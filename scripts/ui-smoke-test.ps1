@@ -42,6 +42,24 @@ public static class ElitePenUiNative {
         }, IntPtr.Zero);
         return count;
     }
+    public static bool IsAboveClass(IntPtr reference, string className) {
+        bool referenceSeen = false;
+        bool valid = true;
+        EnumWindows((window, data) => {
+            if (window == reference) {
+                referenceSeen = true;
+                return true;
+            }
+            var value = new StringBuilder(256);
+            GetClassName(window, value, value.Capacity);
+            if (value.ToString() == className && IsWindowVisible(window) && !referenceSeen) {
+                valid = false;
+                return false;
+            }
+            return true;
+        }, IntPtr.Zero);
+        return referenceSeen && valid;
+    }
     public static IntPtr FindClassContainingPoint(string className, int x, int y) {
         IntPtr found = IntPtr.Zero;
         EnumWindows((window, data) => {
@@ -150,13 +168,14 @@ try {
     $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$paletteBounds)
     Assert-Ui (($paletteBounds.Right - $paletteBounds.Left) -eq 290) 'Palette was not shortened with the new brush design.'
 
-    # Five quick colors follow the visual order requested for 1.1.
+    # Six quick colors follow the compact visual order requested for 1.2.
     $quickColors = @(
-        @{ X = 68;  Y = 108; Value = 4279769115 }, # black
-        @{ X = 71;  Y = 60;  Value = 4294950445 }, # yellow
-        @{ X = 123; Y = 30;  Value = 4280256741 }, # blue
-        @{ X = 175; Y = 61;  Value = 4293870660 }, # red
-        @{ X = 176; Y = 112; Value = 4287323382 }  # purple
+        @{ X = 67;  Y = 107; Value = 4279769115 }, # black
+        @{ X = 69;  Y = 60;  Value = 4294950445 }, # yellow
+        @{ X = 119; Y = 29;  Value = 4280256741 }, # blue
+        @{ X = 169; Y = 53;  Value = 4293870660 }, # red
+        @{ X = 184; Y = 96;  Value = 4280468830 }, # green
+        @{ X = 160; Y = 130; Value = 4287323382 }  # purple
     )
     foreach ($quickColor in $quickColors) {
         Click-Window $palette $quickColor.X $quickColor.Y
@@ -165,7 +184,7 @@ try {
     }
 
     # Complete color panel and an actual color selection.
-    Click-Window $palette 120 132
+    Click-Window $palette 113 139
     $colors = Wait-Window 'ElitePen.Colors' 1000
     Assert-Ui ($colors -ne [IntPtr]::Zero -and [ElitePenUiNative]::IsWindowVisible($colors)) 'Color panel did not open.'
     if ($colors -ne [IntPtr]::Zero) { Click-Window $colors 313 93 }
@@ -189,14 +208,11 @@ try {
     $null = [ElitePenUiNative]::SendMessage($palette, 0x0205, [IntPtr]0, $ferrule)
 
     # Palette remains physically above the drawing overlay while Pen is active.
-    $commandPoint = New-Object ElitePenUiNative+POINT
-    $commandPoint.X = $paletteBounds.Left + 68
-    $commandPoint.Y = $paletteBounds.Top + 108
-    Assert-Ui ([ElitePenUiNative]::WindowFromPoint($commandPoint) -eq $palette) 'Palette commands were covered by the drawing overlay.'
+    Assert-Ui ([ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.Overlay')) 'Palette commands were covered by the drawing overlay.'
 
     # Reproduce the reported failure: send the red-color click through the drawing
     # overlay. The input router must consume it as a palette command, never as ink.
-    Click-ThroughOverlay $palette 175 61
+    Click-ThroughOverlay $palette 169 53
     $routedColor = [ElitePenUiNative]::SendMessage($palette, 0x805B, [IntPtr]::Zero, [IntPtr]::Zero)
     Assert-Ui ($routedColor.ToInt64() -eq 4293870660) 'Overlay click was painted instead of selecting red.'
 

@@ -1012,20 +1012,21 @@ void PaletteWindow::install_tooltips() {
     struct Tip { UINT id; RECT bounds; const wchar_t* text; };
     constexpr std::array tips{
         Tip{1, {7, 11, 41, 144}, L"Grosor del trazo"},
-        Tip{2, {51, 91, 85, 125}, L"Negro"},
-        Tip{3, {54, 43, 88, 77}, L"Amarillo"},
-        Tip{4, {106, 13, 140, 47}, L"Azul"},
-        Tip{5, {158, 44, 192, 78}, L"Rojo"},
-        Tip{6, {159, 95, 193, 129}, L"Morado"},
-        Tip{7, {103, 115, 137, 149}, L"Mas colores"},
-        Tip{8, {104, 61, 148, 105}, L"Ocultar o mostrar anotaciones"},
-        Tip{9, {42, 120, 86, 174}, L"Alternar entre lapiz y cursor normal"},
-        Tip{10, {88, 151, 116, 184}, L"Pizarra blanca (clic) o negra (clic derecho)"},
-        Tip{11, {111, 170, 234, 238}, L"Abrir todas las herramientas"},
-        Tip{12, {143, 177, 169, 203}, L"Texto"},
-        Tip{13, {169, 190, 195, 216}, L"Figuras geometricas"},
-        Tip{14, {195, 203, 221, 229}, L"Configuracion"},
-        Tip{15, {237, 214, 279, 276}, L"Limpiar todas las anotaciones"}
+        Tip{2, {50, 90, 84, 124}, L"Negro"},
+        Tip{3, {52, 43, 86, 77}, L"Amarillo"},
+        Tip{4, {102, 12, 136, 46}, L"Azul"},
+        Tip{5, {152, 36, 186, 70}, L"Rojo"},
+        Tip{6, {167, 79, 201, 113}, L"Verde"},
+        Tip{7, {143, 113, 177, 147}, L"Morado"},
+        Tip{8, {96, 122, 130, 156}, L"Mas colores"},
+        Tip{9, {104, 61, 148, 105}, L"Ocultar o mostrar anotaciones"},
+        Tip{10, {42, 120, 86, 174}, L"Alternar entre lapiz y cursor normal"},
+        Tip{11, {88, 151, 116, 184}, L"Pizarra blanca (clic) o negra (clic derecho)"},
+        Tip{12, {111, 170, 234, 238}, L"Abrir todas las herramientas"},
+        Tip{13, {143, 177, 169, 203}, L"Texto"},
+        Tip{14, {169, 190, 195, 216}, L"Figuras geometricas"},
+        Tip{15, {195, 203, 221, 229}, L"Configuracion"},
+        Tip{16, {237, 214, 279, 276}, L"Limpiar todas las anotaciones"}
     };
     for (const auto& tip : tips) {
         TOOLINFOW information{};
@@ -1138,8 +1139,8 @@ bool PaletteWindow::command_at(POINT point) const {
     for (const float y : thickness_y) {
         if (point_in_circle(point, 23.0F, y, 11.0F)) return true;
     }
-    constexpr std::array<POINT, 6> color_points{{
-        {68, 108}, {71, 60}, {123, 30}, {175, 61}, {176, 112}, {120, 132}
+    constexpr std::array<POINT, 7> color_points{{
+        {67, 107}, {69, 60}, {119, 29}, {169, 53}, {184, 96}, {160, 130}, {113, 139}
     }};
     for (const auto& color_point : color_points) {
         if (point_in_circle(point, static_cast<float>(color_point.x),
@@ -1178,16 +1179,16 @@ void PaletteWindow::activate_at(POINT point) {
     }
     struct Swatch { float x; float y; Color color; };
     constexpr std::array swatches{
-        Swatch{68, 108, kBlack}, Swatch{71, 60, kYellow},
-        Swatch{123, 30, kBlue}, Swatch{175, 61, kRed},
-        Swatch{176, 112, kPurple}};
+        Swatch{67, 107, kBlack}, Swatch{69, 60, kYellow},
+        Swatch{119, 29, kBlue}, Swatch{169, 53, kRed},
+        Swatch{184, 96, kGreen}, Swatch{160, 130, kPurple}};
     for (const auto& swatch : swatches) {
         if (point_in_circle(point, swatch.x, swatch.y, 15.0F)) {
             controller_.set_color(swatch.color);
             return;
         }
     }
-    if (point_in_circle(point, 120, 132, 16)) { choose_custom_color(); return; }
+    if (point_in_circle(point, 113, 139, 16)) { choose_custom_color(); return; }
     if (point_in_circle(point, 126, 83, 22)) { controller_.toggle_visibility(); return; }
     if (point_in_circle(point, 256, 244, 24)) { controller_.clear_document(); return; }
     if (point_in_circle(point, 156, 190, 14)) { select_text_tool(); return; }
@@ -1343,9 +1344,9 @@ void PaletteWindow::render() {
 
     struct Swatch { float x; float y; Color color; };
     constexpr std::array swatches{
-        Swatch{68, 108, kBlack}, Swatch{71, 60, kYellow},
-        Swatch{123, 30, kBlue}, Swatch{175, 61, kRed},
-        Swatch{176, 112, kPurple}};
+        Swatch{67, 107, kBlack}, Swatch{69, 60, kYellow},
+        Swatch{119, 29, kBlue}, Swatch{169, 53, kRed},
+        Swatch{184, 96, kGreen}, Swatch{160, 130, kPurple}};
     for (const auto& swatch : swatches) {
         ComPtr<ID2D1SolidColorBrush> color_brush;
         context->CreateSolidColorBrush(d2d_color(swatch.color), color_brush.GetAddressOf());
@@ -1358,10 +1359,10 @@ void PaletteWindow::render() {
         context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(swatch.x, swatch.y), 12, 12),
                              color_brush.Get());
     }
-    context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(120, 132), 13, 13), cream.Get());
-    context->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(120, 132), 12, 12), ink.Get(), 1.5F);
-    context->DrawLine(D2D1::Point2F(114, 132), D2D1::Point2F(126, 132), ink.Get(), 2.0F);
-    context->DrawLine(D2D1::Point2F(120, 126), D2D1::Point2F(120, 138), ink.Get(), 2.0F);
+    context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(113, 139), 13, 13), cream.Get());
+    context->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(113, 139), 12, 12), ink.Get(), 1.5F);
+    context->DrawLine(D2D1::Point2F(107, 139), D2D1::Point2F(119, 139), ink.Get(), 2.0F);
+    context->DrawLine(D2D1::Point2F(113, 133), D2D1::Point2F(113, 145), ink.Get(), 2.0F);
 
     const auto thickness_shadow = D2D1::RoundedRect(D2D1::RectF(5, 13, 41, 144), 17, 17);
     context->FillRoundedRectangle(thickness_shadow, shadow.Get());
@@ -1397,8 +1398,20 @@ void PaletteWindow::render() {
         context->DrawGeometry(eye.Get(), ink.Get(), 1.7F);
         context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(126.5F, 83), 4.5F, 6.5F), ink.Get());
     } else {
-        context->DrawLine(D2D1::Point2F(109, 83), D2D1::Point2F(145, 83), ink.Get(), 2.2F);
-        context->DrawLine(D2D1::Point2F(113, 74), D2D1::Point2F(141, 93), ink.Get(), 2.2F);
+        ComPtr<ID2D1PathGeometry> closed_eye;
+        controller_.graphics().d2d_factory()->CreatePathGeometry(closed_eye.GetAddressOf());
+        ComPtr<ID2D1GeometrySink> closed_eye_sink;
+        closed_eye->Open(closed_eye_sink.GetAddressOf());
+        closed_eye_sink->BeginFigure(D2D1::Point2F(108, 81), D2D1_FIGURE_BEGIN_HOLLOW);
+        closed_eye_sink->AddBezier(D2D1::BezierSegment(D2D1::Point2F(118, 92),
+                                                       D2D1::Point2F(136, 92),
+                                                       D2D1::Point2F(145, 81)));
+        closed_eye_sink->EndFigure(D2D1_FIGURE_END_OPEN);
+        closed_eye_sink->Close();
+        context->DrawGeometry(closed_eye.Get(), ink.Get(), 2.1F);
+        context->DrawLine(D2D1::Point2F(115, 87), D2D1::Point2F(111, 92), ink.Get(), 1.6F);
+        context->DrawLine(D2D1::Point2F(126.5F, 90), D2D1::Point2F(126.5F, 96), ink.Get(), 1.6F);
+        context->DrawLine(D2D1::Point2F(138, 87), D2D1::Point2F(142, 92), ink.Get(), 1.6F);
     }
 
     // Functional brush: tip mode, white ferrule/board and compact blue handle commands.
@@ -1982,7 +1995,7 @@ bool SettingsWindow::initialize() {
                 WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
                 WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, bounds)) return false;
     HFONT regular = static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
-    title_ = CreateWindowW(L"STATIC", L"Elite Pen 1.1.1", WS_CHILD | WS_VISIBLE,
+    title_ = CreateWindowW(L"STATIC", L"Elite Pen 1.2.0", WS_CHILD | WS_VISIBLE,
                            24, 20, 510, 24, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
     capture_ = CreateWindowW(L"BUTTON", L"Ocultar la paleta en capturas de pantalla",

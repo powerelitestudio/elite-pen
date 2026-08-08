@@ -13,7 +13,7 @@ crea automaticamente junto al ejecutable.
 CONTROLES PRINCIPALES
 ---------------------
 - Punta del pincel: alterna entre dibujar y cursor normal.
-- Colores: negro, amarillo, azul, rojo y morado. El boton + abre la paleta completa.
+- Colores: negro, amarillo, azul, rojo, verde y morado. El boton + abre la paleta completa.
 - Ojo: oculta o muestra las anotaciones sin eliminarlas.
 - Puntos laterales: grosor.
 - Mango azul: herramientas; sus controles son Texto, Figuras y Configuracion.
@@ -47,4 +47,4 @@ Configuracion.
 
 SOPORTE
 -------
-Producto de Power Elite Studio. Version 1.1.1.
+Producto de Power Elite Studio. Version 1.2.0.

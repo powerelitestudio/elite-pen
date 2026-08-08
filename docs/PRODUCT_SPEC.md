@@ -1,6 +1,6 @@
-# Elite Pen 1.1 — contrato de producto
+# Elite Pen 1.2 — contrato de producto
 
-Estado: version 1.1.1 implementada.
+Estado: version 1.2.0 implementada.
 
 ## 1. Identidad e interaccion principal
 
@@ -10,10 +10,11 @@ la aplicacion sobre la que se presenta.
 
 ### Paleta
 
-- Cinco colores rapidos en este orden: negro, amarillo, azul, rojo y morado.
-- El sexto circulo `+` abre una cuadricula de 42 colores y el selector RGB
+- Seis colores rapidos en este orden: negro, amarillo, azul, rojo, verde y morado.
+- El septimo circulo `+` abre una cuadricula de 42 colores y el selector RGB
   personalizado de Windows.
-- El ojo central oculta o muestra todas las anotaciones sin alterar el historial.
+- El ojo central abierto muestra las anotaciones; al ocultarlas se transforma en un
+  parpado cerrado con pestanas sutiles, sin alterar el historial.
 - Los puntos de grosor seleccionan 2, 4, 7, 12 y 20 pixeles logicos; 7 es el valor
   inicial.
 - La paleta se arrastra desde cualquier zona vacia y recuerda su posicion por monitor.

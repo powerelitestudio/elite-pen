@@ -1,5 +1,12 @@
 # Historial de cambios
 
+## 1.2.0 — 2026-08-08
+
+- El estado oculto del control central ahora se representa con un ojo cerrado elegante.
+- Se agrega verde como sexto color rapido directo.
+- Los seis colores y el selector `+` se compactan alrededor del ojo sin reducir sus
+  areas de clic.
+
 ## 1.1.1 — 2026-08-08
 
 - El overlay detecta y enruta los clics sobre la paleta en modo dibujo.
