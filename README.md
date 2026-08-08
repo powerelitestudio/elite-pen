@@ -45,6 +45,9 @@ con `scripts/publish-portable.ps1`.
 | Ocultar/mostrar trazos | Ojo | `Ctrl+Shift+H` |
 | Pizarra blanca | Ferula blanca | `Ctrl+Shift+W` |
 | Pizarra negra | Clic derecho en la ferula | `Ctrl+Shift+B` |
+| Texto | `T` del mango | — |
+| Figuras | Control central del mango | — |
+| Configuracion | Control derecho del mango | — |
 | Deshacer | Menu/historial | `Ctrl+Shift+Z` |
 | Rehacer | Menu/historial | `Ctrl+Shift+Y` |
 | Limpiar | Gota de agua | `Ctrl+Shift+C` |

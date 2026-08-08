@@ -47,6 +47,7 @@ inline constexpr Color kBlack{24, 24, 27, 255};
 inline constexpr Color kYellow{255, 190, 45, 255};
 inline constexpr Color kBlue{31, 136, 229, 255};
 inline constexpr Color kRed{239, 68, 68, 255};
+inline constexpr Color kPurple{139, 92, 246, 255};
 
 enum class Tool : std::uint8_t {
     Interact,

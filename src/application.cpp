@@ -34,7 +34,7 @@ constexpr UINT kExitMessage = WM_APP + 12;
 constexpr UINT kQaQueryToolMessage = WM_APP + 90;
 constexpr UINT kQaQueryColorMessage = WM_APP + 91;
 constexpr UINT_PTR kTrayId = 1;
-constexpr int kPaletteWidth = 360;
+constexpr int kPaletteWidth = 290;
 constexpr int kPaletteHeight = 320;
 
 constexpr int kHotkeyInteract = 1;
@@ -125,8 +125,11 @@ protected:
 
 private:
     void install_tooltips();
+    [[nodiscard]] bool command_at(POINT point) const;
     void activate_at(POINT point);
     void show_tool_menu();
+    void show_geometry_menu();
+    void select_text_tool();
     void show_tray_menu();
     void choose_custom_color();
     void show_settings();
@@ -159,12 +162,20 @@ public:
     explicit ToolWindow(Controller& controller) : WindowBase(controller) {}
     bool initialize(GraphicsDevice& graphics);
     void toggle_near(HWND anchor);
+    void toggle_geometry_near(HWND anchor);
     void hide() { ShowWindow(window_, SW_HIDE); }
     [[nodiscard]] bool visible() const noexcept { return IsWindowVisible(window_) != FALSE; }
+    [[nodiscard]] bool geometry_only() const noexcept { return geometry_only_; }
 
 protected:
     LRESULT handle_message(UINT message, WPARAM wparam, LPARAM lparam) override;
     void render() override;
+
+private:
+    void show_near(HWND anchor, bool geometry_only);
+    [[nodiscard]] std::size_t tool_count() const noexcept;
+    [[nodiscard]] Tool tool_at(std::size_t index) const noexcept;
+    bool geometry_only_{};
 };
 
 class TextInputWindow final : public WindowBase {
@@ -298,6 +309,7 @@ public:
     void toggle_zoom();
     void toggle_color_panel();
     void toggle_tool_panel();
+    void toggle_geometry_panel();
     void close_panels();
     void stop_transient_mode();
     void begin_text(PointF position);
@@ -367,6 +379,10 @@ constexpr std::array<Tool, 12> kTools{{
     Tool::Interact, Tool::Pen, Tool::Highlighter, Tool::Eraser, Tool::Line,
     Tool::Rectangle, Tool::Ellipse, Tool::Arrow, Tool::CurvedArrow, Tool::Text,
     Tool::Screenshot, Tool::Zoom
+}};
+
+constexpr std::array<Tool, 5> kGeometryTools{{
+    Tool::Line, Tool::Rectangle, Tool::Ellipse, Tool::Arrow, Tool::CurvedArrow
 }};
 
 bool point_in_circle(POINT point, float cx, float cy, float radius) {
@@ -987,17 +1003,20 @@ void PaletteWindow::install_tooltips() {
     struct Tip { UINT id; RECT bounds; const wchar_t* text; };
     constexpr std::array tips{
         Tip{1, {7, 11, 41, 144}, L"Grosor del trazo"},
-        Tip{2, {54, 43, 88, 77}, L"Negro"},
-        Tip{3, {158, 44, 192, 78}, L"Amarillo"},
-        Tip{4, {159, 95, 193, 129}, L"Azul"},
-        Tip{5, {103, 115, 137, 149}, L"Rojo"},
-        Tip{6, {51, 91, 85, 125}, L"Mas colores"},
-        Tip{7, {104, 61, 148, 105}, L"Ocultar o mostrar anotaciones"},
-        Tip{8, {108, 15, 138, 45}, L"Configuracion"},
+        Tip{2, {51, 91, 85, 125}, L"Negro"},
+        Tip{3, {54, 43, 88, 77}, L"Amarillo"},
+        Tip{4, {106, 13, 140, 47}, L"Azul"},
+        Tip{5, {158, 44, 192, 78}, L"Rojo"},
+        Tip{6, {159, 95, 193, 129}, L"Morado"},
+        Tip{7, {103, 115, 137, 149}, L"Mas colores"},
+        Tip{8, {104, 61, 148, 105}, L"Ocultar o mostrar anotaciones"},
         Tip{9, {42, 120, 86, 174}, L"Alternar entre lapiz y cursor normal"},
         Tip{10, {88, 151, 116, 184}, L"Pizarra blanca (clic) o negra (clic derecho)"},
-        Tip{11, {111, 170, 305, 278}, L"Abrir herramientas"},
-        Tip{12, {294, 242, 336, 286}, L"Limpiar todas las anotaciones"}
+        Tip{11, {111, 170, 234, 238}, L"Abrir todas las herramientas"},
+        Tip{12, {143, 177, 169, 203}, L"Texto"},
+        Tip{13, {169, 190, 195, 216}, L"Figuras geometricas"},
+        Tip{14, {195, 203, 221, 229}, L"Configuracion"},
+        Tip{15, {237, 214, 279, 276}, L"Limpiar todas las anotaciones"}
     };
     for (const auto& tip : tips) {
         TOOLINFOW information{};
@@ -1061,6 +1080,14 @@ void PaletteWindow::show_tool_menu() {
     controller_.toggle_tool_panel();
 }
 
+void PaletteWindow::show_geometry_menu() {
+    controller_.toggle_geometry_panel();
+}
+
+void PaletteWindow::select_text_tool() {
+    controller_.set_tool(Tool::Text);
+}
+
 void PaletteWindow::choose_custom_color() {
     controller_.toggle_color_panel();
 }
@@ -1097,6 +1124,28 @@ void PaletteWindow::show_tray_menu() {
     }
 }
 
+bool PaletteWindow::command_at(POINT point) const {
+    constexpr std::array<float, 5> thickness_y{32.0F, 49.0F, 69.0F, 93.0F, 122.0F};
+    for (const float y : thickness_y) {
+        if (point_in_circle(point, 23.0F, y, 11.0F)) return true;
+    }
+    constexpr std::array<POINT, 6> color_points{{
+        {68, 108}, {71, 60}, {123, 30}, {175, 61}, {176, 112}, {120, 132}
+    }};
+    for (const auto& color_point : color_points) {
+        if (point_in_circle(point, static_cast<float>(color_point.x),
+                            static_cast<float>(color_point.y), 17.0F)) return true;
+    }
+    return point_in_circle(point, 126, 83, 23) ||
+           point_in_circle(point, 256, 244, 25) ||
+           point_in_circle(point, 156, 190, 14) ||
+           point_in_circle(point, 182, 203, 14) ||
+           point_in_circle(point, 208, 216, 14) ||
+           (point.x >= 42 && point.x <= 86 && point.y >= 120 && point.y <= 174) ||
+           (point.x >= 88 && point.x <= 116 && point.y >= 151 && point.y <= 184) ||
+           (point.x >= 111 && point.x <= 234 && point.y >= 170 && point.y <= 238);
+}
+
 void PaletteWindow::activate_at(POINT point) {
     constexpr std::array<float, 5> thicknesses{2.0F, 4.0F, 7.0F, 12.0F, 20.0F};
     constexpr std::array<float, 5> thickness_y{32.0F, 49.0F, 69.0F, 93.0F, 122.0F};
@@ -1108,20 +1157,21 @@ void PaletteWindow::activate_at(POINT point) {
     }
     struct Swatch { float x; float y; Color color; };
     constexpr std::array swatches{
-        Swatch{71, 60, kBlack}, Swatch{175, 61, kYellow},
-        Swatch{176, 112, kBlue}, Swatch{120, 132, kRed}};
+        Swatch{68, 108, kBlack}, Swatch{71, 60, kYellow},
+        Swatch{123, 30, kBlue}, Swatch{175, 61, kRed},
+        Swatch{176, 112, kPurple}};
     for (const auto& swatch : swatches) {
         if (point_in_circle(point, swatch.x, swatch.y, 15.0F)) {
             controller_.set_color(swatch.color);
             return;
         }
     }
-    if (point_in_circle(point, 68, 108, 16)) { choose_custom_color(); return; }
+    if (point_in_circle(point, 120, 132, 16)) { choose_custom_color(); return; }
     if (point_in_circle(point, 126, 83, 22)) { controller_.toggle_visibility(); return; }
-    if (point_in_circle(point, 315, 269, 20)) { controller_.clear_document(); return; }
-    if (point_in_circle(point, 123, 30, 15)) {
-        show_settings(); return;
-    }
+    if (point_in_circle(point, 256, 244, 24)) { controller_.clear_document(); return; }
+    if (point_in_circle(point, 156, 190, 14)) { select_text_tool(); return; }
+    if (point_in_circle(point, 182, 203, 14)) { show_geometry_menu(); return; }
+    if (point_in_circle(point, 208, 216, 14)) { show_settings(); return; }
     if (point.x >= 42 && point.x <= 86 && point.y >= 120 && point.y <= 174) {
         controller_.set_tool(controller_.state().tool == Tool::Interact
             ? Tool::Pen : Tool::Interact);
@@ -1130,7 +1180,7 @@ void PaletteWindow::activate_at(POINT point) {
     if (point.x >= 88 && point.x <= 116 && point.y >= 155 && point.y <= 184) {
         controller_.toggle_whiteboard(); return;
     }
-    if (point.x >= 111 && point.x <= 305 && point.y >= 170 && point.y <= 278) {
+    if (point.x >= 111 && point.x <= 234 && point.y >= 170 && point.y <= 238) {
         show_tool_menu(); return;
     }
 
@@ -1148,6 +1198,15 @@ LRESULT PaletteWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
             return static_cast<LRESULT>(controller_.state().tool);
         case kQaQueryColorMessage:
             return static_cast<LRESULT>(controller_.state().color.argb());
+        case WM_SETCURSOR:
+            if (LOWORD(lparam) == HTCLIENT) {
+                POINT point{};
+                GetCursorPos(&point);
+                ScreenToClient(window_, &point);
+                SetCursor(LoadCursorW(nullptr, command_at(point) ? IDC_HAND : IDC_SIZEALL));
+                return TRUE;
+            }
+            break;
         case WM_LBUTTONDOWN:
             activate_at({GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)});
             return 0;
@@ -1261,8 +1320,9 @@ void PaletteWindow::render() {
 
     struct Swatch { float x; float y; Color color; };
     constexpr std::array swatches{
-        Swatch{71, 60, kBlack}, Swatch{175, 61, kYellow},
-        Swatch{176, 112, kBlue}, Swatch{120, 132, kRed}};
+        Swatch{68, 108, kBlack}, Swatch{71, 60, kYellow},
+        Swatch{123, 30, kBlue}, Swatch{175, 61, kRed},
+        Swatch{176, 112, kPurple}};
     for (const auto& swatch : swatches) {
         ComPtr<ID2D1SolidColorBrush> color_brush;
         context->CreateSolidColorBrush(d2d_color(swatch.color), color_brush.GetAddressOf());
@@ -1275,10 +1335,10 @@ void PaletteWindow::render() {
         context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(swatch.x, swatch.y), 12, 12),
                              color_brush.Get());
     }
-    context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(68, 108), 13, 13), cream.Get());
-    context->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(68, 108), 12, 12), ink.Get(), 1.5F);
-    context->DrawLine(D2D1::Point2F(62, 108), D2D1::Point2F(74, 108), ink.Get(), 2.0F);
-    context->DrawLine(D2D1::Point2F(68, 102), D2D1::Point2F(68, 114), ink.Get(), 2.0F);
+    context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(120, 132), 13, 13), cream.Get());
+    context->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(120, 132), 12, 12), ink.Get(), 1.5F);
+    context->DrawLine(D2D1::Point2F(114, 132), D2D1::Point2F(126, 132), ink.Get(), 2.0F);
+    context->DrawLine(D2D1::Point2F(120, 126), D2D1::Point2F(120, 138), ink.Get(), 2.0F);
 
     const auto thickness_shadow = D2D1::RoundedRect(D2D1::RectF(5, 13, 41, 144), 17, 17);
     context->FillRoundedRectangle(thickness_shadow, shadow.Get());
@@ -1318,7 +1378,7 @@ void PaletteWindow::render() {
         context->DrawLine(D2D1::Point2F(113, 74), D2D1::Point2F(141, 93), ink.Get(), 2.2F);
     }
 
-    // Functional brush: bristles/settings, white ferrule/whiteboard and blue handle/tools.
+    // Functional brush: tip mode, white ferrule/board and compact blue handle commands.
     ComPtr<ID2D1SolidColorBrush> bristle;
     ComPtr<ID2D1SolidColorBrush> red;
     ComPtr<ID2D1SolidColorBrush> ferrule;
@@ -1327,9 +1387,9 @@ void PaletteWindow::render() {
     context->CreateSolidColorBrush(D2D1::ColorF(0xFF6868), red.GetAddressOf());
     context->CreateSolidColorBrush(D2D1::ColorF(0xF7F7F4), ferrule.GetAddressOf());
     context->CreateSolidColorBrush(D2D1::ColorF(0x27A9D2), handle.GetAddressOf());
-    context->DrawLine(D2D1::Point2F(108, 173), D2D1::Point2F(292, 260),
+    context->DrawLine(D2D1::Point2F(108, 173), D2D1::Point2F(228, 231),
                       shadow.Get(), 20.0F);
-    context->DrawLine(D2D1::Point2F(108, 168), D2D1::Point2F(292, 255),
+    context->DrawLine(D2D1::Point2F(108, 168), D2D1::Point2F(228, 226),
                       handle.Get(), 17.0F);
     D2D1_POINT_2F ferrule_points[]{{82, 151}, {110, 164}, {102, 182}, {75, 169}};
     ComPtr<ID2D1PathGeometry> ferrule_geometry;
@@ -1372,41 +1432,63 @@ void PaletteWindow::render() {
                              ferrule.Get());
     }
 
-    // Settings gear moved to the palette so the tip has one unambiguous purpose.
-    context->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(123, 30), 7, 7), ink.Get(), 1.4F);
-    context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(123, 30), 2.2F, 2.2F), ink.Get());
-    for (int index = 0; index < 8; ++index) {
-        const float angle = static_cast<float>(index) * 0.785398F;
-        context->DrawLine(D2D1::Point2F(123 + std::cos(angle) * 7.0F,
-                                        30 + std::sin(angle) * 7.0F),
-                          D2D1::Point2F(123 + std::cos(angle) * 9.5F,
-                                        30 + std::sin(angle) * 9.5F), ink.Get(), 1.4F);
+    // Three compact commands embedded in the handle: text, geometry, settings.
+    constexpr std::array<D2D1_POINT_2F, 3> handle_commands{{
+        {156, 190}, {182, 203}, {208, 216}
+    }};
+    for (const auto& command : handle_commands) {
+        context->FillEllipse(D2D1::Ellipse(command, 8.2F, 8.2F), ferrule.Get());
+        context->DrawEllipse(D2D1::Ellipse(command, 8.2F, 8.2F), ink.Get(), 1.0F);
     }
-
-    // Three dots on the handle communicate that it opens more tools.
-    for (int index = 0; index < 3; ++index) {
-        const float dot_index = static_cast<float>(index);
-        context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(246 + dot_index * 8.0F,
-                                                         232 + dot_index * 3.8F),
-                                           2.1F, 2.1F), ferrule.Get());
+    ComPtr<IDWriteTextFormat> command_format;
+    controller_.graphics().dwrite()->CreateTextFormat(L"Segoe UI", nullptr,
+        DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+        10.0F, L"es-CO", command_format.GetAddressOf());
+    if (command_format) {
+        command_format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        command_format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        context->DrawTextW(L"T", 1, command_format.Get(),
+                           D2D1::RectF(148, 182, 164, 198), ink.Get());
+    }
+    context->DrawRectangle(D2D1::RectF(177, 198, 184, 205), ink.Get(), 1.1F);
+    context->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(185, 206), 3.0F, 2.4F),
+                         ink.Get(), 1.0F);
+    context->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(208, 216), 3.8F, 3.8F),
+                         ink.Get(), 1.1F);
+    context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(208, 216), 1.3F, 1.3F), ink.Get());
+    for (int index = 0; index < 6; ++index) {
+        const float angle = static_cast<float>(index) * 1.047198F;
+        context->DrawLine(D2D1::Point2F(208 + std::cos(angle) * 4.2F,
+                                        216 + std::sin(angle) * 4.2F),
+                          D2D1::Point2F(208 + std::cos(angle) * 5.8F,
+                                        216 + std::sin(angle) * 5.8F), ink.Get(), 1.0F);
     }
 
     // Water drop = clear.
     ComPtr<ID2D1SolidColorBrush> water;
-    context->CreateSolidColorBrush(D2D1::ColorF(0x57D8FF), water.GetAddressOf());
+    context->CreateSolidColorBrush(D2D1::ColorF(0x4FD8FF), water.GetAddressOf());
+    ComPtr<ID2D1SolidColorBrush> water_highlight;
+    context->CreateSolidColorBrush(D2D1::ColorF(0xD9F8FF, 0.9F),
+                                   water_highlight.GetAddressOf());
     ComPtr<ID2D1PathGeometry> drop;
     controller_.graphics().d2d_factory()->CreatePathGeometry(drop.GetAddressOf());
     ComPtr<ID2D1GeometrySink> drop_sink;
     drop->Open(drop_sink.GetAddressOf());
-    drop_sink->BeginFigure(D2D1::Point2F(315, 245), D2D1_FIGURE_BEGIN_FILLED);
-    drop_sink->AddBezier(D2D1::BezierSegment(D2D1::Point2F(307, 257), D2D1::Point2F(305, 266),
-                                             D2D1::Point2F(315, 273)));
-    drop_sink->AddBezier(D2D1::BezierSegment(D2D1::Point2F(325, 266), D2D1::Point2F(323, 257),
-                                             D2D1::Point2F(315, 245)));
+    drop_sink->BeginFigure(D2D1::Point2F(256, 216), D2D1_FIGURE_BEGIN_FILLED);
+    drop_sink->AddBezier(D2D1::BezierSegment(D2D1::Point2F(248, 228), D2D1::Point2F(241, 239),
+                                             D2D1::Point2F(242, 249)));
+    drop_sink->AddBezier(D2D1::BezierSegment(D2D1::Point2F(243, 262), D2D1::Point2F(253, 269),
+                                             D2D1::Point2F(256, 269)));
+    drop_sink->AddBezier(D2D1::BezierSegment(D2D1::Point2F(267, 269), D2D1::Point2F(273, 260),
+                                             D2D1::Point2F(270, 248)));
+    drop_sink->AddBezier(D2D1::BezierSegment(D2D1::Point2F(268, 238), D2D1::Point2F(261, 226),
+                                             D2D1::Point2F(256, 216)));
     drop_sink->EndFigure(D2D1_FIGURE_END_CLOSED);
     drop_sink->Close();
     context->FillGeometry(drop.Get(), water.Get());
     context->DrawGeometry(drop.Get(), handle.Get(), 1.2F);
+    context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(252, 240), 3.2F, 6.0F),
+                         water_highlight.Get());
 
     ComPtr<IDWriteTextFormat> label_format;
     controller_.graphics().dwrite()->CreateTextFormat(L"Segoe UI", nullptr,
@@ -1578,10 +1660,28 @@ bool ToolWindow::initialize(GraphicsDevice& graphics) {
 }
 
 void ToolWindow::toggle_near(HWND anchor) {
+    show_near(anchor, false);
+}
+
+void ToolWindow::toggle_geometry_near(HWND anchor) {
+    show_near(anchor, true);
+}
+
+std::size_t ToolWindow::tool_count() const noexcept {
+    return geometry_only_ ? kGeometryTools.size() : kTools.size();
+}
+
+Tool ToolWindow::tool_at(std::size_t index) const noexcept {
+    return geometry_only_ ? kGeometryTools[index] : kTools[index];
+}
+
+void ToolWindow::show_near(HWND anchor, bool geometry_only) {
+    geometry_only_ = geometry_only;
+    const int panel_height = geometry_only_ ? 210 : 354;
     RECT anchor_rect{};
     GetWindowRect(anchor, &anchor_rect);
     RECT desired{anchor_rect.right + 10, anchor_rect.top,
-                 anchor_rect.right + 376, anchor_rect.top + 354};
+                 anchor_rect.right + 376, anchor_rect.top + panel_height};
     HMONITOR monitor = MonitorFromRect(&anchor_rect, MONITOR_DEFAULTTONEAREST);
     MONITORINFO info{};
     info.cbSize = sizeof(info);
@@ -1592,8 +1692,8 @@ void ToolWindow::toggle_near(HWND anchor) {
     }
     desired.top = std::clamp(static_cast<int>(desired.top),
                              static_cast<int>(info.rcWork.top),
-                             static_cast<int>(info.rcWork.bottom) - 354);
-    SetWindowPos(window_, HWND_TOPMOST, desired.left, desired.top, 366, 354,
+                             static_cast<int>(info.rcWork.bottom) - panel_height);
+    SetWindowPos(window_, HWND_TOPMOST, desired.left, desired.top, 366, panel_height,
                  SWP_SHOWWINDOW | SWP_NOACTIVATE);
     invalidate();
 }
@@ -1601,13 +1701,13 @@ void ToolWindow::toggle_near(HWND anchor) {
 LRESULT ToolWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
     if (message == WM_LBUTTONDOWN) {
         const POINT point{GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
-        for (std::size_t index = 0; index < kTools.size(); ++index) {
+        for (std::size_t index = 0; index < tool_count(); ++index) {
             const int column = static_cast<int>(index % 2);
             const int row = static_cast<int>(index / 2);
             const RECT item{15 + column * 169, 48 + row * 48,
                             15 + column * 169 + 162, 48 + row * 48 + 40};
             if (PtInRect(&item, point)) {
-                const Tool tool = kTools[index];
+                const Tool tool = tool_at(index);
                 hide();
                 controller_.set_tool(tool);
                 return 0;
@@ -1632,7 +1732,9 @@ void ToolWindow::render() {
     context->CreateSolidColorBrush(D2D1::ColorF(0xF8FAFC), text.GetAddressOf());
     context->CreateSolidColorBrush(d2d_color(controller_.state().color), accent.GetAddressOf());
     context->CreateSolidColorBrush(D2D1::ColorF(0x34363E), hover.GetAddressOf());
-    const auto background = D2D1::RoundedRect(D2D1::RectF(2, 2, 364, 352), 18, 18);
+    const float panel_bottom = static_cast<float>(surface_.height()) - 2.0F;
+    const auto background = D2D1::RoundedRect(
+        D2D1::RectF(2, 2, 364, panel_bottom), 18, 18);
     context->FillRoundedRectangle(background, panel.Get());
     context->DrawRoundedRectangle(background, border.Get(), 1.0F);
 
@@ -1645,20 +1747,22 @@ void ToolWindow::render() {
         DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
         13.0F, L"es-CO", item_format.GetAddressOf());
     if (title_format) {
-        context->DrawTextW(L"HERRAMIENTAS", 12, title_format.Get(),
+        const wchar_t* title = geometry_only_ ? L"FIGURAS" : L"HERRAMIENTAS";
+        context->DrawTextW(title, static_cast<UINT32>(wcslen(title)), title_format.Get(),
                            D2D1::RectF(17, 14, 220, 38), text.Get());
     }
-    for (std::size_t index = 0; index < kTools.size(); ++index) {
+    for (std::size_t index = 0; index < tool_count(); ++index) {
+        const Tool panel_tool = tool_at(index);
         const float left = 15.0F + static_cast<float>(index % 2) * 169.0F;
         const float top = 48.0F + static_cast<float>(index / 2) * 48.0F;
         const auto item = D2D1::RoundedRect(D2D1::RectF(left, top, left + 162, top + 40), 9, 9);
-        const bool active = controller_.state().tool == kTools[index];
+        const bool active = controller_.state().tool == panel_tool;
         if (active) context->FillRoundedRectangle(item, hover.Get());
         context->DrawRoundedRectangle(item, active ? accent.Get() : border.Get(),
                                       active ? 2.0F : 1.0F);
         const float icon_x = left + 20;
         const float icon_y = top + 20;
-        switch (kTools[index]) {
+        switch (panel_tool) {
             case Tool::Interact:
                 context->DrawLine(D2D1::Point2F(icon_x - 6, icon_y - 9),
                                   D2D1::Point2F(icon_x + 6, icon_y + 8), text.Get(), 2.0F);
@@ -1736,13 +1840,13 @@ void ToolWindow::render() {
                 break;
             default:
                 context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(icon_x, icon_y),
-                                                   kTools[index] == Tool::Eraser ? 6.0F : 3.0F,
-                                                   kTools[index] == Tool::Eraser ? 6.0F : 3.0F),
+                                                   panel_tool == Tool::Eraser ? 6.0F : 3.0F,
+                                                   panel_tool == Tool::Eraser ? 6.0F : 3.0F),
                                      text.Get());
                 break;
         }
         if (item_format) {
-            const wchar_t* name = tool_name(kTools[index]);
+            const wchar_t* name = tool_name(panel_tool);
             context->DrawTextW(name, static_cast<UINT32>(wcslen(name)), item_format.Get(),
                                D2D1::RectF(left + 40, top + 11, left + 155, top + 35),
                                text.Get());
@@ -1855,7 +1959,7 @@ bool SettingsWindow::initialize() {
                 WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
                 WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, bounds)) return false;
     HFONT regular = static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
-    title_ = CreateWindowW(L"STATIC", L"Elite Pen 1.0", WS_CHILD | WS_VISIBLE,
+    title_ = CreateWindowW(L"STATIC", L"Elite Pen 1.1", WS_CHILD | WS_VISIBLE,
                            24, 20, 510, 24, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
     capture_ = CreateWindowW(L"BUTTON", L"Ocultar la paleta en capturas de pantalla",
@@ -2401,6 +2505,12 @@ void Controller::invalidate_all() { invalidate_document(); }
 
 void Controller::update_overlay_interaction() {
     for (const auto& overlay : overlays_) overlay->update_interaction();
+    // Every overlay is topmost while drawing, so explicitly restore the palette
+    // above them. Its controls must remain selectable in every tool mode.
+    if (palette_) {
+        SetWindowPos(palette_->hwnd(), HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
 }
 
 void Controller::set_tool(Tool tool) {
@@ -2503,9 +2613,16 @@ void Controller::toggle_color_panel() {
 
 void Controller::toggle_tool_panel() {
     if (!tools_ || !palette_) return;
-    const bool was_visible = tools_->visible();
+    const bool was_visible = tools_->visible() && !tools_->geometry_only();
     close_panels();
     if (!was_visible) tools_->toggle_near(palette_->hwnd());
+}
+
+void Controller::toggle_geometry_panel() {
+    if (!tools_ || !palette_) return;
+    const bool was_visible = tools_->visible() && tools_->geometry_only();
+    close_panels();
+    if (!was_visible) tools_->toggle_geometry_near(palette_->hwnd());
 }
 
 void Controller::close_panels() {

@@ -17,6 +17,9 @@ La entrada de la superposicion se transforma a coordenadas del escritorio virtua
 El controlador produce una operacion de documento. El historial la aplica y notifica
 una invalidacion. El renderizador vuelve a componer pizarra, documento y vista previa;
 la paleta conserva su propia superficie y nunca se mezcla con el documento.
+Cuando cambia la herramienta, las superposiciones recuperan su modo de entrada y el
+controlador restablece despues la paleta en la cima del grupo topmost. Asi sus zonas
+accionables siguen recibiendo clics mientras el lienzo esta en modo de dibujo.
 
 ## Decisiones
 

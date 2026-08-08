@@ -1,4 +1,4 @@
-ELITE PEN 1.0 — EDICION PORTABLE
+ELITE PEN 1.1 — EDICION PORTABLE
 ================================
 
 Elite Pen es la herramienta de anotacion, pizarra y ampliacion de pantalla de
@@ -13,12 +13,11 @@ crea automaticamente junto al ejecutable.
 CONTROLES PRINCIPALES
 ---------------------
 - Punta del pincel: alterna entre dibujar y cursor normal.
-- Colores: negro, amarillo, azul y rojo. El boton + abre la paleta completa.
+- Colores: negro, amarillo, azul, rojo y morado. El boton + abre la paleta completa.
 - Ojo: oculta o muestra las anotaciones sin eliminarlas.
 - Puntos laterales: grosor.
-- Mango azul: herramientas.
+- Mango azul: herramientas; sus controles son Texto, Figuras y Configuracion.
 - Parte blanca del pincel: clic para pizarra blanca; clic derecho para pizarra negra.
-- Engranaje: configuracion.
 - Gota de agua: limpiar; la accion se puede deshacer.
 
 ATAJOS
@@ -48,4 +47,4 @@ Configuracion.
 
 SOPORTE
 -------
-Producto de Power Elite Studio. Version 1.0.0.
+Producto de Power Elite Studio. Version 1.1.0.

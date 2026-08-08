@@ -19,6 +19,7 @@ using System.Text;
 using System.Runtime.InteropServices;
 public static class ElitePenUiNative {
     [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
+    [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
     public delegate bool WindowCallback(IntPtr window, IntPtr data);
     [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr context);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindow(string className, string title);
@@ -29,6 +30,7 @@ public static class ElitePenUiNative {
     [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr window, uint message, IntPtr wparam, IntPtr lparam);
     [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr window, int id);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr window, out RECT rectangle);
+    [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT point);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern bool SetWindowText(IntPtr window, string value);
     public static int CountClass(string className) {
         int count = 0;
@@ -92,7 +94,7 @@ function Click-Window([IntPtr]$Window, [int]$X, [int]$Y) {
 }
 
 function Select-Tool([IntPtr]$Palette, [int]$Index) {
-    Click-Window $Palette 220 220
+    Click-Window $Palette 225 232
     $tools = Wait-Window 'ElitePen.Tools' 1000
     Assert-Ui ($tools -ne [IntPtr]::Zero -and [ElitePenUiNative]::IsWindowVisible($tools)) 'Tool panel did not open.'
     if ($tools -eq [IntPtr]::Zero) { return }
@@ -110,8 +112,26 @@ try {
 
     Assert-Ui ([ElitePenUiNative]::CountClass('ElitePen.Overlay') -ge 1) 'No monitor overlay was created.'
 
+    $paletteBounds = New-Object ElitePenUiNative+RECT
+    $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$paletteBounds)
+    Assert-Ui (($paletteBounds.Right - $paletteBounds.Left) -eq 290) 'Palette was not shortened with the new brush design.'
+
+    # Five quick colors follow the visual order requested for 1.1.
+    $quickColors = @(
+        @{ X = 68;  Y = 108; Value = 4279769115 }, # black
+        @{ X = 71;  Y = 60;  Value = 4294950445 }, # yellow
+        @{ X = 123; Y = 30;  Value = 4280256741 }, # blue
+        @{ X = 175; Y = 61;  Value = 4293870660 }, # red
+        @{ X = 176; Y = 112; Value = 4287323382 }  # purple
+    )
+    foreach ($quickColor in $quickColors) {
+        Click-Window $palette $quickColor.X $quickColor.Y
+        $activeColor = [ElitePenUiNative]::SendMessage($palette, 0x805B, [IntPtr]::Zero, [IntPtr]::Zero)
+        Assert-Ui ($activeColor.ToInt64() -eq $quickColor.Value) "Quick color at $($quickColor.X),$($quickColor.Y) did not select its assigned color."
+    }
+
     # Complete color panel and an actual color selection.
-    Click-Window $palette 68 108
+    Click-Window $palette 120 132
     $colors = Wait-Window 'ElitePen.Colors' 1000
     Assert-Ui ($colors -ne [IntPtr]::Zero -and [ElitePenUiNative]::IsWindowVisible($colors)) 'Color panel did not open.'
     if ($colors -ne [IntPtr]::Zero) { Click-Window $colors 313 93 }
@@ -134,8 +154,30 @@ try {
     $null = [ElitePenUiNative]::SendMessage($palette, 0x0205, [IntPtr]0, $ferrule)
     $null = [ElitePenUiNative]::SendMessage($palette, 0x0205, [IntPtr]0, $ferrule)
 
+    # Palette remains physically above the drawing overlay while Pen is active.
+    $commandPoint = New-Object ElitePenUiNative+POINT
+    $commandPoint.X = $paletteBounds.Left + 68
+    $commandPoint.Y = $paletteBounds.Top + 108
+    Assert-Ui ([ElitePenUiNative]::WindowFromPoint($commandPoint) -eq $palette) 'Palette commands were covered by the drawing overlay.'
+
+    # Dedicated text and geometry commands embedded in the shortened handle.
+    Click-Window $palette 156 190
+    $directText = [ElitePenUiNative]::SendMessage($palette, 0x805A, [IntPtr]::Zero, [IntPtr]::Zero)
+    Assert-Ui ($directText.ToInt64() -eq 9) 'Handle T command did not select Text.'
+    Click-Window $palette 182 203
+    $geometryPanel = Wait-Window 'ElitePen.Tools' 1000
+    Assert-Ui ($geometryPanel -ne [IntPtr]::Zero -and [ElitePenUiNative]::IsWindowVisible($geometryPanel)) 'Direct geometry panel did not open.'
+    if ($geometryPanel -ne [IntPtr]::Zero) {
+        $geometryBounds = New-Object ElitePenUiNative+RECT
+        $null = [ElitePenUiNative]::GetWindowRect($geometryPanel, [ref]$geometryBounds)
+        Assert-Ui (($geometryBounds.Bottom - $geometryBounds.Top) -eq 210) 'Geometry panel was not compact.'
+        Click-Window $geometryPanel 96 68
+        $directGeometry = [ElitePenUiNative]::SendMessage($palette, 0x805A, [IntPtr]::Zero, [IntPtr]::Zero)
+        Assert-Ui ($directGeometry.ToInt64() -eq 4) 'Geometry panel did not select Line.'
+    }
+
     # Settings is a real window and can close without ending the application.
-    Click-Window $palette 123 30
+    Click-Window $palette 208 216
     $settings = Wait-Window 'ElitePen.Settings' 1000
     Assert-Ui ($settings -ne [IntPtr]::Zero -and [ElitePenUiNative]::IsWindowVisible($settings)) 'Settings window did not open.'
     if ($settings -ne [IntPtr]::Zero) {
@@ -192,7 +234,7 @@ try {
     Click-Window $overlay 390 340
     $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]4, [IntPtr]::Zero)
     $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]5, [IntPtr]::Zero)
-    Click-Window $palette 315 269
+    Click-Window $palette 256 244
     $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]4, [IntPtr]::Zero)
     $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]5, [IntPtr]::Zero)
 

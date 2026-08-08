@@ -1,6 +1,6 @@
-# Elite Pen 1.0 — contrato de producto
+# Elite Pen 1.1 — contrato de producto
 
-Estado: version 1.0.0 implementada.
+Estado: version 1.1.0 implementada.
 
 ## 1. Identidad e interaccion principal
 
@@ -10,21 +10,25 @@ la aplicacion sobre la que se presenta.
 
 ### Paleta
 
-- Cuatro colores rapidos en este orden logico: negro, amarillo, azul y rojo.
-- Un quinto circulo `+` abre una cuadricula de 42 colores y el selector RGB
+- Cinco colores rapidos en este orden: negro, amarillo, azul, rojo y morado.
+- El sexto circulo `+` abre una cuadricula de 42 colores y el selector RGB
   personalizado de Windows.
 - El ojo central oculta o muestra todas las anotaciones sin alterar el historial.
 - Los puntos de grosor seleccionan 2, 4, 7, 12 y 20 pixeles logicos; 7 es el valor
   inicial.
 - La paleta se arrastra desde cualquier zona vacia y recuerda su posicion por monitor.
+- Todos los comandos permanecen por encima del lienzo y muestran cursor de mano, por
+  lo que color, grosor y herramienta se seleccionan sin abandonar el modo de dibujo.
 
 ### Pincel
 
 - Punta del pincel: alterna entre Lapiz e Interactuar (cursor normal).
-- Mango azul: abre el selector compacto de herramientas.
+- Mango azul, acortado 40 %: su zona libre abre todas las herramientas.
+- Primer control del mango: `T`, selecciona Texto directamente.
+- Segundo control del mango: abre el panel compacto de figuras geometricas.
+- Tercer control del mango: abre Configuracion.
 - Ferula blanca: clic alterna la pizarra blanca; clic derecho alterna la negra.
-- Engranaje sutil en la paleta: abre Configuracion.
-- Gota de agua: limpia el documento actual mediante una operacion reversible.
+- Gota de agua redisenada: limpia el documento mediante una operacion reversible.
 
 ## 2. Herramientas
 
