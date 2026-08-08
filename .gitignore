@@ -1,0 +1,22 @@
+# Build products
+/build/
+/dist/
+/artifacts/
+/.tmp/
+
+# Local portable toolchain (reproducible from tools/toolchain.json)
+/.tools/
+
+# Runtime/user state
+/*.log
+/*.dmp
+/settings.local.json
+/resources/generated/
+
+# Editors and OS
+/.vs/
+/.vscode/
+*.user
+*.suo
+Thumbs.db
+Desktop.ini

@@ -1,0 +1,10 @@
+{
+  "name": "llvm-mingw",
+  "version": "20260616",
+  "llvmVersion": "22.1.8",
+  "runtime": "ucrt",
+  "architecture": "x86_64",
+  "url": "https://github.com/mstorsjo/llvm-mingw/releases/download/20260616/llvm-mingw-20260616-ucrt-x86_64.zip",
+  "sha256": "B9B68A4D276E16FA25802AABA458E4638F64B3884C290AACCDC2D87083B6CA35",
+  "installDirectory": ".tools/llvm-mingw-20260616-ucrt-x86_64"
+}

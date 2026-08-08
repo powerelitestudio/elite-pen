@@ -1,0 +1,12 @@
+ELITE PEN — LICENCIA DE SOFTWARE PROPIETARIO
+
+Copyright (C) 2026 Power Elite Studio. Todos los derechos reservados.
+
+Este software y sus archivos asociados son propiedad de Power Elite Studio. Se
+autoriza su uso interno y su distribucion exclusivamente por Power Elite Studio o
+por terceros que cuenten con autorizacion escrita. No se concede permiso para
+vender, sublicenciar, descompilar, modificar o redistribuir el software fuera de
+los terminos autorizados por Power Elite Studio.
+
+EL SOFTWARE SE PROPORCIONA "TAL CUAL", SIN GARANTIAS EXPRESAS O IMPLICITAS, EN LA
+MEDIDA PERMITIDA POR LA LEY APLICABLE.
