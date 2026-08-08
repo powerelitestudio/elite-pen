@@ -1,5 +1,12 @@
 # Historial de cambios
 
+## 1.1.1 — 2026-08-08
+
+- El overlay detecta y enruta los clics sobre la paleta en modo dibujo.
+- Color, grosor, ojo, punta, pizarra, Texto, Figuras, Configuracion y Limpiar ya no
+  pueden convertirse accidentalmente en trazos.
+- Prueba de regresion que reproduce el clic a traves del overlay.
+
 ## 1.1.0 — 2026-08-08
 
 - La paleta permanece seleccionable por encima del lienzo en todos los modos.

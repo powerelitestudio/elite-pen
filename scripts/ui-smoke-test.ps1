@@ -42,6 +42,22 @@ public static class ElitePenUiNative {
         }, IntPtr.Zero);
         return count;
     }
+    public static IntPtr FindClassContainingPoint(string className, int x, int y) {
+        IntPtr found = IntPtr.Zero;
+        EnumWindows((window, data) => {
+            var value = new StringBuilder(256);
+            RECT rectangle;
+            GetClassName(window, value, value.Capacity);
+            if (value.ToString() == className && IsWindowVisible(window) &&
+                GetWindowRect(window, out rectangle) && x >= rectangle.Left &&
+                x < rectangle.Right && y >= rectangle.Top && y < rectangle.Bottom) {
+                found = window;
+                return false;
+            }
+            return true;
+        }, IntPtr.Zero);
+        return found;
+    }
 }
 '@
 
@@ -103,6 +119,24 @@ function Select-Tool([IntPtr]$Palette, [int]$Index) {
     Click-Window $tools (96 + 169 * $column) (68 + 48 * $row)
 }
 
+function Click-ThroughOverlay([IntPtr]$Palette, [int]$X, [int]$Y) {
+    $paletteRectangle = New-Object ElitePenUiNative+RECT
+    $null = [ElitePenUiNative]::GetWindowRect($Palette, [ref]$paletteRectangle)
+    $screenX = $paletteRectangle.Left + $X
+    $screenY = $paletteRectangle.Top + $Y
+    $underlay = [ElitePenUiNative]::FindClassContainingPoint('ElitePen.Overlay', $screenX, $screenY)
+    Assert-Ui ($underlay -ne [IntPtr]::Zero) "No overlay was found beneath palette command $X,$Y."
+    if ($underlay -eq [IntPtr]::Zero) { return }
+    $underlayRectangle = New-Object ElitePenUiNative+RECT
+    $null = [ElitePenUiNative]::GetWindowRect($underlay, [ref]$underlayRectangle)
+    $localX = $screenX - $underlayRectangle.Left
+    $localY = $screenY - $underlayRectangle.Top
+    $parameter = [IntPtr](($localY -shl 16) -bor ($localX -band 0xffff))
+    $null = [ElitePenUiNative]::SendMessage($underlay, 0x0201, [IntPtr]1, $parameter)
+    $null = [ElitePenUiNative]::SendMessage($underlay, 0x0202, [IntPtr]0, $parameter)
+    Start-Sleep -Milliseconds 80
+}
+
 $process = $null
 try {
     $process = Start-Process -FilePath $executable -PassThru
@@ -140,16 +174,16 @@ try {
 
     # Thicknesses, visibility, cursor/pen tip and whiteboard toggles.
     Click-Window $palette 23 93
-    Click-Window $palette 126 83
-    Click-Window $palette 126 83
-    Click-Window $palette 62 151
+    Click-ThroughOverlay $palette 126 83
+    Click-ThroughOverlay $palette 126 83
+    Click-ThroughOverlay $palette 62 151
     $tipTool = [ElitePenUiNative]::SendMessage($palette, 0x805A, [IntPtr]::Zero, [IntPtr]::Zero)
     Assert-Ui ($tipTool.ToInt64() -eq 0) 'Brush tip did not switch to the normal cursor.'
-    Click-Window $palette 62 151
+    Click-ThroughOverlay $palette 62 151
     $tipTool = [ElitePenUiNative]::SendMessage($palette, 0x805A, [IntPtr]::Zero, [IntPtr]::Zero)
     Assert-Ui ($tipTool.ToInt64() -eq 1) 'Brush tip did not switch back to the pen.'
-    Click-Window $palette 100 170
-    Click-Window $palette 100 170
+    Click-ThroughOverlay $palette 100 170
+    Click-ThroughOverlay $palette 100 170
     $ferrule = [IntPtr]((170 -shl 16) -bor 100)
     $null = [ElitePenUiNative]::SendMessage($palette, 0x0205, [IntPtr]0, $ferrule)
     $null = [ElitePenUiNative]::SendMessage($palette, 0x0205, [IntPtr]0, $ferrule)
@@ -160,11 +194,22 @@ try {
     $commandPoint.Y = $paletteBounds.Top + 108
     Assert-Ui ([ElitePenUiNative]::WindowFromPoint($commandPoint) -eq $palette) 'Palette commands were covered by the drawing overlay.'
 
+    # Reproduce the reported failure: send the red-color click through the drawing
+    # overlay. The input router must consume it as a palette command, never as ink.
+    Click-ThroughOverlay $palette 175 61
+    $routedColor = [ElitePenUiNative]::SendMessage($palette, 0x805B, [IntPtr]::Zero, [IntPtr]::Zero)
+    Assert-Ui ($routedColor.ToInt64() -eq 4293870660) 'Overlay click was painted instead of selecting red.'
+
+    Click-ThroughOverlay $palette 23 122
+    $routedThickness = [ElitePenUiNative]::SendMessage($palette, 0x805C, [IntPtr]::Zero, [IntPtr]::Zero)
+    Assert-Ui ($routedThickness.ToInt64() -eq 200) 'Overlay click did not select the thickness command.'
+    Click-ThroughOverlay $palette 23 69
+
     # Dedicated text and geometry commands embedded in the shortened handle.
-    Click-Window $palette 156 190
+    Click-ThroughOverlay $palette 156 190
     $directText = [ElitePenUiNative]::SendMessage($palette, 0x805A, [IntPtr]::Zero, [IntPtr]::Zero)
     Assert-Ui ($directText.ToInt64() -eq 9) 'Handle T command did not select Text.'
-    Click-Window $palette 182 203
+    Click-ThroughOverlay $palette 182 203
     $geometryPanel = Wait-Window 'ElitePen.Tools' 1000
     Assert-Ui ($geometryPanel -ne [IntPtr]::Zero -and [ElitePenUiNative]::IsWindowVisible($geometryPanel)) 'Direct geometry panel did not open.'
     if ($geometryPanel -ne [IntPtr]::Zero) {
@@ -177,7 +222,7 @@ try {
     }
 
     # Settings is a real window and can close without ending the application.
-    Click-Window $palette 208 216
+    Click-ThroughOverlay $palette 208 216
     $settings = Wait-Window 'ElitePen.Settings' 1000
     Assert-Ui ($settings -ne [IntPtr]::Zero -and [ElitePenUiNative]::IsWindowVisible($settings)) 'Settings window did not open.'
     if ($settings -ne [IntPtr]::Zero) {
@@ -234,7 +279,7 @@ try {
     Click-Window $overlay 390 340
     $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]4, [IntPtr]::Zero)
     $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]5, [IntPtr]::Zero)
-    Click-Window $palette 256 244
+    Click-ThroughOverlay $palette 256 244
     $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]4, [IntPtr]::Zero)
     $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]5, [IntPtr]::Zero)
 

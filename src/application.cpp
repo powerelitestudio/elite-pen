@@ -33,6 +33,7 @@ constexpr UINT kTrayMessage = WM_APP + 10;
 constexpr UINT kExitMessage = WM_APP + 12;
 constexpr UINT kQaQueryToolMessage = WM_APP + 90;
 constexpr UINT kQaQueryColorMessage = WM_APP + 91;
+constexpr UINT kQaQueryThicknessMessage = WM_APP + 92;
 constexpr UINT_PTR kTrayId = 1;
 constexpr int kPaletteWidth = 290;
 constexpr int kPaletteHeight = 320;
@@ -118,6 +119,8 @@ public:
     void add_tray_icon();
     void remove_tray_icon();
     void show_notification(const wchar_t* title, const std::wstring& message);
+    [[nodiscard]] bool activate_command_at(POINT point);
+    [[nodiscard]] bool contains_screen_point(POINT point) const;
 
 protected:
     LRESULT handle_message(UINT message, WPARAM wparam, LPARAM lparam) override;
@@ -297,6 +300,7 @@ public:
     void invalidate_all();
     void invalidate_document();
     void update_overlay_interaction();
+    [[nodiscard]] bool route_palette_command(PointF screen_point);
     void set_tool(Tool tool);
     void set_color(Color color);
     void set_thickness(float thickness);
@@ -724,6 +728,7 @@ std::optional<PointF> OverlayWindow::pointer_point(WPARAM wparam) const noexcept
 }
 
 void OverlayWindow::begin_gesture(PointF point, float pressure) {
+    if (controller_.route_palette_command(point)) return;
     const Tool tool = controller_.state().tool;
     if (tool == Tool::Eraser) {
         controller_.state().document.begin_compound();
@@ -842,6 +847,10 @@ LRESULT OverlayWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
             }
             break;
         case WM_NCHITTEST:
+            if (controller_.palette() && controller_.palette()->contains_screen_point(
+                    {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)})) {
+                return HTTRANSPARENT;
+            }
             if (controller_.state().tool == Tool::Interact) return HTTRANSPARENT;
             return HTCLIENT;
         case WM_LBUTTONDOWN:
@@ -1146,6 +1155,18 @@ bool PaletteWindow::command_at(POINT point) const {
            (point.x >= 111 && point.x <= 234 && point.y >= 170 && point.y <= 238);
 }
 
+bool PaletteWindow::contains_screen_point(POINT point) const {
+    if (!IsWindowVisible(window_)) return false;
+    RECT bounds{};
+    return GetWindowRect(window_, &bounds) && PtInRect(&bounds, point);
+}
+
+bool PaletteWindow::activate_command_at(POINT point) {
+    if (!command_at(point)) return false;
+    activate_at(point);
+    return true;
+}
+
 void PaletteWindow::activate_at(POINT point) {
     constexpr std::array<float, 5> thicknesses{2.0F, 4.0F, 7.0F, 12.0F, 20.0F};
     constexpr std::array<float, 5> thickness_y{32.0F, 49.0F, 69.0F, 93.0F, 122.0F};
@@ -1198,6 +1219,8 @@ LRESULT PaletteWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
             return static_cast<LRESULT>(controller_.state().tool);
         case kQaQueryColorMessage:
             return static_cast<LRESULT>(controller_.state().color.argb());
+        case kQaQueryThicknessMessage:
+            return static_cast<LRESULT>(std::lround(controller_.state().thickness * 10.0F));
         case WM_SETCURSOR:
             if (LOWORD(lparam) == HTCLIENT) {
                 POINT point{};
@@ -1959,7 +1982,7 @@ bool SettingsWindow::initialize() {
                 WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
                 WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, bounds)) return false;
     HFONT regular = static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
-    title_ = CreateWindowW(L"STATIC", L"Elite Pen 1.1", WS_CHILD | WS_VISIBLE,
+    title_ = CreateWindowW(L"STATIC", L"Elite Pen 1.1.1", WS_CHILD | WS_VISIBLE,
                            24, 20, 510, 24, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
     capture_ = CreateWindowW(L"BUTTON", L"Ocultar la paleta en capturas de pantalla",
@@ -2511,6 +2534,15 @@ void Controller::update_overlay_interaction() {
         SetWindowPos(palette_->hwnd(), HWND_TOPMOST, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     }
+}
+
+bool Controller::route_palette_command(PointF screen_point) {
+    if (!palette_) return false;
+    POINT point{static_cast<LONG>(std::lround(screen_point.x)),
+                static_cast<LONG>(std::lround(screen_point.y))};
+    if (!palette_->contains_screen_point(point)) return false;
+    ScreenToClient(palette_->hwnd(), &point);
+    return palette_->activate_command_at(point);
 }
 
 void Controller::set_tool(Tool tool) {
