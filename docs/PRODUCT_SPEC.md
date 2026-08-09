@@ -1,6 +1,6 @@
-# Elite Pen 1.6 — contrato de producto
+# Elite Pen 1.7 — contrato de producto
 
-Estado: version 1.6.0 implementada.
+Estado: version 1.7.0 implementada.
 
 ## 1. Identidad e interaccion principal
 
@@ -30,6 +30,8 @@ la aplicacion sobre la que se presenta.
 - Los puntos de grosor seleccionan 2, 4, 7, 12 y 20 pixeles logicos; 4, el segundo
   punto de arriba hacia abajo, es el valor inicial y se configura desde Ajustes.
 - La paleta se arrastra desde cualquier zona vacia y recuerda su posicion por monitor.
+- El arrastre usa coordenadas absolutas derivadas del puntero y no realimenta la
+  posición ya desplazada de la ventana; debe seguir cada delta sin rebote ni lastre.
 - El componente principal mide 174 x 168 pixeles fisicos a escala 100 %, una
   reduccion uniforme del 40 % respecto del lienzo visual anterior de 290 x 280.
 - Todos los comandos permanecen por encima del lienzo y muestran cursor de mano, por
@@ -43,7 +45,8 @@ la aplicacion sobre la que se presenta.
 - Cualquier punto del mango abre un unico panel con todas las herramientas y
   Configuracion; no contiene iconos ni comandos diminutos sobre su superficie.
 - Ferula blanca: clic alterna la pizarra blanca; clic derecho alterna la negra.
-- Papelera: limpia el documento mediante una operacion reversible.
+- Papelera: limpia el documento mediante una operacion reversible; se integra cerca
+  del extremo del mango, pero mantiene una zona de clic independiente.
 - No se dibujan etiquetas, nombres, muestras de color ni indicadores de grosor debajo
   del mango.
 

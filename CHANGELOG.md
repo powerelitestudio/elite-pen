@@ -1,5 +1,17 @@
 # Historial de cambios
 
+## 1.7.0 — 2026-08-08
+
+- Arrastre reconstruido con coordenadas absolutas de pantalla: la paleta sigue al
+  puntero sin oscilación, rebote ni sensación de lastre.
+- La papelera se acerca ópticamente al extremo del pincel, reduce su peso visual y
+  conserva una zona de clic separada para evitar limpiezas accidentales.
+- Los selectores de Configuración reemplazan los últimos campos blancos nativos por
+  superficies oscuras, cheurones champaña y foco coherente con Obsidian Atelier.
+- Configuración adopta la misma firma vertical dorada de Herramientas y Colores.
+- Nueva regresión automatizada que desplaza la paleta en dos tramos y verifica que
+  cada delta se siga exactamente después de mover la propia ventana.
+
 ## 1.6.0 — 2026-08-08
 
 - Nuevo sistema visual `Obsidian Atelier`: superficies grafito/obsidiana, metal

@@ -5,6 +5,7 @@
 #include "preferences.hpp"
 
 #include <windows.h>
+#include <commctrl.h>
 #include <commdlg.h>
 #include <dwmapi.h>
 #include <magnification.h>
@@ -398,6 +399,105 @@ void apply_premium_window_chrome(HWND window) {
     DwmSetWindowAttribute(window, 34, &border, sizeof(border));
     DwmSetWindowAttribute(window, 35, &caption, sizeof(caption));
     DwmSetWindowAttribute(window, 36, &caption_text, sizeof(caption_text));
+}
+
+void paint_premium_combo(HWND window, HDC dc) {
+    RECT bounds{};
+    GetClientRect(window, &bounds);
+    HBRUSH background = CreateSolidBrush(RGB(24, 28, 35));
+    FillRect(dc, &bounds, background);
+    DeleteObject(background);
+
+    RECT face_rect = bounds;
+    face_rect.right -= 1;
+    face_rect.bottom -= 1;
+    const bool focused = GetFocus() == window;
+    HBRUSH face = CreateSolidBrush(RGB(27, 31, 39));
+    HPEN outline = CreatePen(PS_SOLID, focused ? 2 : 1,
+                             focused ? RGB(216, 182, 109) : RGB(74, 84, 100));
+    HGDIOBJ previous_brush = SelectObject(dc, face);
+    HGDIOBJ previous_pen = SelectObject(dc, outline);
+    RoundRect(dc, face_rect.left, face_rect.top, face_rect.right, face_rect.bottom, 8, 8);
+    SelectObject(dc, previous_pen);
+    SelectObject(dc, previous_brush);
+    DeleteObject(outline);
+    DeleteObject(face);
+
+    constexpr int arrow_width = 27;
+    HPEN divider = CreatePen(PS_SOLID, 1, RGB(58, 66, 80));
+    previous_pen = SelectObject(dc, divider);
+    MoveToEx(dc, bounds.right - arrow_width, 4, nullptr);
+    LineTo(dc, bounds.right - arrow_width, bounds.bottom - 4);
+    SelectObject(dc, previous_pen);
+    DeleteObject(divider);
+
+    wchar_t value[128]{};
+    const LRESULT selection = SendMessageW(window, CB_GETCURSEL, 0, 0);
+    if (selection >= 0) {
+        SendMessageW(window, CB_GETLBTEXT, static_cast<WPARAM>(selection),
+                     reinterpret_cast<LPARAM>(value));
+    }
+    HGDIOBJ previous_font = nullptr;
+    if (const auto font = reinterpret_cast<HFONT>(SendMessageW(window, WM_GETFONT, 0, 0))) {
+        previous_font = SelectObject(dc, font);
+    }
+    SetBkMode(dc, TRANSPARENT);
+    SetTextColor(dc, IsWindowEnabled(window) ? RGB(245, 246, 248) : RGB(126, 135, 149));
+    RECT text_rect{10, 0, bounds.right - arrow_width - 7, bounds.bottom};
+    DrawTextW(dc, value, -1, &text_rect,
+              DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+    if (previous_font) SelectObject(dc, previous_font);
+
+    HPEN chevron = CreatePen(PS_SOLID, 2,
+                             focused ? RGB(244, 219, 154) : RGB(216, 182, 109));
+    previous_pen = SelectObject(dc, chevron);
+    const int center_x = bounds.right - arrow_width / 2;
+    const int center_y = bounds.bottom / 2;
+    MoveToEx(dc, center_x - 4, center_y - 2, nullptr);
+    LineTo(dc, center_x, center_y + 2);
+    LineTo(dc, center_x + 4, center_y - 2);
+    SelectObject(dc, previous_pen);
+    DeleteObject(chevron);
+}
+
+LRESULT CALLBACK premium_combo_subclass(HWND window, UINT message, WPARAM wparam,
+                                        LPARAM lparam, UINT_PTR subclass_id,
+                                        DWORD_PTR) {
+    switch (message) {
+        case WM_PAINT: {
+            PAINTSTRUCT paint{};
+            HDC dc = BeginPaint(window, &paint);
+            paint_premium_combo(window, dc);
+            EndPaint(window, &paint);
+            return 0;
+        }
+        case WM_PRINTCLIENT:
+            paint_premium_combo(window, reinterpret_cast<HDC>(wparam));
+            return 0;
+        case WM_ERASEBKGND:
+        case WM_NCPAINT:
+            return 1;
+        case CB_SETCURSEL: {
+            const LRESULT result = DefSubclassProc(window, message, wparam, lparam);
+            InvalidateRect(window, nullptr, FALSE);
+            return result;
+        }
+        case WM_SETFOCUS:
+        case WM_KILLFOCUS:
+        case WM_ENABLE:
+        case WM_LBUTTONUP:
+        case WM_KEYUP: {
+            const LRESULT result = DefSubclassProc(window, message, wparam, lparam);
+            InvalidateRect(window, nullptr, FALSE);
+            return result;
+        }
+        case WM_NCDESTROY:
+            RemoveWindowSubclass(window, premium_combo_subclass, subclass_id);
+            break;
+        default:
+            break;
+    }
+    return DefSubclassProc(window, message, wparam, lparam);
 }
 
 std::uint64_t monotonic_milliseconds() {
@@ -1119,7 +1219,7 @@ void PaletteWindow::install_tooltips() {
         Tip{10, {42, 120, 86, 174}, L"Alternar entre lapiz y cursor normal"},
         Tip{11, {88, 151, 116, 184}, L"Pizarra blanca (clic) o negra (clic derecho)"},
         Tip{12, {102, 159, 230, 239}, L"Abrir herramientas y configuracion"},
-        Tip{16, {237, 214, 279, 276}, L"Papelera: limpiar todas las anotaciones"}
+        Tip{16, {220, 210, 258, 264}, L"Papelera: limpiar todas las anotaciones"}
     };
     for (const auto& tip : tips) {
         TOOLINFOW information{};
@@ -1229,10 +1329,10 @@ bool PaletteWindow::command_at(POINT point) const {
                             static_cast<float>(color_point.y), 17.0F)) return true;
     }
     return point_in_circle(point, 126, 83, 23) ||
-           point_in_circle(point, 256, 244, 25) ||
+           (point.x >= 226 && point_in_circle(point, 239, 238, 23)) ||
            (point.x >= 42 && point.x <= 86 && point.y >= 120 && point.y <= 174) ||
            (point.x >= 88 && point.x <= 116 && point.y >= 151 && point.y <= 184) ||
-           point_near_segment(point, 106, 173, 216, 225, 14);
+           (point.x < 226 && point_near_segment(point, 106, 173, 216, 225, 14));
 }
 
 bool PaletteWindow::contains_screen_point(POINT point) const {
@@ -1271,7 +1371,10 @@ void PaletteWindow::activate_at(POINT point) {
     }
     if (point_in_circle(point, 113, 139, 16)) { choose_custom_color(); return; }
     if (point_in_circle(point, 126, 83, 22)) { controller_.toggle_visibility(); return; }
-    if (point_in_circle(point, 256, 244, 24)) { controller_.clear_document(); return; }
+    if (point.x >= 226 && point_in_circle(point, 239, 238, 22)) {
+        controller_.clear_document();
+        return;
+    }
     if (point.x >= 42 && point.x <= 86 && point.y >= 120 && point.y <= 174) {
         controller_.set_tool(controller_.state().tool == Tool::Interact
             ? Tool::Pen : Tool::Interact);
@@ -1280,12 +1383,13 @@ void PaletteWindow::activate_at(POINT point) {
     if (point.x >= 88 && point.x <= 116 && point.y >= 155 && point.y <= 184) {
         controller_.toggle_whiteboard(); return;
     }
-    if (point_near_segment(point, 106, 173, 216, 225, 14)) {
+    if (point.x < 226 && point_near_segment(point, 106, 173, 216, 225, 14)) {
         show_tool_menu(); return;
     }
 
     dragging_ = true;
     drag_origin_ = physical_point;
+    ClientToScreen(window_, &drag_origin_);
     RECT bounds{};
     GetWindowRect(window_, &bounds);
     window_origin_ = {bounds.left, bounds.top};
@@ -1317,16 +1421,22 @@ LRESULT PaletteWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
         case WM_MOUSEMOVE:
             if (dragging_ && (wparam & MK_LBUTTON)) {
                 POINT current{GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
-                SetWindowPos(window_, HWND_TOPMOST,
+                ClientToScreen(window_, &current);
+                SetWindowPos(window_, nullptr,
                              window_origin_.x + current.x - drag_origin_.x,
                              window_origin_.y + current.y - drag_origin_.y,
-                             0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+                             0, 0, SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOZORDER |
+                                   SWP_NOSENDCHANGING);
             }
             return 0;
         case WM_LBUTTONUP:
             dragging_ = false;
             if (GetCapture() == window_) ReleaseCapture();
             controller_.save_palette_position();
+            return 0;
+        case WM_CANCELMODE:
+        case WM_CAPTURECHANGED:
+            dragging_ = false;
             return 0;
         case WM_RBUTTONUP:
             if (const POINT point = palette_logical_point(
@@ -1616,17 +1726,17 @@ void PaletteWindow::render() {
 
     // A familiar trash can makes the destructive action immediately recognizable.
     context->DrawRoundedRectangle(
-        D2D1::RoundedRect(D2D1::RectF(244, 233, 268, 263), 3, 3), danger.Get(), 2.2F);
-    context->DrawLine(D2D1::Point2F(241, 229), D2D1::Point2F(271, 229),
-                      danger.Get(), 2.6F);
-    context->DrawLine(D2D1::Point2F(251, 225), D2D1::Point2F(261, 225),
-                      danger.Get(), 2.6F);
-    context->DrawLine(D2D1::Point2F(250, 239), D2D1::Point2F(250, 257),
-                      danger.Get(), 1.7F);
-    context->DrawLine(D2D1::Point2F(256, 239), D2D1::Point2F(256, 257),
-                      danger.Get(), 1.7F);
-    context->DrawLine(D2D1::Point2F(262, 239), D2D1::Point2F(262, 257),
-                      danger.Get(), 1.7F);
+        D2D1::RoundedRect(D2D1::RectF(230, 228, 248, 253), 3, 3), danger.Get(), 2.0F);
+    context->DrawLine(D2D1::Point2F(227, 224), D2D1::Point2F(251, 224),
+                      danger.Get(), 2.1F);
+    context->DrawLine(D2D1::Point2F(234, 220), D2D1::Point2F(244, 220),
+                      danger.Get(), 2.1F);
+    context->DrawLine(D2D1::Point2F(235, 233), D2D1::Point2F(235, 248),
+                      danger.Get(), 1.45F);
+    context->DrawLine(D2D1::Point2F(239, 233), D2D1::Point2F(239, 248),
+                      danger.Get(), 1.45F);
+    context->DrawLine(D2D1::Point2F(243, 233), D2D1::Point2F(243, 248),
+                      danger.Get(), 1.45F);
 
     std::wstring error;
     if (!surface_.end_draw(error)) controller_.report_runtime_error(error);
@@ -2322,10 +2432,10 @@ bool SettingsWindow::initialize() {
                               DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                               CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI Variable Text");
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
-                           34, 12, 470, 30, window_, nullptr,
+                           31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 1.6.0",
-                              WS_CHILD | WS_VISIBLE, 35, 40, 470, 20, window_, nullptr,
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 1.7.0",
+                              WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
                                   BS_OWNERDRAW, 541, 14, 32, 32, window_,
@@ -2411,6 +2521,10 @@ bool SettingsWindow::initialize() {
     SendMessageW(title_, WM_SETFONT, reinterpret_cast<WPARAM>(title_font_), TRUE);
     SendMessageW(subtitle_, WM_SETFONT, reinterpret_cast<WPARAM>(small_font_), TRUE);
     SendMessageW(shortcuts_, WM_SETFONT, reinterpret_cast<WPARAM>(small_font_), TRUE);
+    SetWindowSubclass(fade_, premium_combo_subclass, 4009, 0);
+    SetWindowSubclass(thickness_, premium_combo_subclass, 4010, 0);
+    SetWindowSubclass(zoom_, premium_combo_subclass, 4004, 0);
+    SetWindowSubclass(zoom_view_, premium_combo_subclass, 4006, 0);
     return true;
 }
 
@@ -2430,7 +2544,7 @@ void SettingsWindow::paint_background(HDC dc) {
     HBRUSH brand_brush = CreateSolidBrush(RGB(216, 182, 109));
     old_brush = SelectObject(dc, brand_brush);
     old_pen = SelectObject(dc, GetStockObject(NULL_PEN));
-    Ellipse(dc, 17, 18, 25, 26);
+    RoundRect(dc, 18, 17, 22, 31, 4, 4);
     SelectObject(dc, old_pen);
     SelectObject(dc, old_brush);
     DeleteObject(brand_brush);

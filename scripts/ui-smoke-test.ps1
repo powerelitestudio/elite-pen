@@ -31,6 +31,8 @@ public static class ElitePenUiNative {
     [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr window, int id);
     [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr window, int index);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr window, out RECT rectangle);
+    [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter,
+        int x, int y, int width, int height, uint flags);
     [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT point);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern bool SetWindowText(IntPtr window, string value);
     public static int CountClass(string className) {
@@ -179,6 +181,29 @@ try {
     Assert-Ui (($paletteBounds.Right - $paletteBounds.Left) -eq 174) 'Palette width was not reduced by 40 percent.'
     Assert-Ui (($paletteBounds.Bottom - $paletteBounds.Top) -eq 168) 'Palette height was not reduced by 40 percent.'
 
+    # Dragging uses screen-space pointer deltas. Client-space deltas feed the moved
+    # window back into the calculation and cause the palette to shake or lag.
+    $dragX = Convert-PaletteCoordinate 225
+    $dragY = Convert-PaletteCoordinate 150
+    $dragStart = [IntPtr](($dragY -shl 16) -bor ($dragX -band 0xffff))
+    $null = [ElitePenUiNative]::SendMessage($palette, 0x0201, [IntPtr]1, $dragStart)
+    $dragMove = [IntPtr]((($dragY + 25) -shl 16) -bor (($dragX + 40) -band 0xffff))
+    $null = [ElitePenUiNative]::SendMessage($palette, 0x0200, [IntPtr]1, $dragMove)
+    $firstDragBounds = New-Object ElitePenUiNative+RECT
+    $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$firstDragBounds)
+    Assert-Ui ($firstDragBounds.Left -eq $paletteBounds.Left + 40 -and
+               $firstDragBounds.Top -eq $paletteBounds.Top + 25) `
+        "Palette first drag expected $($paletteBounds.Left + 40),$($paletteBounds.Top + 25) but reached $($firstDragBounds.Left),$($firstDragBounds.Top)."
+    $null = [ElitePenUiNative]::SendMessage($palette, 0x0200, [IntPtr]1, $dragMove)
+    $secondDragBounds = New-Object ElitePenUiNative+RECT
+    $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$secondDragBounds)
+    Assert-Ui ($secondDragBounds.Left -eq $paletteBounds.Left + 80 -and
+               $secondDragBounds.Top -eq $paletteBounds.Top + 50) `
+        "Palette second drag expected $($paletteBounds.Left + 80),$($paletteBounds.Top + 50) but reached $($secondDragBounds.Left),$($secondDragBounds.Top)."
+    $null = [ElitePenUiNative]::SetWindowPos($palette, [IntPtr]::Zero,
+        $paletteBounds.Left, $paletteBounds.Top, 0, 0, 0x0015)
+    $null = [ElitePenUiNative]::SendMessage($palette, 0x0202, [IntPtr]::Zero, $dragStart)
+
     # Six quick colors follow the compact visual order requested for 1.2.
     $quickColors = @(
         @{ X = 67;  Y = 107; Value = 4279769115 }, # black
@@ -314,7 +339,7 @@ try {
     Click-Window $overlay 390 340
     $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]4, [IntPtr]::Zero)
     $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]5, [IntPtr]::Zero)
-    Click-ThroughOverlay $palette 256 244
+    Click-ThroughOverlay $palette 239 238
     $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]4, [IntPtr]::Zero)
     $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]5, [IntPtr]::Zero)
 
