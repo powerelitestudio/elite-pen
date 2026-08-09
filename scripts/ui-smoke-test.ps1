@@ -82,6 +82,7 @@ public static class ElitePenUiNative {
 
 $null = [ElitePenUiNative]::SetProcessDpiAwarenessContext([IntPtr](-4))
 $failures = [System.Collections.Generic.List[string]]::new()
+$paletteScale = 0.60
 $captureDirectory = Join-Path $repoRoot 'artifacts\qa\ui-captures'
 if (Test-Path -LiteralPath $captureDirectory) {
     Remove-Item -LiteralPath $captureDirectory -Recurse -Force
@@ -128,8 +129,16 @@ function Click-Window([IntPtr]$Window, [int]$X, [int]$Y) {
     Start-Sleep -Milliseconds 80
 }
 
+function Convert-PaletteCoordinate([int]$Value) {
+    return [int][Math]::Round($Value * $script:paletteScale, [MidpointRounding]::AwayFromZero)
+}
+
+function Click-PaletteWindow([IntPtr]$Window, [int]$X, [int]$Y) {
+    Click-Window $Window (Convert-PaletteCoordinate $X) (Convert-PaletteCoordinate $Y)
+}
+
 function Select-Tool([IntPtr]$Palette, [int]$Index) {
-    Click-Window $Palette 225 232
+    Click-PaletteWindow $Palette 225 232
     $tools = Wait-Window 'ElitePen.Tools' 1000
     Assert-Ui ($tools -ne [IntPtr]::Zero -and [ElitePenUiNative]::IsWindowVisible($tools)) 'Tool panel did not open.'
     if ($tools -eq [IntPtr]::Zero) { return }
@@ -141,8 +150,8 @@ function Select-Tool([IntPtr]$Palette, [int]$Index) {
 function Click-ThroughOverlay([IntPtr]$Palette, [int]$X, [int]$Y) {
     $paletteRectangle = New-Object ElitePenUiNative+RECT
     $null = [ElitePenUiNative]::GetWindowRect($Palette, [ref]$paletteRectangle)
-    $screenX = $paletteRectangle.Left + $X
-    $screenY = $paletteRectangle.Top + $Y
+    $screenX = $paletteRectangle.Left + (Convert-PaletteCoordinate $X)
+    $screenY = $paletteRectangle.Top + (Convert-PaletteCoordinate $Y)
     $underlay = [ElitePenUiNative]::FindClassContainingPoint('ElitePen.Overlay', $screenX, $screenY)
     Assert-Ui ($underlay -ne [IntPtr]::Zero) "No overlay was found beneath palette command $X,$Y."
     if ($underlay -eq [IntPtr]::Zero) { return }
@@ -167,8 +176,8 @@ try {
 
     $paletteBounds = New-Object ElitePenUiNative+RECT
     $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$paletteBounds)
-    Assert-Ui (($paletteBounds.Right - $paletteBounds.Left) -eq 290) 'Palette was not shortened with the new brush design.'
-    Assert-Ui (($paletteBounds.Bottom - $paletteBounds.Top) -eq 280) 'Palette did not compact around the brush controls.'
+    Assert-Ui (($paletteBounds.Right - $paletteBounds.Left) -eq 174) 'Palette width was not reduced by 40 percent.'
+    Assert-Ui (($paletteBounds.Bottom - $paletteBounds.Top) -eq 168) 'Palette height was not reduced by 40 percent.'
 
     # Six quick colors follow the compact visual order requested for 1.2.
     $quickColors = @(
@@ -180,13 +189,13 @@ try {
         @{ X = 160; Y = 130; Value = 4287323382 }  # purple
     )
     foreach ($quickColor in $quickColors) {
-        Click-Window $palette $quickColor.X $quickColor.Y
+        Click-PaletteWindow $palette $quickColor.X $quickColor.Y
         $activeColor = [ElitePenUiNative]::SendMessage($palette, 0x805B, [IntPtr]::Zero, [IntPtr]::Zero)
         Assert-Ui ($activeColor.ToInt64() -eq $quickColor.Value) "Quick color at $($quickColor.X),$($quickColor.Y) did not select its assigned color."
     }
 
     # Complete color panel and an actual color selection.
-    Click-Window $palette 113 139
+    Click-PaletteWindow $palette 113 139
     $colors = Wait-Window 'ElitePen.Colors' 1000
     Assert-Ui ($colors -ne [IntPtr]::Zero -and [ElitePenUiNative]::IsWindowVisible($colors)) 'Color panel did not open.'
     if ($colors -ne [IntPtr]::Zero) { Click-Window $colors 313 93 }
@@ -194,7 +203,7 @@ try {
     Assert-Ui ($selectedColor.ToInt64() -eq 4280468830) 'Custom color selection did not update the active ink color.'
 
     # Thicknesses, visibility, cursor/pen tip and whiteboard toggles.
-    Click-Window $palette 23 93
+    Click-PaletteWindow $palette 23 93
     Click-ThroughOverlay $palette 126 83
     Click-ThroughOverlay $palette 126 83
     Click-ThroughOverlay $palette 62 151
@@ -205,7 +214,9 @@ try {
     Assert-Ui ($tipTool.ToInt64() -eq 1) 'Brush tip did not switch back to the pen.'
     Click-ThroughOverlay $palette 100 170
     Click-ThroughOverlay $palette 100 170
-    $ferrule = [IntPtr]((170 -shl 16) -bor 100)
+    $ferruleX = Convert-PaletteCoordinate 100
+    $ferruleY = Convert-PaletteCoordinate 170
+    $ferrule = [IntPtr](($ferruleY -shl 16) -bor ($ferruleX -band 0xffff))
     $null = [ElitePenUiNative]::SendMessage($palette, 0x0205, [IntPtr]0, $ferrule)
     $null = [ElitePenUiNative]::SendMessage($palette, 0x0205, [IntPtr]0, $ferrule)
 

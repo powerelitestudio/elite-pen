@@ -1,6 +1,6 @@
-# Elite Pen 1.3 — contrato de producto
+# Elite Pen 1.4 — contrato de producto
 
-Estado: version 1.3.0 implementada.
+Estado: version 1.4.0 implementada.
 
 ## 1. Identidad e interaccion principal
 
@@ -18,16 +18,20 @@ la aplicacion sobre la que se presenta.
 - Los puntos de grosor seleccionan 2, 4, 7, 12 y 20 pixeles logicos; 4, el segundo
   punto de arriba hacia abajo, es el valor inicial y se configura desde Ajustes.
 - La paleta se arrastra desde cualquier zona vacia y recuerda su posicion por monitor.
+- El componente principal mide 174 x 168 pixeles fisicos a escala 100 %, una
+  reduccion uniforme del 40 % respecto del lienzo visual anterior de 290 x 280.
 - Todos los comandos permanecen por encima del lienzo y muestran cursor de mano, por
   lo que color, grosor y herramienta se seleccionan sin abandonar el modo de dibujo.
 
 ### Pincel
 
 - Punta del pincel: alterna entre Lapiz e Interactuar (cursor normal).
-- Mango azul, acortado 40 %: su zona libre abre todas las herramientas.
+- Mango azul, acortado 40 %, unido y alineado con la ferula blanca: su zona libre
+  abre todas las herramientas.
 - Primer control del mango: `T`, selecciona Texto directamente.
 - Segundo control del mango: abre el panel compacto de figuras geometricas.
 - Tercer control del mango: abre Configuracion.
+- Los tres iconos se dibujan directamente sobre el azul, sin fondos ni contenedores.
 - Ferula blanca: clic alterna la pizarra blanca; clic derecho alterna la negra.
 - Papelera: limpia el documento mediante una operacion reversible.
 - Debajo del mango, una muestra corta e inclinada enseña color y grosor activos sin

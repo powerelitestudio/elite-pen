@@ -1,4 +1,4 @@
-ELITE PEN 1.3 — EDICION PORTABLE
+ELITE PEN 1.4 — EDICION PORTABLE
 ================================
 
 Elite Pen es la herramienta de anotacion, pizarra y ampliacion de pantalla de
@@ -49,4 +49,4 @@ Configuracion.
 
 SOPORTE
 -------
-Producto de Power Elite Studio. Version 1.3.0.
+Producto de Power Elite Studio. Version 1.4.0.

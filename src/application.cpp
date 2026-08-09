@@ -37,8 +37,11 @@ constexpr UINT kQaQueryThicknessMessage = WM_APP + 92;
 constexpr UINT kQaCommitInlineTextMessage = WM_APP + 93;
 constexpr UINT kQaQueryDocumentCountMessage = WM_APP + 94;
 constexpr UINT_PTR kTrayId = 1;
-constexpr int kPaletteWidth = 290;
-constexpr int kPaletteHeight = 280;
+constexpr float kPaletteScale = 0.60F;
+constexpr int kPaletteDesignWidth = 290;
+constexpr int kPaletteDesignHeight = 280;
+constexpr int kPaletteWidth = static_cast<int>(kPaletteDesignWidth * kPaletteScale);
+constexpr int kPaletteHeight = static_cast<int>(kPaletteDesignHeight * kPaletteScale);
 
 constexpr int kHotkeyInteract = 1;
 constexpr int kHotkeyVisibility = 2;
@@ -396,6 +399,22 @@ bool point_in_circle(POINT point, float cx, float cy, float radius) {
     const float dx = static_cast<float>(point.x) - cx;
     const float dy = static_cast<float>(point.y) - cy;
     return dx * dx + dy * dy <= radius * radius;
+}
+
+POINT palette_logical_point(POINT point) noexcept {
+    return {
+        static_cast<LONG>(std::lround(static_cast<float>(point.x) / kPaletteScale)),
+        static_cast<LONG>(std::lround(static_cast<float>(point.y) / kPaletteScale))
+    };
+}
+
+RECT palette_scaled_rect(RECT bounds) noexcept {
+    return {
+        static_cast<LONG>(std::lround(static_cast<float>(bounds.left) * kPaletteScale)),
+        static_cast<LONG>(std::lround(static_cast<float>(bounds.top) * kPaletteScale)),
+        static_cast<LONG>(std::lround(static_cast<float>(bounds.right) * kPaletteScale)),
+        static_cast<LONG>(std::lround(static_cast<float>(bounds.bottom) * kPaletteScale))
+    };
 }
 
 bool capture_desktop_duplication(GraphicsDevice& graphics, int left, int top,
@@ -1059,7 +1078,7 @@ void PaletteWindow::install_tooltips() {
         information.uFlags = TTF_SUBCLASS | TTF_TRANSPARENT;
         information.hwnd = window_;
         information.uId = tip.id;
-        information.rect = tip.bounds;
+        information.rect = palette_scaled_rect(tip.bounds);
         information.lpszText = const_cast<wchar_t*>(tip.text);
         SendMessageW(tooltip_, TTM_ADDTOOLW, 0,
                      reinterpret_cast<LPARAM>(&information));
@@ -1160,6 +1179,7 @@ void PaletteWindow::show_tray_menu() {
 }
 
 bool PaletteWindow::command_at(POINT point) const {
+    point = palette_logical_point(point);
     constexpr std::array<float, 5> thickness_y{32.0F, 49.0F, 69.0F, 93.0F, 122.0F};
     for (const float y : thickness_y) {
         if (point_in_circle(point, 23.0F, y, 11.0F)) return true;
@@ -1194,6 +1214,8 @@ bool PaletteWindow::activate_command_at(POINT point) {
 }
 
 void PaletteWindow::activate_at(POINT point) {
+    const POINT physical_point = point;
+    point = palette_logical_point(point);
     constexpr std::array<float, 5> thicknesses{2.0F, 4.0F, 7.0F, 12.0F, 20.0F};
     constexpr std::array<float, 5> thickness_y{32.0F, 49.0F, 69.0F, 93.0F, 122.0F};
     for (std::size_t index = 0; index < thickness_y.size(); ++index) {
@@ -1232,7 +1254,7 @@ void PaletteWindow::activate_at(POINT point) {
     }
 
     dragging_ = true;
-    drag_origin_ = point;
+    drag_origin_ = physical_point;
     RECT bounds{};
     GetWindowRect(window_, &bounds);
     window_origin_ = {bounds.left, bounds.top};
@@ -1276,8 +1298,9 @@ LRESULT PaletteWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
             controller_.save_palette_position();
             return 0;
         case WM_RBUTTONUP:
-            if (GET_X_LPARAM(lparam) >= 88 && GET_X_LPARAM(lparam) <= 116 &&
-                GET_Y_LPARAM(lparam) >= 155 && GET_Y_LPARAM(lparam) <= 184) {
+            if (const POINT point = palette_logical_point(
+                    {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)});
+                point.x >= 88 && point.x <= 116 && point.y >= 155 && point.y <= 184) {
                 controller_.toggle_blackboard();
             } else {
                 show_tray_menu();
@@ -1339,6 +1362,7 @@ LRESULT PaletteWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
 void PaletteWindow::render() {
     auto* context = surface_.begin_draw(D2D1::ColorF(0, 0.0F));
     if (!context) return;
+    context->SetTransform(D2D1::Matrix3x2F::Scale(kPaletteScale, kPaletteScale));
 
     ComPtr<ID2D1SolidColorBrush> cream;
     ComPtr<ID2D1SolidColorBrush> shadow;
@@ -1449,9 +1473,9 @@ void PaletteWindow::render() {
     context->CreateSolidColorBrush(D2D1::ColorF(0xFF6868), red.GetAddressOf());
     context->CreateSolidColorBrush(D2D1::ColorF(0xF7F7F4), ferrule.GetAddressOf());
     context->CreateSolidColorBrush(D2D1::ColorF(0x27A9D2), handle.GetAddressOf());
-    context->DrawLine(D2D1::Point2F(108, 173), D2D1::Point2F(228, 231),
+    context->DrawLine(D2D1::Point2F(106, 177), D2D1::Point2F(228, 235),
                       shadow.Get(), 20.0F);
-    context->DrawLine(D2D1::Point2F(108, 168), D2D1::Point2F(228, 226),
+    context->DrawLine(D2D1::Point2F(106, 173), D2D1::Point2F(228, 231),
                       handle.Get(), 17.0F);
     D2D1_POINT_2F ferrule_points[]{{82, 151}, {110, 164}, {102, 182}, {75, 169}};
     ComPtr<ID2D1PathGeometry> ferrule_geometry;
@@ -1494,14 +1518,7 @@ void PaletteWindow::render() {
                              ferrule.Get());
     }
 
-    // Three compact commands embedded in the handle: text, geometry, settings.
-    constexpr std::array<D2D1_POINT_2F, 3> handle_commands{{
-        {156, 190}, {182, 203}, {208, 216}
-    }};
-    for (const auto& command : handle_commands) {
-        context->FillEllipse(D2D1::Ellipse(command, 8.2F, 8.2F), ferrule.Get());
-        context->DrawEllipse(D2D1::Ellipse(command, 8.2F, 8.2F), ink.Get(), 1.0F);
-    }
+    // Text, geometry and settings rest directly on the blue handle without badges.
     ComPtr<IDWriteTextFormat> command_format;
     controller_.graphics().dwrite()->CreateTextFormat(L"Segoe UI", nullptr,
         DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
@@ -1510,20 +1527,20 @@ void PaletteWindow::render() {
         command_format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
         command_format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
         context->DrawTextW(L"T", 1, command_format.Get(),
-                           D2D1::RectF(148, 182, 164, 198), ink.Get());
+                           D2D1::RectF(148, 182, 164, 198), ferrule.Get());
     }
-    context->DrawRectangle(D2D1::RectF(177, 198, 184, 205), ink.Get(), 1.1F);
+    context->DrawRectangle(D2D1::RectF(177, 198, 184, 205), ferrule.Get(), 1.4F);
     context->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(185, 206), 3.0F, 2.4F),
-                         ink.Get(), 1.0F);
+                         ferrule.Get(), 1.3F);
     context->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(208, 216), 3.8F, 3.8F),
-                         ink.Get(), 1.1F);
-    context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(208, 216), 1.3F, 1.3F), ink.Get());
+                         ferrule.Get(), 1.4F);
+    context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(208, 216), 1.3F, 1.3F), ferrule.Get());
     for (int index = 0; index < 6; ++index) {
         const float angle = static_cast<float>(index) * 1.047198F;
         context->DrawLine(D2D1::Point2F(208 + std::cos(angle) * 4.2F,
                                         216 + std::sin(angle) * 4.2F),
                           D2D1::Point2F(208 + std::cos(angle) * 5.8F,
-                                        216 + std::sin(angle) * 5.8F), ink.Get(), 1.0F);
+                                        216 + std::sin(angle) * 5.8F), ferrule.Get(), 1.2F);
     }
 
     // A familiar trash can makes the destructive action immediately recognizable.
@@ -2091,7 +2108,7 @@ bool SettingsWindow::initialize() {
                 WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
                 WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, bounds)) return false;
     HFONT regular = static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
-    title_ = CreateWindowW(L"STATIC", L"Elite Pen 1.3.0", WS_CHILD | WS_VISIBLE,
+    title_ = CreateWindowW(L"STATIC", L"Elite Pen 1.4.0", WS_CHILD | WS_VISIBLE,
                            24, 20, 510, 24, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
     capture_ = CreateWindowW(L"BUTTON", L"Ocultar la paleta en capturas de pantalla",

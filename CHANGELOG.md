@@ -1,5 +1,16 @@
 # Historial de cambios
 
+## 1.4.0 — 2026-08-08
+
+- Todo el componente principal se reduce de 290 x 280 a 174 x 168 px: 40 % menos
+  en ambas dimensiones, conservando sus proporciones y comportamiento.
+- La ferula blanca y el mango azul quedan unidos sobre el mismo eje, sin salto ni
+  separacion visual.
+- Los accesos `T`, Figuras y Configuracion pierden sus fondos circulares y descansan
+  directamente sobre el mango azul.
+- Las zonas de clic, el enrutamiento desde el lienzo y los tooltips se adaptan al
+  nuevo escalado para mantener todos los comandos seleccionables mientras se dibuja.
+
 ## 1.3.0 — 2026-08-08
 
 - Panel de Figuras reducido a cinco botones visuales sin nombres repetidos.
