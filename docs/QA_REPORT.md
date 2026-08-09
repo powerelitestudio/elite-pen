@@ -1,4 +1,4 @@
-# Informe de calidad — Elite Pen 1.2.0
+# Informe de calidad — Elite Pen 1.3.0
 
 Fecha: 2026-08-08
 Equipo de referencia: Lenovo 80NV, Intel Core i7-6700HQ, 12 GB RAM, Intel HD 530,
@@ -18,6 +18,9 @@ GeForce GTX 960M, Windows 10 Pro 22H2 x64, dos monitores con escalado mixto.
   grosor, ojo, punta, pizarra, Texto, Figuras, Configuracion y Limpiar.
 - Iteracion 1.2: sexto acceso directo verde, arco compacto de colores y estado oculto
   representado mediante un ojo cerrado sin `X`.
+- Iteracion 1.3: panel de figuras solo con iconos, curva cubica Bezier, texto directo
+  y transparente, papelera, grosor inicial configurable, indicador inclinado sin
+  fondo, selector `+` sin circulo y paleta de 280 px de alto.
 - Captura: el gesto y el codificador PNG se prueban con una superficie determinista;
   la copia real del escritorio dispone de ruta GDI y respaldo DXGI Desktop Duplication.
 - Empaquetado: inicio portable, integridad SHA-256 e instalacion/desinstalacion
@@ -34,10 +37,10 @@ Resultado final en el equipo de referencia:
 
 | Prueba | Resultado | Presupuesto |
 |---|---:|---:|
-| Agregar 5.000 trazos | 18,44 ms | 2.500 ms |
-| 250 borrados fallidos sobre 5.000 objetos | 6,72 ms | 1.500 ms |
-| Limpiar y restaurar 5.000 objetos | 8,00 ms | 2.500 ms |
-| Simplificar 100.000 muestras | 107,81 ms | 1.500 ms |
+| Agregar 5.000 trazos | 18,03 ms | 2.500 ms |
+| 250 borrados fallidos sobre 5.000 objetos | 15,93 ms | 1.500 ms |
+| Limpiar y restaurar 5.000 objetos | 10,65 ms | 2.500 ms |
+| Simplificar 100.000 muestras | 113,12 ms | 1.500 ms |
 
 ## Compatibilidad y recuperacion
 
@@ -52,5 +55,5 @@ Resultado final en el equipo de referencia:
 - Windows puede denegar la captura del escritorio en una sesion bloqueada, segura o
   no interactiva; Elite Pen informa el fallo y no genera un archivo corrupto.
 - La presion depende del controlador del lapiz y de que Windows entregue WM_POINTER.
-- El binario 1.2.0 no esta firmado digitalmente; los hashes del paquete permiten
+- El binario 1.3.0 no esta firmado digitalmente; los hashes del paquete permiten
   verificar integridad hasta incorporar el certificado de Power Elite Studio.

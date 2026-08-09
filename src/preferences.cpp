@@ -81,7 +81,7 @@ Preferences PreferencesStore::load() const {
     result.zoom_factor = std::clamp(read_float(path_, L"ZoomFactor", 2.0F), 1.25F, 8.0F);
     result.zoom_view = std::clamp(read_int(path_, L"ZoomView", 0), 0, 2);
     result.zoom_invert = read_int(path_, L"ZoomInvert", 0) != 0;
-    result.thickness = std::clamp(read_float(path_, L"Thickness", 7.0F), 1.0F, 40.0F);
+    result.thickness = std::clamp(read_float(path_, L"Thickness", 4.0F), 1.0F, 40.0F);
     result.color = read_color(path_, kBlack);
     return result;
 }

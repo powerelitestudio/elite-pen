@@ -1,5 +1,16 @@
 # Historial de cambios
 
+## 1.3.0 — 2026-08-08
+
+- Panel de Figuras reducido a cinco botones visuales sin nombres repetidos.
+- Flecha curva reconstruida como una curva cubica Bezier con punta tangencial.
+- Texto directo sobre el escritorio mediante un editor transparente con caret.
+- La papelera reemplaza a la gota de agua como accion de limpieza.
+- Grosor inicial de 4 px, correspondiente al segundo punto, configurable en Ajustes.
+- Indicador activo inclinado, sin tarjeta de fondo, mostrando color, grosor y herramienta.
+- El selector avanzado queda representado por un `+` limpio, sin circulo exterior.
+- La altura total de la paleta baja de 320 a 280 px.
+
 ## 1.2.0 — 2026-08-08
 
 - El estado oculto del control central ahora se representa con un ojo cerrado elegante.

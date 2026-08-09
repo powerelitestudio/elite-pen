@@ -1,6 +1,6 @@
-# Elite Pen 1.2 — contrato de producto
+# Elite Pen 1.3 — contrato de producto
 
-Estado: version 1.2.0 implementada.
+Estado: version 1.3.0 implementada.
 
 ## 1. Identidad e interaccion principal
 
@@ -11,12 +11,12 @@ la aplicacion sobre la que se presenta.
 ### Paleta
 
 - Seis colores rapidos en este orden: negro, amarillo, azul, rojo, verde y morado.
-- El septimo circulo `+` abre una cuadricula de 42 colores y el selector RGB
-  personalizado de Windows.
+- El septimo acceso es un `+` sin circulo exterior; abre una cuadricula de 42 colores
+  y el selector RGB personalizado de Windows.
 - El ojo central abierto muestra las anotaciones; al ocultarlas se transforma en un
   parpado cerrado con pestanas sutiles, sin alterar el historial.
-- Los puntos de grosor seleccionan 2, 4, 7, 12 y 20 pixeles logicos; 7 es el valor
-  inicial.
+- Los puntos de grosor seleccionan 2, 4, 7, 12 y 20 pixeles logicos; 4, el segundo
+  punto de arriba hacia abajo, es el valor inicial y se configura desde Ajustes.
 - La paleta se arrastra desde cualquier zona vacia y recuerda su posicion por monitor.
 - Todos los comandos permanecen por encima del lienzo y muestran cursor de mano, por
   lo que color, grosor y herramienta se seleccionan sin abandonar el modo de dibujo.
@@ -29,7 +29,9 @@ la aplicacion sobre la que se presenta.
 - Segundo control del mango: abre el panel compacto de figuras geometricas.
 - Tercer control del mango: abre Configuracion.
 - Ferula blanca: clic alterna la pizarra blanca; clic derecho alterna la negra.
-- Gota de agua redisenada: limpia el documento mediante una operacion reversible.
+- Papelera: limpia el documento mediante una operacion reversible.
+- Debajo del mango, una muestra corta e inclinada enseña color y grosor activos sin
+  tarjeta de fondo; una etiqueta compacta identifica la herramienta actual.
 
 ## 2. Herramientas
 
@@ -41,11 +43,17 @@ la aplicacion sobre la que se presenta.
 6. Rectangulo: contorno perfecto; `Shift` conserva proporcion cuadrada.
 7. Elipse: contorno perfecto; `Shift` conserva proporcion circular.
 8. Flecha: linea recta con punta proporcional al grosor.
-9. Flecha curva: curva cuadratica editable durante el gesto y punta tangencial.
-10. Texto: editor en contexto, multilinea, confirmacion y cancelacion explicitas.
+9. Flecha curva: curva cubica Bezier calculada entre inicio y fin, con arco uniforme,
+   limites y hit testing sobre la trayectoria real, y punta tangencial.
+10. Texto: al elegir `T`, el siguiente clic fija el punto de insercion y abre un editor
+    transparente directamente sobre el escritorio. Admite multilinea, pegado,
+    `Ctrl+Enter` para confirmar y `Esc` para cancelar, sin dialogo independiente.
 11. Captura: seleccion rectangular, guardado PNG y copia al portapapeles.
 12. Zoom: ampliacion en vivo centrada en el puntero, ajuste con rueda y salida con
     `Esc`.
+
+El panel directo de Figuras presenta los cinco iconos en una sola fila, sin nombres
+redundantes, y ocupa 112 pixeles de alto.
 
 ## 3. Documento e historial
 

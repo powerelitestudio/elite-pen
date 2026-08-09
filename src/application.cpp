@@ -34,9 +34,11 @@ constexpr UINT kExitMessage = WM_APP + 12;
 constexpr UINT kQaQueryToolMessage = WM_APP + 90;
 constexpr UINT kQaQueryColorMessage = WM_APP + 91;
 constexpr UINT kQaQueryThicknessMessage = WM_APP + 92;
+constexpr UINT kQaCommitInlineTextMessage = WM_APP + 93;
+constexpr UINT kQaQueryDocumentCountMessage = WM_APP + 94;
 constexpr UINT_PTR kTrayId = 1;
 constexpr int kPaletteWidth = 290;
-constexpr int kPaletteHeight = 320;
+constexpr int kPaletteHeight = 280;
 
 constexpr int kHotkeyInteract = 1;
 constexpr int kHotkeyVisibility = 2;
@@ -184,25 +186,24 @@ private:
 class TextInputWindow final : public WindowBase {
 public:
     explicit TextInputWindow(Controller& controller) : WindowBase(controller) {}
-    bool initialize();
+    bool initialize(GraphicsDevice& graphics);
     void show_at(PointF position, Color color, float thickness);
+    void update_style(Color color, float thickness);
+    void commit();
     void cancel();
+    [[nodiscard]] bool active() const noexcept { return active_; }
 
 protected:
     LRESULT handle_message(UINT message, WPARAM wparam, LPARAM lparam) override;
+    void render() override;
 
 private:
-    static LRESULT CALLBACK edit_proc(HWND window, UINT message, WPARAM wparam,
-                                      LPARAM lparam, UINT_PTR subclass_id,
-                                      DWORD_PTR reference_data);
-    void commit();
-    HWND edit_{};
-    HWND hint_{};
-    HWND accept_{};
-    HWND cancel_{};
     PointF position_{};
     Color color_{};
     float thickness_{};
+    std::wstring text_;
+    bool active_{};
+    bool caret_visible_{true};
 };
 
 class SettingsWindow final : public WindowBase {
@@ -223,6 +224,8 @@ private:
     HWND highlight_cursor_{};
     HWND fade_label_{};
     HWND fade_{};
+    HWND thickness_label_{};
+    HWND thickness_{};
     HWND zoom_label_{};
     HWND zoom_{};
     HWND zoom_view_label_{};
@@ -559,6 +562,29 @@ void draw_drawable(GraphicsDevice& graphics, ID2D1DeviceContext* context,
         return;
     }
 
+    if (drawable.kind == Tool::CurvedArrow && drawable.points.size() >= 2) {
+        const auto curve = curved_arrow_bezier(drawable.points.front(), drawable.points.back());
+        ComPtr<ID2D1PathGeometry> geometry;
+        graphics.d2d_factory()->CreatePathGeometry(geometry.GetAddressOf());
+        if (!geometry) return;
+        ComPtr<ID2D1GeometrySink> sink;
+        geometry->Open(sink.GetAddressOf());
+        sink->BeginFigure(local(curve.start), D2D1_FIGURE_BEGIN_HOLLOW);
+        sink->AddBezier(D2D1::BezierSegment(local(curve.control1), local(curve.control2),
+                                             local(curve.end)));
+        sink->EndFigure(D2D1_FIGURE_END_OPEN);
+        sink->Close();
+        context->DrawGeometry(geometry.Get(), brush.Get(), drawable.width, stroke_style.Get());
+        PointF tangent = curve.control2;
+        PointF end = curve.end;
+        tangent.x -= offset_x;
+        tangent.y -= offset_y;
+        end.x -= offset_x;
+        end.y -= offset_y;
+        draw_arrow_head(context, brush.Get(), tangent, end, drawable.width);
+        return;
+    }
+
     if (drawable.points.size() == 1) {
         const auto point = local(drawable.points.front());
         context->FillEllipse(D2D1::Ellipse(point, drawable.width * 0.5F,
@@ -573,8 +599,7 @@ void draw_drawable(GraphicsDevice& graphics, ID2D1DeviceContext* context,
     geometry->Open(sink.GetAddressOf());
     sink->BeginFigure(local(drawable.points.front()), D2D1_FIGURE_BEGIN_HOLLOW);
     const bool smooth = drawable.points.size() >= 3 &&
-        (drawable.kind == Tool::Pen || drawable.kind == Tool::Highlighter ||
-         drawable.kind == Tool::CurvedArrow);
+        (drawable.kind == Tool::Pen || drawable.kind == Tool::Highlighter);
     if (smooth) {
         for (std::size_t index = 0; index + 1 < drawable.points.size(); ++index) {
             const PointF p0 = drawable.points[index == 0 ? 0 : index - 1];
@@ -596,8 +621,7 @@ void draw_drawable(GraphicsDevice& graphics, ID2D1DeviceContext* context,
     sink->EndFigure(D2D1_FIGURE_END_OPEN);
     sink->Close();
     context->DrawGeometry(geometry.Get(), brush.Get(), drawable.width, stroke_style.Get());
-    if ((drawable.kind == Tool::Arrow || drawable.kind == Tool::CurvedArrow) &&
-        drawable.points.size() >= 2) {
+    if (drawable.kind == Tool::Arrow && drawable.points.size() >= 2) {
         PointF before = drawable.points[drawable.points.size() - 2];
         PointF end = drawable.points.back();
         before.x -= offset_x;
@@ -752,7 +776,9 @@ void OverlayWindow::begin_gesture(PointF point, float pressure) {
         std::clamp(pressure, 0.35F, 1.45F);
     drawable.points.push_back(point);
     if (tool == Tool::Line || tool == Tool::Rectangle || tool == Tool::Ellipse ||
-        tool == Tool::Arrow || tool == Tool::Screenshot) drawable.points.push_back(point);
+        tool == Tool::Arrow || tool == Tool::CurvedArrow || tool == Tool::Screenshot) {
+        drawable.points.push_back(point);
+    }
     controller_.preview() = std::move(drawable);
     drawing_ = true;
     SetCapture(window_);
@@ -772,7 +798,7 @@ void OverlayWindow::update_gesture(PointF point, WPARAM keys) {
     preview->invalidate_bounds_cache();
     const Tool tool = preview->kind;
     if (tool == Tool::Line || tool == Tool::Rectangle || tool == Tool::Ellipse ||
-        tool == Tool::Arrow || tool == Tool::Screenshot) {
+        tool == Tool::Arrow || tool == Tool::CurvedArrow || tool == Tool::Screenshot) {
         if ((keys & MK_SHIFT) && (tool == Tool::Rectangle || tool == Tool::Ellipse)) {
             const PointF origin = preview->points.front();
             const float dx = point.x - origin.x;
@@ -822,8 +848,7 @@ void OverlayWindow::finish_gesture(PointF point, WPARAM keys) {
         controller_.set_tool(Tool::Interact);
         return;
     }
-    if (completed.kind == Tool::Pen || completed.kind == Tool::Highlighter ||
-        completed.kind == Tool::CurvedArrow) {
+    if (completed.kind == Tool::Pen || completed.kind == Tool::Highlighter) {
         completed.points = simplify_path(completed.points,
             std::clamp(completed.width * 0.08F, 0.5F, 2.0F));
     }
@@ -1026,7 +1051,7 @@ void PaletteWindow::install_tooltips() {
         Tip{13, {143, 177, 169, 203}, L"Texto"},
         Tip{14, {169, 190, 195, 216}, L"Figuras geometricas"},
         Tip{15, {195, 203, 221, 229}, L"Configuracion"},
-        Tip{16, {237, 214, 279, 276}, L"Limpiar todas las anotaciones"}
+        Tip{16, {237, 214, 279, 276}, L"Papelera: limpiar todas las anotaciones"}
     };
     for (const auto& tip : tips) {
         TOOLINFOW information{};
@@ -1222,6 +1247,8 @@ LRESULT PaletteWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
             return static_cast<LRESULT>(controller_.state().color.argb());
         case kQaQueryThicknessMessage:
             return static_cast<LRESULT>(std::lround(controller_.state().thickness * 10.0F));
+        case kQaQueryDocumentCountMessage:
+            return static_cast<LRESULT>(controller_.state().document.items().size());
         case WM_SETCURSOR:
             if (LOWORD(lparam) == HTCLIENT) {
                 POINT point{};
@@ -1359,10 +1386,9 @@ void PaletteWindow::render() {
         context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(swatch.x, swatch.y), 12, 12),
                              color_brush.Get());
     }
-    context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(113, 139), 13, 13), cream.Get());
-    context->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(113, 139), 12, 12), ink.Get(), 1.5F);
-    context->DrawLine(D2D1::Point2F(107, 139), D2D1::Point2F(119, 139), ink.Get(), 2.0F);
-    context->DrawLine(D2D1::Point2F(113, 133), D2D1::Point2F(113, 145), ink.Get(), 2.0F);
+    // The advanced selector is intentionally just a clean plus sign after purple.
+    context->DrawLine(D2D1::Point2F(106, 139), D2D1::Point2F(120, 139), ink.Get(), 2.2F);
+    context->DrawLine(D2D1::Point2F(113, 132), D2D1::Point2F(113, 146), ink.Get(), 2.2F);
 
     const auto thickness_shadow = D2D1::RoundedRect(D2D1::RectF(5, 13, 41, 144), 17, 17);
     context->FillRoundedRectangle(thickness_shadow, shadow.Get());
@@ -1500,52 +1526,38 @@ void PaletteWindow::render() {
                                         216 + std::sin(angle) * 5.8F), ink.Get(), 1.0F);
     }
 
-    // Water drop = clear.
-    ComPtr<ID2D1SolidColorBrush> water;
-    context->CreateSolidColorBrush(D2D1::ColorF(0x4FD8FF), water.GetAddressOf());
-    ComPtr<ID2D1SolidColorBrush> water_highlight;
-    context->CreateSolidColorBrush(D2D1::ColorF(0xD9F8FF, 0.9F),
-                                   water_highlight.GetAddressOf());
-    ComPtr<ID2D1PathGeometry> drop;
-    controller_.graphics().d2d_factory()->CreatePathGeometry(drop.GetAddressOf());
-    ComPtr<ID2D1GeometrySink> drop_sink;
-    drop->Open(drop_sink.GetAddressOf());
-    drop_sink->BeginFigure(D2D1::Point2F(256, 216), D2D1_FIGURE_BEGIN_FILLED);
-    drop_sink->AddBezier(D2D1::BezierSegment(D2D1::Point2F(248, 228), D2D1::Point2F(241, 239),
-                                             D2D1::Point2F(242, 249)));
-    drop_sink->AddBezier(D2D1::BezierSegment(D2D1::Point2F(243, 262), D2D1::Point2F(253, 269),
-                                             D2D1::Point2F(256, 269)));
-    drop_sink->AddBezier(D2D1::BezierSegment(D2D1::Point2F(267, 269), D2D1::Point2F(273, 260),
-                                             D2D1::Point2F(270, 248)));
-    drop_sink->AddBezier(D2D1::BezierSegment(D2D1::Point2F(268, 238), D2D1::Point2F(261, 226),
-                                             D2D1::Point2F(256, 216)));
-    drop_sink->EndFigure(D2D1_FIGURE_END_CLOSED);
-    drop_sink->Close();
-    context->FillGeometry(drop.Get(), water.Get());
-    context->DrawGeometry(drop.Get(), handle.Get(), 1.2F);
-    context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(252, 240), 3.2F, 6.0F),
-                         water_highlight.Get());
+    // A familiar trash can makes the destructive action immediately recognizable.
+    context->DrawRoundedRectangle(
+        D2D1::RoundedRect(D2D1::RectF(244, 233, 268, 263), 3, 3), handle.Get(), 2.2F);
+    context->DrawLine(D2D1::Point2F(241, 229), D2D1::Point2F(271, 229),
+                      handle.Get(), 2.6F);
+    context->DrawLine(D2D1::Point2F(251, 225), D2D1::Point2F(261, 225),
+                      handle.Get(), 2.6F);
+    context->DrawLine(D2D1::Point2F(250, 239), D2D1::Point2F(250, 257),
+                      handle.Get(), 1.7F);
+    context->DrawLine(D2D1::Point2F(256, 239), D2D1::Point2F(256, 257),
+                      handle.Get(), 1.7F);
+    context->DrawLine(D2D1::Point2F(262, 239), D2D1::Point2F(262, 257),
+                      handle.Get(), 1.7F);
 
     ComPtr<IDWriteTextFormat> label_format;
     controller_.graphics().dwrite()->CreateTextFormat(L"Segoe UI", nullptr,
         DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
-        DWRITE_FONT_STRETCH_NORMAL, 13.0F, L"es-CO", label_format.GetAddressOf());
+        DWRITE_FONT_STRETCH_NORMAL, 10.5F, L"es-CO", label_format.GetAddressOf());
     if (label_format) {
-        std::wstring status = tool_name(controller_.state().tool);
-        if (controller_.state().whiteboard) status += L"  ·  Pizarra";
-        if (controller_.state().blackboard) status += L"  ·  Pizarra negra";
-        const auto chip = D2D1::RoundedRect(D2D1::RectF(34, 286, 244, 314), 10, 10);
-        context->FillRoundedRectangle(chip, cream.Get());
-        context->DrawRoundedRectangle(chip, ink.Get(), 1.0F);
         ComPtr<ID2D1SolidColorBrush> active_color;
         context->CreateSolidColorBrush(d2d_color(controller_.state().color),
                                        active_color.GetAddressOf());
-        context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(49, 300), 6, 6),
-                             active_color.Get());
-        context->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(49, 300), 6, 6),
-                             ink.Get(), 1.0F);
-        context->DrawTextW(status.c_str(), static_cast<UINT32>(status.size()),
-                           label_format.Get(), D2D1::RectF(61, 292, 232, 312), ink.Get());
+        const float normalized_thickness =
+            (std::clamp(controller_.state().thickness, 2.0F, 20.0F) - 2.0F) / 18.0F;
+        const float sample_width = 1.5F + normalized_thickness * 5.5F;
+        context->DrawLine(D2D1::Point2F(168, 211), D2D1::Point2F(238, 245),
+                          ink.Get(), sample_width + 2.0F);
+        context->DrawLine(D2D1::Point2F(168, 211), D2D1::Point2F(238, 245),
+                          active_color.Get(), sample_width);
+        const wchar_t* status = tool_name(controller_.state().tool);
+        context->DrawTextW(status, static_cast<UINT32>(wcslen(status)),
+                           label_format.Get(), D2D1::RectF(150, 247, 240, 267), ink.Get());
     }
 
     std::wstring error;
@@ -1713,7 +1725,7 @@ Tool ToolWindow::tool_at(std::size_t index) const noexcept {
 
 void ToolWindow::show_near(HWND anchor, bool geometry_only) {
     geometry_only_ = geometry_only;
-    const int panel_height = geometry_only_ ? 210 : 354;
+    const int panel_height = geometry_only_ ? 112 : 354;
     RECT anchor_rect{};
     GetWindowRect(anchor, &anchor_rect);
     RECT desired{anchor_rect.right + 10, anchor_rect.top,
@@ -1738,10 +1750,16 @@ LRESULT ToolWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
     if (message == WM_LBUTTONDOWN) {
         const POINT point{GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
         for (std::size_t index = 0; index < tool_count(); ++index) {
-            const int column = static_cast<int>(index % 2);
-            const int row = static_cast<int>(index / 2);
-            const RECT item{15 + column * 169, 48 + row * 48,
-                            15 + column * 169 + 162, 48 + row * 48 + 40};
+            RECT item{};
+            if (geometry_only_) {
+                const int left = 14 + static_cast<int>(index) * 68;
+                item = {left, 43, left + 58, 95};
+            } else {
+                const int column = static_cast<int>(index % 2);
+                const int row = static_cast<int>(index / 2);
+                item = {15 + column * 169, 48 + row * 48,
+                        15 + column * 169 + 162, 48 + row * 48 + 40};
+            }
             if (PtInRect(&item, point)) {
                 const Tool tool = tool_at(index);
                 hide();
@@ -1789,15 +1807,22 @@ void ToolWindow::render() {
     }
     for (std::size_t index = 0; index < tool_count(); ++index) {
         const Tool panel_tool = tool_at(index);
-        const float left = 15.0F + static_cast<float>(index % 2) * 169.0F;
-        const float top = 48.0F + static_cast<float>(index / 2) * 48.0F;
-        const auto item = D2D1::RoundedRect(D2D1::RectF(left, top, left + 162, top + 40), 9, 9);
+        const float left = geometry_only_
+            ? 14.0F + static_cast<float>(index) * 68.0F
+            : 15.0F + static_cast<float>(index % 2) * 169.0F;
+        const float top = geometry_only_
+            ? 43.0F
+            : 48.0F + static_cast<float>(index / 2) * 48.0F;
+        const float item_width = geometry_only_ ? 58.0F : 162.0F;
+        const float item_height = geometry_only_ ? 52.0F : 40.0F;
+        const auto item = D2D1::RoundedRect(
+            D2D1::RectF(left, top, left + item_width, top + item_height), 9, 9);
         const bool active = controller_.state().tool == panel_tool;
         if (active) context->FillRoundedRectangle(item, hover.Get());
         context->DrawRoundedRectangle(item, active ? accent.Get() : border.Get(),
                                       active ? 2.0F : 1.0F);
-        const float icon_x = left + 20;
-        const float icon_y = top + 20;
+        const float icon_x = left + (geometry_only_ ? item_width * 0.5F : 20.0F);
+        const float icon_y = top + item_height * 0.5F;
         switch (panel_tool) {
             case Tool::Interact:
                 context->DrawLine(D2D1::Point2F(icon_x - 6, icon_y - 9),
@@ -1852,8 +1877,8 @@ void ToolWindow::render() {
                 curve_sink->EndFigure(D2D1_FIGURE_END_OPEN);
                 curve_sink->Close();
                 context->DrawGeometry(curve.Get(), text.Get(), 2.0F);
-                context->DrawLine(D2D1::Point2F(icon_x + 8, icon_y - 2),
-                                  D2D1::Point2F(icon_x + 2, icon_y - 3), text.Get(), 2.0F);
+                draw_arrow_head(context, text.Get(), {icon_x + 5, icon_y - 8},
+                                {icon_x + 8, icon_y - 2}, 2.0F);
                 break;
             }
             case Tool::Text:
@@ -1881,7 +1906,7 @@ void ToolWindow::render() {
                                      text.Get());
                 break;
         }
-        if (item_format) {
+        if (item_format && !geometry_only_) {
             const wchar_t* name = tool_name(panel_tool);
             context->DrawTextW(name, static_cast<UINT32>(wcslen(name)), item_format.Get(),
                                D2D1::RectF(left + 40, top + 11, left + 155, top + 35),
@@ -1892,98 +1917,169 @@ void ToolWindow::render() {
     if (!surface_.end_draw(error)) controller_.report_runtime_error(error);
 }
 
-bool TextInputWindow::initialize() {
-    const RECT bounds{0, 0, 460, 222};
+bool TextInputWindow::initialize(GraphicsDevice& graphics) {
+    const RECT bounds{0, 0, 640, 420};
+    constexpr DWORD ex_style = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED;
     if (!create(L"ElitePen.TextInput", L"Insertar texto — Elite Pen",
-                WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
-                WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, bounds)) return false;
-    HFONT font = static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
-    hint_ = CreateWindowW(L"STATIC", L"Escribe el texto. Ctrl+Enter inserta · Esc cancela",
-                          WS_CHILD | WS_VISIBLE, 16, 14, 420, 20, window_, nullptr,
-                          GetModuleHandleW(nullptr), nullptr);
-    edit_ = CreateWindowExW(WS_EX_CLIENTEDGE, L"EDIT", L"",
-                            WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_MULTILINE |
-                                ES_AUTOVSCROLL | ES_WANTRETURN | WS_VSCROLL,
-                            16, 40, 420, 100, window_, reinterpret_cast<HMENU>(3001),
-                            GetModuleHandleW(nullptr), nullptr);
-    accept_ = CreateWindowW(L"BUTTON", L"Insertar", WS_CHILD | WS_VISIBLE |
-                            WS_TABSTOP | BS_DEFPUSHBUTTON, 244, 153, 92, 30, window_,
-                            reinterpret_cast<HMENU>(IDOK), GetModuleHandleW(nullptr), nullptr);
-    cancel_ = CreateWindowW(L"BUTTON", L"Cancelar", WS_CHILD | WS_VISIBLE | WS_TABSTOP,
-                            344, 153, 92, 30, window_, reinterpret_cast<HMENU>(IDCANCEL),
-                            GetModuleHandleW(nullptr), nullptr);
-    for (HWND child : {hint_, edit_, accept_, cancel_}) SendMessageW(child, WM_SETFONT,
-                                                                    reinterpret_cast<WPARAM>(font), TRUE);
-    SetWindowSubclass(edit_, &TextInputWindow::edit_proc, 1,
-                      reinterpret_cast<DWORD_PTR>(this));
+                ex_style, WS_POPUP, bounds)) return false;
+    SetLayeredWindowAttributes(window_, 0, 255, LWA_ALPHA);
+    if (!initialize_surface(graphics)) return false;
+#ifndef ELITE_PEN_DEBUG
+    if (controller_.preferences().exclude_palette_from_capture)
+        SetWindowDisplayAffinity(window_, WDA_EXCLUDEFROMCAPTURE);
+#endif
     return true;
 }
 
 void TextInputWindow::show_at(PointF position, Color color, float thickness) {
+    if (active_) commit();
     position_ = position;
     color_ = color;
     thickness_ = thickness;
-    SetWindowTextW(edit_, L"");
+    text_.clear();
+    active_ = true;
+    caret_visible_ = true;
+
     POINT requested{static_cast<LONG>(std::lround(position.x)),
                     static_cast<LONG>(std::lround(position.y))};
     HMONITOR monitor = MonitorFromPoint(requested, MONITOR_DEFAULTTONEAREST);
     MONITORINFO info{};
     info.cbSize = sizeof(info);
     GetMonitorInfoW(monitor, &info);
-    const int x = std::clamp(requested.x, info.rcWork.left, info.rcWork.right - 460);
-    const int y = std::clamp(requested.y, info.rcWork.top, info.rcWork.bottom - 222);
-    SetWindowPos(window_, HWND_TOPMOST, x, y, 460, 222, SWP_SHOWWINDOW);
+    const int x = std::clamp(requested.x, info.rcWork.left, info.rcWork.right - 40);
+    const int y = std::clamp(requested.y, info.rcWork.top, info.rcWork.bottom - 40);
+    const int width = std::max(40, std::min(640, static_cast<int>(info.rcWork.right) - x));
+    const int height = std::max(40, std::min(420, static_cast<int>(info.rcWork.bottom) - y));
+    SetWindowPos(window_, HWND_TOPMOST, x, y, width, height, SWP_SHOWWINDOW);
     SetForegroundWindow(window_);
-    SetFocus(edit_);
+    SetFocus(window_);
+    SetTimer(window_, 31, 500, nullptr);
+    invalidate();
+}
+
+void TextInputWindow::update_style(Color color, float thickness) {
+    color_ = color;
+    thickness_ = thickness;
+    if (active_) invalidate();
 }
 
 void TextInputWindow::commit() {
-    const int length = GetWindowTextLengthW(edit_);
-    if (length <= 0) { cancel(); return; }
-    std::wstring text(static_cast<std::size_t>(length) + 1, L'\0');
-    GetWindowTextW(edit_, text.data(), length + 1);
-    text.resize(static_cast<std::size_t>(length));
+    if (!active_) return;
+    active_ = false;
+    KillTimer(window_, 31);
+    ShowWindow(window_, SW_HIDE);
+    std::wstring text = std::move(text_);
+    text_.clear();
     if (text.find_first_not_of(L" \t\r\n") != std::wstring::npos) {
         controller_.commit_text(position_, color_, thickness_, std::move(text));
     }
+}
+
+void TextInputWindow::cancel() {
+    if (!active_) return;
+    active_ = false;
+    text_.clear();
+    KillTimer(window_, 31);
     ShowWindow(window_, SW_HIDE);
 }
 
-void TextInputWindow::cancel() { ShowWindow(window_, SW_HIDE); }
-
-LRESULT CALLBACK TextInputWindow::edit_proc(HWND window, UINT message, WPARAM wparam,
-                                             LPARAM lparam, UINT_PTR subclass_id,
-                                             DWORD_PTR reference_data) {
-    auto* self = reinterpret_cast<TextInputWindow*>(reference_data);
-    if (message == WM_KEYDOWN && wparam == VK_ESCAPE) {
-        self->cancel();
-        return 0;
+void TextInputWindow::render() {
+    auto* context = surface_.begin_draw(D2D1::ColorF(0, 0.0F));
+    if (!context) return;
+    if (active_) {
+        const float font_size = std::clamp(thickness_ * 3.4F, 16.0F, 72.0F);
+        ComPtr<ID2D1SolidColorBrush> brush;
+        context->CreateSolidColorBrush(d2d_color(color_), brush.GetAddressOf());
+        ComPtr<IDWriteTextFormat> format;
+        controller_.graphics().dwrite()->CreateTextFormat(
+            L"Segoe UI", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
+            DWRITE_FONT_STRETCH_NORMAL, font_size, L"es-CO", format.GetAddressOf());
+        RECT client{};
+        GetClientRect(window_, &client);
+        ComPtr<IDWriteTextLayout> layout;
+        if (format) {
+            controller_.graphics().dwrite()->CreateTextLayout(
+                text_.c_str(), static_cast<UINT32>(text_.size()), format.Get(),
+                static_cast<float>(std::clamp(static_cast<int>(client.right), 1, 600)),
+                static_cast<float>(std::clamp(static_cast<int>(client.bottom), 1, 400)),
+                layout.GetAddressOf());
+        }
+        if (layout && brush) {
+            context->DrawTextLayout(D2D1::Point2F(0, 0), layout.Get(), brush.Get());
+            if (caret_visible_) {
+                FLOAT caret_x = 0;
+                FLOAT caret_y = 0;
+                DWRITE_HIT_TEST_METRICS metrics{};
+                layout->HitTestTextPosition(static_cast<UINT32>(text_.size()), FALSE,
+                                            &caret_x, &caret_y, &metrics);
+                const float caret_height = metrics.height > 0 ? metrics.height : font_size * 1.2F;
+                context->DrawLine(D2D1::Point2F(caret_x, caret_y),
+                                  D2D1::Point2F(caret_x, caret_y + caret_height),
+                                  brush.Get(), 1.7F);
+            }
+        }
     }
-    if (message == WM_KEYDOWN && wparam == VK_RETURN &&
-        (GetKeyState(VK_CONTROL) & 0x8000) != 0) {
-        self->commit();
-        return 0;
-    }
-    if (message == WM_NCDESTROY) RemoveWindowSubclass(window, edit_proc, subclass_id);
-    return DefSubclassProc(window, message, wparam, lparam);
+    std::wstring error;
+    if (!surface_.end_draw(error)) controller_.report_runtime_error(error);
 }
 
 LRESULT TextInputWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
     switch (message) {
-        case WM_COMMAND:
-            if (LOWORD(wparam) == IDOK) { commit(); return 0; }
-            if (LOWORD(wparam) == IDCANCEL) { cancel(); return 0; }
+        case WM_NCHITTEST:
+            return HTTRANSPARENT;
+        case WM_KEYDOWN:
+            if (wparam == VK_ESCAPE) { cancel(); return 0; }
+            if ((GetKeyState(VK_CONTROL) & 0x8000) != 0 && wparam == 'V') {
+                SendMessageW(window_, WM_PASTE, 0, 0);
+                return 0;
+            }
             break;
+        case WM_CHAR:
+            if (!active_) return 0;
+            if (wparam == L'\b') {
+                if (!text_.empty()) {
+                    text_.pop_back();
+                    if (!text_.empty() && text_.back() >= 0xD800 && text_.back() <= 0xDBFF) {
+                        text_.pop_back();
+                    }
+                }
+            } else if (wparam == L'\r') {
+                if ((GetKeyState(VK_CONTROL) & 0x8000) != 0) commit();
+                else text_.push_back(L'\n');
+            } else if (wparam == L'\t') {
+                text_.append(4, L' ');
+            } else if (wparam >= 0x20 && wparam != 0x7F) {
+                text_.push_back(static_cast<wchar_t>(wparam));
+            }
+            caret_visible_ = true;
+            invalidate();
+            return 0;
+        case WM_PASTE:
+            if (active_ && OpenClipboard(window_)) {
+                if (HANDLE data = GetClipboardData(CF_UNICODETEXT)) {
+                    if (const auto* value = static_cast<const wchar_t*>(GlobalLock(data))) {
+                        text_.append(value);
+                        GlobalUnlock(data);
+                    }
+                }
+                CloseClipboard();
+                caret_visible_ = true;
+                invalidate();
+            }
+            return 0;
+        case WM_TIMER:
+            if (wparam == 31 && active_) {
+                caret_visible_ = !caret_visible_;
+                invalidate();
+                return 0;
+            }
+            break;
+        case kQaCommitInlineTextMessage:
+            commit();
+            return 0;
         case WM_CLOSE:
             cancel();
             return 0;
-        case WM_ERASEBKGND: {
-            RECT client{};
-            GetClientRect(window_, &client);
-            FillRect(reinterpret_cast<HDC>(wparam), &client,
-                     GetSysColorBrush(COLOR_WINDOW));
-            return 1;
-        }
         default: break;
     }
     return WindowBase::handle_message(message, wparam, lparam);
@@ -1995,7 +2091,7 @@ bool SettingsWindow::initialize() {
                 WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
                 WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, bounds)) return false;
     HFONT regular = static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
-    title_ = CreateWindowW(L"STATIC", L"Elite Pen 1.2.0", WS_CHILD | WS_VISIBLE,
+    title_ = CreateWindowW(L"STATIC", L"Elite Pen 1.3.0", WS_CHILD | WS_VISIBLE,
                            24, 20, 510, 24, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
     capture_ = CreateWindowW(L"BUTTON", L"Ocultar la paleta en capturas de pantalla",
@@ -2023,11 +2119,20 @@ bool SettingsWindow::initialize() {
     for (const wchar_t* value : {L"Permanente", L"3 segundos", L"8 segundos", L"15 segundos"}) {
         SendMessageW(fade_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(value));
     }
-    zoom_label_ = CreateWindowW(L"STATIC", L"Ampliacion inicial:", WS_CHILD | WS_VISIBLE,
-                                24, 220, 170, 24, window_, nullptr,
+    thickness_label_ = CreateWindowW(L"STATIC", L"Grosor inicial:", WS_CHILD | WS_VISIBLE,
+                                     24, 220, 145, 24, window_, nullptr,
+                                     GetModuleHandleW(nullptr), nullptr);
+    thickness_ = CreateWindowW(L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
+                               CBS_DROPDOWNLIST, 165, 216, 116, 160, window_,
+                               reinterpret_cast<HMENU>(4010), GetModuleHandleW(nullptr), nullptr);
+    for (const wchar_t* value : {L"2 px", L"4 px", L"7 px", L"12 px", L"20 px"}) {
+        SendMessageW(thickness_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(value));
+    }
+    zoom_label_ = CreateWindowW(L"STATIC", L"Ampliacion:", WS_CHILD | WS_VISIBLE,
+                                304, 220, 112, 24, window_, nullptr,
                                 GetModuleHandleW(nullptr), nullptr);
     zoom_ = CreateWindowW(L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-                          CBS_DROPDOWNLIST, 195, 216, 120, 180, window_,
+                          CBS_DROPDOWNLIST, 414, 216, 144, 180, window_,
                           reinterpret_cast<HMENU>(4004), GetModuleHandleW(nullptr), nullptr);
     for (const wchar_t* value : {L"1.5×", L"2×", L"3×", L"4×", L"6×", L"8×"}) {
         SendMessageW(zoom_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(value));
@@ -2060,7 +2165,7 @@ bool SettingsWindow::initialize() {
                            BS_DEFPUSHBUTTON, 455, 498, 100, 32, window_,
                            reinterpret_cast<HMENU>(IDOK), GetModuleHandleW(nullptr), nullptr);
     for (HWND child : {title_, capture_, confirm_clear_, start_interact_, highlight_cursor_,
-                       fade_label_, fade_, zoom_label_,
+                       fade_label_, fade_, thickness_label_, thickness_, zoom_label_,
                        zoom_, zoom_view_label_, zoom_view_, zoom_invert_, reset_position_,
                        shortcuts_, close_}) {
         SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(regular), TRUE);
@@ -2084,6 +2189,17 @@ void SettingsWindow::refresh_controls() {
         if (preferences.fade_seconds == fade_values[index]) fade_selection = index;
     }
     SendMessageW(fade_, CB_SETCURSEL, static_cast<WPARAM>(fade_selection), 0);
+    constexpr std::array<float, 5> thickness_values{2.0F, 4.0F, 7.0F, 12.0F, 20.0F};
+    std::size_t thickness_selection = 0;
+    float thickness_difference = 100.0F;
+    for (std::size_t index = 0; index < thickness_values.size(); ++index) {
+        const float current = std::abs(controller_.state().thickness - thickness_values[index]);
+        if (current < thickness_difference) {
+            thickness_difference = current;
+            thickness_selection = index;
+        }
+    }
+    SendMessageW(thickness_, CB_SETCURSEL, static_cast<WPARAM>(thickness_selection), 0);
     constexpr std::array<float, 6> factors{1.5F, 2.0F, 3.0F, 4.0F, 6.0F, 8.0F};
     std::size_t closest = 0;
     float difference = 100.0F;
@@ -2151,6 +2267,18 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
                 if (selection >= 0 && static_cast<std::size_t>(selection) < fade_values.size()) {
                     controller_.preferences().fade_seconds =
                         fade_values[static_cast<std::size_t>(selection)];
+                    controller_.save_preferences();
+                }
+                return 0;
+            }
+            if (id == 4010 && HIWORD(wparam) == CBN_SELCHANGE) {
+                constexpr std::array<float, 5> thickness_values{
+                    2.0F, 4.0F, 7.0F, 12.0F, 20.0F};
+                const LRESULT selection = SendMessageW(thickness_, CB_GETCURSEL, 0, 0);
+                if (selection >= 0 &&
+                    static_cast<std::size_t>(selection) < thickness_values.size()) {
+                    controller_.set_thickness(
+                        thickness_values[static_cast<std::size_t>(selection)]);
                     controller_.save_preferences();
                 }
                 return 0;
@@ -2487,7 +2615,7 @@ bool Controller::initialize(std::wstring& error) {
         return false;
     }
     text_input_ = std::make_unique<TextInputWindow>(*this);
-    if (!text_input_->initialize()) {
+    if (!text_input_->initialize(graphics_)) {
         error = L"No se pudo crear el editor de texto.";
         return false;
     }
@@ -2559,6 +2687,7 @@ bool Controller::route_palette_command(PointF screen_point) {
 }
 
 void Controller::set_tool(Tool tool) {
+    if (text_input_ && text_input_->active() && tool != Tool::Text) text_input_->commit();
     if (tool == Tool::Zoom) {
         toggle_zoom();
         return;
@@ -2573,21 +2702,25 @@ void Controller::set_color(Color color) {
     state_.color = color;
     preferences_.color = color;
     if (state_.tool == Tool::Interact || state_.tool == Tool::Eraser) set_tool(Tool::Pen);
+    if (text_input_) text_input_->update_style(state_.color, state_.thickness);
     invalidate_all();
 }
 
 void Controller::set_thickness(float thickness) {
     state_.thickness = thickness;
     preferences_.thickness = thickness;
+    if (text_input_) text_input_->update_style(state_.color, state_.thickness);
     invalidate_all();
 }
 
 void Controller::toggle_visibility() {
+    if (text_input_ && text_input_->active()) text_input_->commit();
     state_.annotations_visible = !state_.annotations_visible;
     invalidate_all();
 }
 
 void Controller::toggle_whiteboard() {
+    if (text_input_ && text_input_->active()) text_input_->commit();
     state_.whiteboard = !state_.whiteboard;
     if (state_.whiteboard) state_.blackboard = false;
     if (state_.whiteboard && state_.color == Color{255, 255, 255, 255}) {
@@ -2595,11 +2728,13 @@ void Controller::toggle_whiteboard() {
         preferences_.color = kBlack;
     }
     if (state_.whiteboard && state_.tool == Tool::Interact) state_.tool = Tool::Pen;
+    if (text_input_) text_input_->update_style(state_.color, state_.thickness);
     update_overlay_interaction();
     invalidate_all();
 }
 
 void Controller::toggle_blackboard() {
+    if (text_input_ && text_input_->active()) text_input_->commit();
     state_.blackboard = !state_.blackboard;
     if (state_.blackboard) state_.whiteboard = false;
     if (state_.blackboard && state_.color == kBlack) {
@@ -2607,11 +2742,13 @@ void Controller::toggle_blackboard() {
         preferences_.color = kYellow;
     }
     if (state_.blackboard && state_.tool == Tool::Interact) state_.tool = Tool::Pen;
+    if (text_input_) text_input_->update_style(state_.color, state_.thickness);
     update_overlay_interaction();
     invalidate_all();
 }
 
 void Controller::clear_document() {
+    if (text_input_ && text_input_->active()) text_input_->cancel();
     if (state_.document.empty() && transient_drawables_.empty()) return;
     if (preferences_.confirm_clear &&
         MessageBoxW(palette_ ? palette_->hwnd() : nullptr,
@@ -2634,6 +2771,7 @@ void Controller::redo() {
 }
 
 void Controller::toggle_zoom() {
+    if (text_input_ && text_input_->active()) text_input_->commit();
     if (!zoom_) {
         MessageBoxW(palette_ ? palette_->hwnd() : nullptr,
                     L"La ampliacion nativa de Windows no esta disponible en este equipo.",
@@ -2677,6 +2815,11 @@ void Controller::close_panels() {
 
 void Controller::stop_transient_mode() {
     close_panels();
+    if (text_input_ && text_input_->active()) {
+        text_input_->cancel();
+        set_tool(Tool::Interact);
+        return;
+    }
     if (zoom_ && zoom_->active()) {
         zoom_->hide_zoom();
         return;
@@ -2910,6 +3053,7 @@ void Controller::save_palette_position() {
 }
 
 void Controller::show_settings_window() {
+    if (text_input_ && text_input_->active()) text_input_->commit();
     close_panels();
     if (settings_) settings_->show_settings();
 }
@@ -2920,6 +3064,7 @@ void Controller::apply_capture_preference() {
     if (palette_ && palette_->hwnd()) SetWindowDisplayAffinity(palette_->hwnd(), affinity);
     if (colors_ && colors_->hwnd()) SetWindowDisplayAffinity(colors_->hwnd(), affinity);
     if (tools_ && tools_->hwnd()) SetWindowDisplayAffinity(tools_->hwnd(), affinity);
+    if (text_input_ && text_input_->hwnd()) SetWindowDisplayAffinity(text_input_->hwnd(), affinity);
 }
 
 void Controller::reset_palette_position() {

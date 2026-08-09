@@ -50,7 +50,7 @@ con `scripts/publish-portable.ps1`.
 | Configuracion | Control derecho del mango | — |
 | Deshacer | Menu/historial | `Ctrl+Shift+Z` |
 | Rehacer | Menu/historial | `Ctrl+Shift+Y` |
-| Limpiar | Gota de agua | `Ctrl+Shift+C` |
+| Limpiar | Papelera | `Ctrl+Shift+C` |
 | Zoom | Herramientas | `Ctrl+Shift+M` |
 | Salir de modo/zoom | — | `Esc` |
 

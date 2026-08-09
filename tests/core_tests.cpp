@@ -90,6 +90,17 @@ void test_hit_testing() {
     check(updated_bounds.right > original_bounds.right &&
           updated_bounds.bottom > original_bounds.bottom,
           "bounds cache invalidates after editable geometry changes");
+
+    Drawable curved;
+    curved.kind = Tool::CurvedArrow;
+    curved.width = 4;
+    curved.points = {{0, 0}, {100, 0}};
+    const auto bezier = curved_arrow_bezier(curved.points.front(), curved.points.back());
+    const PointF crest = cubic_bezier_point(bezier, 0.5F);
+    check(crest.y > 15.0F, "curved arrow uses a visible cubic Bezier bend");
+    check(curved.bounds().bottom > 15.0F, "curved arrow bounds include Bezier controls");
+    check(hit_test(curved, crest, 2.0F), "curved arrow hit testing follows Bezier path");
+    check(!hit_test(curved, {50, -30}, 2.0F), "curved arrow misses away from Bezier path");
 }
 
 void test_simplification() {

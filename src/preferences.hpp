@@ -20,7 +20,7 @@ struct Preferences {
     float zoom_factor{2.0F};
     int zoom_view{0};
     bool zoom_invert{false};
-    float thickness{7.0F};
+    float thickness{4.0F};
     Color color{kBlack};
 };
 

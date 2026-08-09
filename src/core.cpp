@@ -42,6 +42,38 @@ float distance_to_segment(PointF p, PointF a, PointF b) noexcept {
     return distance(p, {a.x + t * dx, a.y + t * dy});
 }
 
+CubicBezier curved_arrow_bezier(PointF start, PointF end) noexcept {
+    const float dx = end.x - start.x;
+    const float dy = end.y - start.y;
+    const float length = std::hypot(dx, dy);
+    if (length <= std::numeric_limits<float>::epsilon()) {
+        return {start, start, end, end};
+    }
+    const PointF normal{-dy / length, dx / length};
+    const float bend = std::min(length * 0.28F, 110.0F);
+    return {
+        start,
+        {start.x + dx * 0.30F + normal.x * bend,
+         start.y + dy * 0.30F + normal.y * bend},
+        {start.x + dx * 0.70F + normal.x * bend,
+         start.y + dy * 0.70F + normal.y * bend},
+        end
+    };
+}
+
+PointF cubic_bezier_point(const CubicBezier& curve, float t) noexcept {
+    t = std::clamp(t, 0.0F, 1.0F);
+    const float inverse = 1.0F - t;
+    const float a = inverse * inverse * inverse;
+    const float b = 3.0F * inverse * inverse * t;
+    const float c = 3.0F * inverse * t * t;
+    const float d = t * t * t;
+    return {
+        curve.start.x * a + curve.control1.x * b + curve.control2.x * c + curve.end.x * d,
+        curve.start.y * a + curve.control1.y * b + curve.control2.y * c + curve.end.y * d
+    };
+}
+
 RectF Drawable::bounds() const noexcept {
     if (bounds_cached_) return cached_bounds_;
     if (points.empty()) return {};
@@ -51,6 +83,15 @@ RectF Drawable::bounds() const noexcept {
         result.top = std::min(result.top, point.y);
         result.right = std::max(result.right, point.x);
         result.bottom = std::max(result.bottom, point.y);
+    }
+    if (kind == Tool::CurvedArrow && points.size() >= 2) {
+        const auto curve = curved_arrow_bezier(points.front(), points.back());
+        for (const PointF point : {curve.control1, curve.control2}) {
+            result.left = std::min(result.left, point.x);
+            result.top = std::min(result.top, point.y);
+            result.right = std::max(result.right, point.x);
+            result.bottom = std::max(result.bottom, point.y);
+        }
     }
     const float padding = std::max(width, 3.0F) * 1.5F;
     result.left -= padding;
@@ -81,6 +122,21 @@ bool path_hit(const Drawable& item, PointF point, float tolerance) noexcept {
     return false;
 }
 
+bool curved_arrow_hit(const Drawable& item, PointF point, float tolerance) noexcept {
+    if (item.points.size() < 2) return false;
+    const auto curve = curved_arrow_bezier(item.points.front(), item.points.back());
+    const float radius = tolerance + item.width * 0.5F;
+    PointF previous = curve.start;
+    constexpr int samples = 32;
+    for (int index = 1; index <= samples; ++index) {
+        const PointF current = cubic_bezier_point(
+            curve, static_cast<float>(index) / static_cast<float>(samples));
+        if (distance_to_segment(point, previous, current) <= radius) return true;
+        previous = current;
+    }
+    return false;
+}
+
 void rdp(const std::vector<PointF>& input, std::size_t first, std::size_t last,
          float epsilon, std::vector<bool>& keep) {
     if (last <= first + 1) return;
@@ -107,9 +163,9 @@ bool hit_test(const Drawable& item, PointF point, float tolerance) noexcept {
     if (!item.bounds().contains(point)) return false;
 
     if (item.kind == Tool::Text) return item.bounds().contains(point);
+    if (item.kind == Tool::CurvedArrow) return curved_arrow_hit(item, point, tolerance);
     if (item.kind == Tool::Pen || item.kind == Tool::Highlighter ||
-        item.kind == Tool::Line || item.kind == Tool::Arrow ||
-        item.kind == Tool::CurvedArrow) {
+        item.kind == Tool::Line || item.kind == Tool::Arrow) {
         return path_hit(item, point, tolerance);
     }
     if ((item.kind == Tool::Rectangle || item.kind == Tool::Ellipse) &&

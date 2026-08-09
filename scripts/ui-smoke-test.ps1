@@ -29,6 +29,7 @@ public static class ElitePenUiNative {
     [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr window, uint message, IntPtr wparam, IntPtr lparam);
     [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr window, uint message, IntPtr wparam, IntPtr lparam);
     [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr window, int id);
+    [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr window, int index);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr window, out RECT rectangle);
     [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT point);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern bool SetWindowText(IntPtr window, string value);
@@ -167,6 +168,7 @@ try {
     $paletteBounds = New-Object ElitePenUiNative+RECT
     $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$paletteBounds)
     Assert-Ui (($paletteBounds.Right - $paletteBounds.Left) -eq 290) 'Palette was not shortened with the new brush design.'
+    Assert-Ui (($paletteBounds.Bottom - $paletteBounds.Top) -eq 280) 'Palette did not compact around the brush controls.'
 
     # Six quick colors follow the compact visual order requested for 1.2.
     $quickColors = @(
@@ -231,8 +233,8 @@ try {
     if ($geometryPanel -ne [IntPtr]::Zero) {
         $geometryBounds = New-Object ElitePenUiNative+RECT
         $null = [ElitePenUiNative]::GetWindowRect($geometryPanel, [ref]$geometryBounds)
-        Assert-Ui (($geometryBounds.Bottom - $geometryBounds.Top) -eq 210) 'Geometry panel was not compact.'
-        Click-Window $geometryPanel 96 68
+        Assert-Ui (($geometryBounds.Bottom - $geometryBounds.Top) -eq 112) 'Icon-only geometry panel was not compact.'
+        Click-Window $geometryPanel 43 69
         $directGeometry = [ElitePenUiNative]::SendMessage($palette, 0x805A, [IntPtr]::Zero, [IntPtr]::Zero)
         Assert-Ui ($directGeometry.ToInt64() -eq 4) 'Geometry panel did not select Line.'
     }
@@ -249,6 +251,11 @@ try {
         $null = [ElitePenUiNative]::SendMessage($settings, 0x0111, [IntPtr]0x00010FA9, $fade)
         $null = [ElitePenUiNative]::SendMessage($fade, 0x014E, [IntPtr]0, [IntPtr]::Zero)
         $null = [ElitePenUiNative]::SendMessage($settings, 0x0111, [IntPtr]0x00010FA9, $fade)
+        $defaultThickness = [ElitePenUiNative]::GetDlgItem($settings, 4010)
+        $null = [ElitePenUiNative]::SendMessage($defaultThickness, 0x014E, [IntPtr]1, [IntPtr]::Zero)
+        $null = [ElitePenUiNative]::SendMessage($settings, 0x0111, [IntPtr]0x00010FAA, $defaultThickness)
+        $configuredThickness = [ElitePenUiNative]::SendMessage($palette, 0x805C, [IntPtr]::Zero, [IntPtr]::Zero)
+        Assert-Ui ($configuredThickness.ToInt64() -eq 40) 'Settings did not configure the 4 px default thickness.'
         $null = [ElitePenUiNative]::SendMessage($highlight, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
         $null = [ElitePenUiNative]::SendMessage($settings, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)
     }
@@ -267,15 +274,22 @@ try {
         $null = [ElitePenUiNative]::SendMessage($overlay, 0x0202, [IntPtr]0, $finish)
     }
 
-    # Text opens the IME-compatible editor and commits a real string.
+    # Text uses a transparent, captionless editor directly at the insertion point.
+    $itemsBeforeText = [ElitePenUiNative]::SendMessage($palette, 0x805E, [IntPtr]::Zero, [IntPtr]::Zero)
     Select-Tool $palette 9
     Click-Window $overlay 520 360
     $textWindow = Wait-Window 'ElitePen.TextInput' 1000
-    Assert-Ui ($textWindow -ne [IntPtr]::Zero -and [ElitePenUiNative]::IsWindowVisible($textWindow)) 'Text editor did not open.'
+    Assert-Ui ($textWindow -ne [IntPtr]::Zero -and [ElitePenUiNative]::IsWindowVisible($textWindow)) 'Inline text editor did not appear at the insertion point.'
     if ($textWindow -ne [IntPtr]::Zero) {
-        $edit = [ElitePenUiNative]::GetDlgItem($textWindow, 3001)
-        $null = [ElitePenUiNative]::SetWindowText($edit, 'Elite Pen QA')
-        $null = [ElitePenUiNative]::SendMessage($textWindow, 0x0111, [IntPtr]1, [IntPtr]::Zero)
+        $style = [ElitePenUiNative]::GetWindowLong($textWindow, -16)
+        Assert-Ui (($style -band 0x00C00000) -eq 0) 'Inline text unexpectedly has a dialog caption.'
+        foreach ($character in 'Elite Pen QA'.ToCharArray()) {
+            $null = [ElitePenUiNative]::SendMessage($textWindow, 0x0102, [IntPtr][int]$character, [IntPtr]::Zero)
+        }
+        $null = [ElitePenUiNative]::SendMessage($textWindow, 0x805D, [IntPtr]::Zero, [IntPtr]::Zero)
+        Assert-Ui (-not [ElitePenUiNative]::IsWindowVisible($textWindow)) 'Inline text editor did not commit cleanly.'
+        $itemsAfterText = [ElitePenUiNative]::SendMessage($palette, 0x805E, [IntPtr]::Zero, [IntPtr]::Zero)
+        Assert-Ui ($itemsAfterText.ToInt64() -eq $itemsBeforeText.ToInt64() + 1) 'Inline text did not create a drawable.'
     }
 
     # Region capture writes PNG to the isolated QA folder and copies a bitmap.

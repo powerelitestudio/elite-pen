@@ -85,6 +85,16 @@ private:
 
 [[nodiscard]] float distance(PointF a, PointF b) noexcept;
 [[nodiscard]] float distance_to_segment(PointF p, PointF a, PointF b) noexcept;
+
+struct CubicBezier {
+    PointF start{};
+    PointF control1{};
+    PointF control2{};
+    PointF end{};
+};
+
+[[nodiscard]] CubicBezier curved_arrow_bezier(PointF start, PointF end) noexcept;
+[[nodiscard]] PointF cubic_bezier_point(const CubicBezier& curve, float t) noexcept;
 [[nodiscard]] bool hit_test(const Drawable& item, PointF point, float tolerance = 3.0F) noexcept;
 [[nodiscard]] std::vector<PointF> simplify_path(const std::vector<PointF>& input,
                                                 float epsilon);
@@ -135,7 +145,7 @@ struct AppState {
     Document document;
     Tool tool{Tool::Pen};
     Color color{kBlack};
-    float thickness{7.0F};
+    float thickness{4.0F};
     bool annotations_visible{true};
     bool whiteboard{false};
     bool blackboard{false};
