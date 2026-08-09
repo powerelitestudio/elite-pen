@@ -4,7 +4,7 @@ Elite Pen es la herramienta nativa de anotacion, pizarra y ampliacion de pantall
 Power Elite Studio. Su interfaz principal toma la forma de una paleta de pintor y un
 pincel funcional; no replica la barra vertical de otras aplicaciones.
 
-La edición 1.8.1 consolida el lenguaje visual **Obsidian Atelier**: obsidiana profunda,
+La edición 1.9 consolida el lenguaje visual **Obsidian Atelier**: obsidiana profunda,
 metal champaña, azul eléctrico controlado, superficies elevadas y tipografía moderna.
 La estética es propia de Power Elite Studio y mantiene la interfaz compacta, legible
 y rápida tanto en Windows 10 como en Windows 11.
@@ -12,6 +12,7 @@ y rápida tanto en Windows 10 como en Windows 11.
 ## Objetivos del producto
 
 - Dibujar encima de cualquier aplicacion sin interrumpir el flujo de trabajo.
+- Usar un cursor de lápiz nativo, preciso y visible en lugar de la cruz genérica.
 - Ocultar y recuperar anotaciones sin perderlas.
 - Crear texto, lineas, rectangulos, elipses, flechas rectas y flechas curvas.
 - Capturar una region en PNG y copiarla al portapapeles.

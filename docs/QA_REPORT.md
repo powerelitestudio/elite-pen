@@ -1,6 +1,6 @@
-# Informe de calidad — Elite Pen 1.8.1
+# Informe de calidad — Elite Pen 1.9.0
 
-Fecha: 2026-08-08
+Fecha: 2026-08-09
 Equipo de referencia: Lenovo 80NV, Intel Core i7-6700HQ, 12 GB RAM, Intel HD 530,
 GeForce GTX 960M, Windows 10 Pro 22H2 x64, dos monitores con escalado mixto.
 
@@ -38,6 +38,9 @@ GeForce GTX 960M, Windows 10 Pro 22H2 x64, dos monitores con escalado mixto.
 - Regresión 1.8.1: la paleta usa composición directa sin superficie de redirección
   heredada; una prueba aislada sobre fondo blanco comprueba por píxel que las cuatro
   escalas mantienen esquinas transparentes y contenido visible.
+- Iteración 1.9: cursor de lápiz nativo para Lápiz/Resaltador, rasterizado 4x y
+  adaptado por DPI; QA verifica que no sea la cruceta del sistema, que conserve un
+  bitmap de color de al menos 32 px y que el hotspot permanezca sobre el grafito.
 - QA visual mediante capturas reales de Paleta, Herramientas, Colores y Configuración;
   se comprueban jerarquía, alineación, separación, legibilidad y estados activos.
 - Captura: el gesto y el codificador PNG se prueban con una superficie determinista;
@@ -56,10 +59,10 @@ Resultado final en el equipo de referencia:
 
 | Prueba | Resultado | Presupuesto |
 |---|---:|---:|
-| Agregar 5.000 trazos | 89,34 ms | 2.500 ms |
-| 250 borrados fallidos sobre 5.000 objetos | 85,76 ms | 1.500 ms |
-| Limpiar y restaurar 5.000 objetos | 29,67 ms | 2.500 ms |
-| Simplificar 100.000 muestras | 206,14 ms | 1.500 ms |
+| Agregar 5.000 trazos | 27,63 ms | 2.500 ms |
+| 250 borrados fallidos sobre 5.000 objetos | 16,79 ms | 1.500 ms |
+| Limpiar y restaurar 5.000 objetos | 10,76 ms | 2.500 ms |
+| Simplificar 100.000 muestras | 126,17 ms | 1.500 ms |
 
 ## Compatibilidad y recuperacion
 
@@ -74,5 +77,5 @@ Resultado final en el equipo de referencia:
 - Windows puede denegar la captura del escritorio en una sesion bloqueada, segura o
   no interactiva; Elite Pen informa el fallo y no genera un archivo corrupto.
 - La presion depende del controlador del lapiz y de que Windows entregue WM_POINTER.
-- El binario 1.8.1 no esta firmado digitalmente; los hashes del paquete permiten
+- El binario 1.9.0 no esta firmado digitalmente; los hashes del paquete permiten
   verificar integridad hasta incorporar el certificado de Power Elite Studio.

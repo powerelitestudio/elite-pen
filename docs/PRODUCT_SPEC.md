@@ -1,6 +1,6 @@
-# Elite Pen 1.8.1 — contrato de producto
+# Elite Pen 1.9 — contrato de producto
 
-Estado: version 1.8.1 implementada.
+Estado: version 1.9.0 implementada.
 
 ## 1. Identidad e interaccion principal
 
@@ -59,7 +59,9 @@ la aplicacion sobre la que se presenta.
 
 1. Interactuar: la superposicion deja pasar raton, lapiz y tacto.
 2. Lapiz: trazo suavizado con raton o lapiz y presion cuando el hardware la informa.
-3. Resaltador: trazo semitransparente y ancho ampliado.
+   Usa un cursor nativo de lápiz inclinado en lugar de la cruz de Windows; la punta
+   de grafito coincide con el punto exacto donde comienza el trazo y escala por DPI.
+3. Resaltador: trazo semitransparente y ancho ampliado; comparte el cursor de lápiz.
 4. Borrador: elimina objetos tocados; la operacion se puede deshacer.
 5. Linea: linea recta con vista previa.
 6. Rectangulo: contorno perfecto; `Shift` conserva proporcion cuadrada.

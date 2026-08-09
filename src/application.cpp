@@ -15,6 +15,7 @@
 #include <wincodec.h>
 #include <windowsx.h>
 
+#include <algorithm>
 #include <array>
 #include <chrono>
 #include <cstring>
@@ -38,6 +39,7 @@ constexpr UINT kQaQueryColorMessage = WM_APP + 91;
 constexpr UINT kQaQueryThicknessMessage = WM_APP + 92;
 constexpr UINT kQaCommitInlineTextMessage = WM_APP + 93;
 constexpr UINT kQaQueryDocumentCountMessage = WM_APP + 94;
+constexpr UINT kQaQueryDrawingCursorMessage = WM_APP + 95;
 constexpr UINT_PTR kTrayId = 1;
 constexpr int kPaletteDesignWidth = 290;
 constexpr int kPaletteDesignHeight = 280;
@@ -54,6 +56,201 @@ int palette_pixel_width(float scale) noexcept {
 
 int palette_pixel_height(float scale) noexcept {
     return static_cast<int>(std::lround(static_cast<float>(kPaletteDesignHeight) * scale));
+}
+
+struct CursorPoint {
+    float x{};
+    float y{};
+};
+
+struct CursorColor {
+    float r{};
+    float g{};
+    float b{};
+    float a{};
+};
+
+bool cursor_point_in_polygon(CursorPoint point, const std::vector<CursorPoint>& polygon) {
+    bool inside = false;
+    for (std::size_t current = 0, previous = polygon.size() - 1;
+         current < polygon.size(); previous = current++) {
+        const CursorPoint a = polygon[current];
+        const CursorPoint b = polygon[previous];
+        const bool crosses = ((a.y > point.y) != (b.y > point.y)) &&
+            (point.x < (b.x - a.x) * (point.y - a.y) /
+                ((b.y - a.y) == 0.0F ? 0.0001F : (b.y - a.y)) + a.x);
+        if (crosses) inside = !inside;
+    }
+    return inside;
+}
+
+std::vector<CursorPoint> cursor_rectangle(CursorPoint start, CursorPoint finish,
+                                          CursorPoint normal, float half_width) {
+    return {
+        {start.x - normal.x * half_width, start.y - normal.y * half_width},
+        {finish.x - normal.x * half_width, finish.y - normal.y * half_width},
+        {finish.x + normal.x * half_width, finish.y + normal.y * half_width},
+        {start.x + normal.x * half_width, start.y + normal.y * half_width}
+    };
+}
+
+std::vector<CursorPoint> cursor_tip(CursorPoint tip, CursorPoint base,
+                                    CursorPoint normal, float half_width) {
+    return {
+        tip,
+        {base.x - normal.x * half_width, base.y - normal.y * half_width},
+        {base.x + normal.x * half_width, base.y + normal.y * half_width}
+    };
+}
+
+HCURSOR create_pencil_cursor(UINT dpi) {
+    using GetSystemMetricsForDpiFunction = int(WINAPI*)(int, UINT);
+    const auto metrics_for_dpi = reinterpret_cast<GetSystemMetricsForDpiFunction>(
+        GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetSystemMetricsForDpi"));
+    const auto metric = [metrics_for_dpi, dpi](int index) {
+        if (metrics_for_dpi) return metrics_for_dpi(index, dpi);
+        return MulDiv(GetSystemMetrics(index), static_cast<int>(dpi), USER_DEFAULT_SCREEN_DPI);
+    };
+    const int width = std::clamp(metric(SM_CXCURSOR), 32, 96);
+    const int height = std::clamp(metric(SM_CYCURSOR), 32, 96);
+    constexpr int sample_grid = 4;
+    constexpr float logical_size = 32.0F;
+    constexpr float diagonal = 0.70710678F;
+    const CursorPoint direction{diagonal, -diagonal};
+    const CursorPoint normal{diagonal, diagonal};
+    const CursorPoint tip{2.5F, 29.5F};
+    const CursorPoint wood_base{tip.x + direction.x * 8.5F,
+                                tip.y + direction.y * 8.5F};
+    const CursorPoint finish{27.0F, 5.0F};
+    const auto along = [direction](CursorPoint origin, float amount) {
+        return CursorPoint{origin.x + direction.x * amount,
+                           origin.y + direction.y * amount};
+    };
+    const CursorPoint metal_start = along(finish, -7.0F);
+    const CursorPoint eraser_start = along(finish, -4.0F);
+
+    const auto outer_shaft = cursor_rectangle(wood_base, finish, normal, 5.0F);
+    const auto outer_tip = cursor_tip(tip, wood_base, normal, 5.0F);
+    const auto outline_shaft = cursor_rectangle(wood_base, finish, normal, 4.25F);
+    const auto outline_tip = cursor_tip(tip, wood_base, normal, 4.25F);
+    const auto wood = cursor_tip(tip, wood_base, normal, 3.35F);
+    const CursorPoint graphite_base = along(tip, 3.6F);
+    const auto graphite = cursor_tip(tip, graphite_base, normal, 1.45F);
+    const auto body = cursor_rectangle(wood_base, metal_start, normal, 3.35F);
+    const auto metal = cursor_rectangle(metal_start, eraser_start, normal, 3.35F);
+    const auto eraser = cursor_rectangle(eraser_start, finish, normal, 3.35F);
+    const CursorPoint highlight_start{
+        wood_base.x - normal.x * 1.75F + direction.x * 0.9F,
+        wood_base.y - normal.y * 1.75F + direction.y * 0.9F};
+    const CursorPoint highlight_finish{
+        metal_start.x - normal.x * 1.75F - direction.x * 0.7F,
+        metal_start.y - normal.y * 1.75F - direction.y * 0.7F};
+    const auto highlight = cursor_rectangle(
+        highlight_start, highlight_finish, normal, 0.55F);
+
+    constexpr CursorColor transparent{};
+    constexpr CursorColor halo{0.98F, 0.98F, 0.99F, 0.96F};
+    constexpr CursorColor outline{0.07F, 0.08F, 0.10F, 1.0F};
+    constexpr CursorColor wood_color{0.95F, 0.80F, 0.59F, 1.0F};
+    constexpr CursorColor graphite_color{0.08F, 0.09F, 0.11F, 1.0F};
+    constexpr CursorColor body_color{0.96F, 0.66F, 0.18F, 1.0F};
+    constexpr CursorColor highlight_color{1.0F, 0.86F, 0.38F, 1.0F};
+    constexpr CursorColor metal_color{0.72F, 0.76F, 0.82F, 1.0F};
+    constexpr CursorColor eraser_color{0.94F, 0.34F, 0.42F, 1.0F};
+
+    const auto sample_color = [&](CursorPoint point) {
+        CursorColor color = transparent;
+        if (cursor_point_in_polygon(point, outer_shaft) ||
+            cursor_point_in_polygon(point, outer_tip)) color = halo;
+        if (cursor_point_in_polygon(point, outline_shaft) ||
+            cursor_point_in_polygon(point, outline_tip)) color = outline;
+        if (cursor_point_in_polygon(point, wood)) color = wood_color;
+        if (cursor_point_in_polygon(point, graphite)) color = graphite_color;
+        if (cursor_point_in_polygon(point, body)) color = body_color;
+        if (cursor_point_in_polygon(point, highlight)) color = highlight_color;
+        if (cursor_point_in_polygon(point, metal)) color = metal_color;
+        if (cursor_point_in_polygon(point, eraser)) color = eraser_color;
+        return color;
+    };
+
+    std::vector<unsigned char> pixels(
+        static_cast<std::size_t>(width * height * 4), 0);
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            float red{};
+            float green{};
+            float blue{};
+            float alpha{};
+            for (int sample_y = 0; sample_y < sample_grid; ++sample_y) {
+                for (int sample_x = 0; sample_x < sample_grid; ++sample_x) {
+                    const CursorPoint point{
+                        (static_cast<float>(x) +
+                         (static_cast<float>(sample_x) + 0.5F) / sample_grid) *
+                            logical_size / static_cast<float>(width),
+                        (static_cast<float>(y) +
+                         (static_cast<float>(sample_y) + 0.5F) / sample_grid) *
+                            logical_size / static_cast<float>(height)};
+                    const CursorColor color = sample_color(point);
+                    red += color.r * color.a;
+                    green += color.g * color.a;
+                    blue += color.b * color.a;
+                    alpha += color.a;
+                }
+            }
+            constexpr float samples = static_cast<float>(sample_grid * sample_grid);
+            const std::size_t offset = static_cast<std::size_t>((y * width + x) * 4);
+            pixels[offset] = static_cast<unsigned char>(
+                std::clamp(std::lround(blue / samples * 255.0F), 0L, 255L));
+            pixels[offset + 1] = static_cast<unsigned char>(
+                std::clamp(std::lround(green / samples * 255.0F), 0L, 255L));
+            pixels[offset + 2] = static_cast<unsigned char>(
+                std::clamp(std::lround(red / samples * 255.0F), 0L, 255L));
+            pixels[offset + 3] = static_cast<unsigned char>(
+                std::clamp(std::lround(alpha / samples * 255.0F), 0L, 255L));
+        }
+    }
+
+    BITMAPV5HEADER header{};
+    header.bV5Size = sizeof(header);
+    header.bV5Width = width;
+    header.bV5Height = -height;
+    header.bV5Planes = 1;
+    header.bV5BitCount = 32;
+    header.bV5Compression = BI_BITFIELDS;
+    header.bV5RedMask = 0x00ff0000;
+    header.bV5GreenMask = 0x0000ff00;
+    header.bV5BlueMask = 0x000000ff;
+    header.bV5AlphaMask = 0xff000000;
+    void* bitmap_bits{};
+    HDC screen = GetDC(nullptr);
+    HBITMAP color_bitmap = CreateDIBSection(screen,
+        reinterpret_cast<const BITMAPINFO*>(&header), DIB_RGB_COLORS,
+        &bitmap_bits, nullptr, 0);
+    ReleaseDC(nullptr, screen);
+    if (!color_bitmap || !bitmap_bits) {
+        if (color_bitmap) DeleteObject(color_bitmap);
+        return nullptr;
+    }
+    std::memcpy(bitmap_bits, pixels.data(), pixels.size());
+    HBITMAP mask_bitmap = CreateBitmap(width, height, 1, 1, nullptr);
+    if (!mask_bitmap) {
+        DeleteObject(color_bitmap);
+        return nullptr;
+    }
+    ICONINFO information{};
+    information.fIcon = FALSE;
+    information.xHotspot = static_cast<DWORD>(std::clamp(
+        std::lround(tip.x * static_cast<float>(width) / logical_size), 0L,
+        static_cast<long>(width - 1)));
+    information.yHotspot = static_cast<DWORD>(std::clamp(
+        std::lround(tip.y * static_cast<float>(height) / logical_size), 0L,
+        static_cast<long>(height - 1)));
+    information.hbmMask = mask_bitmap;
+    information.hbmColor = color_bitmap;
+    HCURSOR cursor = static_cast<HCURSOR>(CreateIconIndirect(&information));
+    DeleteObject(mask_bitmap);
+    DeleteObject(color_bitmap);
+    return cursor;
 }
 
 constexpr int kHotkeyInteract = 1;
@@ -104,6 +301,9 @@ class OverlayWindow final : public WindowBase {
 public:
     OverlayWindow(Controller& controller, RECT monitor_rect)
         : WindowBase(controller), monitor_rect_(monitor_rect) {}
+    ~OverlayWindow() override {
+        if (pencil_cursor_) DestroyCursor(pencil_cursor_);
+    }
 
     bool initialize(GraphicsDevice& graphics);
     void update_interaction();
@@ -115,6 +315,7 @@ protected:
     void render() override;
 
 private:
+    void refresh_pencil_cursor();
     PointF global_point(LPARAM lparam) const noexcept;
     std::optional<PointF> pointer_point(WPARAM wparam) const noexcept;
     void begin_gesture(PointF point, float pressure = 1.0F);
@@ -126,6 +327,7 @@ private:
     bool erasing_{};
     bool pointer_active_{};
     UINT32 pointer_id_{};
+    HCURSOR pencil_cursor_{};
 };
 
 class PaletteWindow final : public WindowBase {
@@ -908,10 +1110,18 @@ bool OverlayWindow::initialize(GraphicsDevice& graphics) {
                 monitor_rect_)) return false;
     SetLayeredWindowAttributes(window_, 0, 255, LWA_ALPHA);
     if (!initialize_surface(graphics)) return false;
+    refresh_pencil_cursor();
     SetWindowDisplayAffinity(window_, WDA_NONE);
     ShowWindow(window_, SW_SHOWNOACTIVATE);
     update_interaction();
     return true;
+}
+
+void OverlayWindow::refresh_pencil_cursor() {
+    HCURSOR next = create_pencil_cursor(GetDpiForWindow(window_));
+    if (!next) return;
+    if (pencil_cursor_) DestroyCursor(pencil_cursor_);
+    pencil_cursor_ = next;
 }
 
 void OverlayWindow::update_interaction() {
@@ -1057,15 +1267,24 @@ void OverlayWindow::finish_gesture(PointF point, WPARAM keys) {
 
 LRESULT OverlayWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
     switch (message) {
+        case kQaQueryDrawingCursorMessage:
+            return reinterpret_cast<LRESULT>(pencil_cursor_);
         case WM_SETCURSOR:
             if (LOWORD(lparam) == HTCLIENT) {
                 const Tool tool = controller_.state().tool;
-                const wchar_t* cursor = tool == Tool::Interact ? IDC_ARROW
-                    : (tool == Tool::Text ? IDC_IBEAM : IDC_CROSS);
-                SetCursor(LoadCursorW(nullptr, cursor));
+                HCURSOR cursor{};
+                if (tool == Tool::Interact) cursor = LoadCursorW(nullptr, IDC_ARROW);
+                else if (tool == Tool::Text) cursor = LoadCursorW(nullptr, IDC_IBEAM);
+                else if ((tool == Tool::Pen || tool == Tool::Highlighter) && pencil_cursor_)
+                    cursor = pencil_cursor_;
+                else cursor = LoadCursorW(nullptr, IDC_CROSS);
+                SetCursor(cursor);
                 return TRUE;
             }
             break;
+        case WM_DPICHANGED:
+            refresh_pencil_cursor();
+            return 0;
         case WM_NCHITTEST:
             if (controller_.palette() && controller_.palette()->contains_screen_point(
                     {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)})) {
@@ -2498,7 +2717,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 1.8.1",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 1.9.0",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |

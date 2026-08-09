@@ -20,6 +20,14 @@ using System.Runtime.InteropServices;
 public static class ElitePenUiNative {
     [StructLayout(LayoutKind.Sequential)] public struct RECT { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)] public struct POINT { public int X, Y; }
+    [StructLayout(LayoutKind.Sequential)] public struct ICONINFO {
+        public bool IsIcon; public uint HotspotX, HotspotY; public IntPtr Mask, Color;
+    }
+    [StructLayout(LayoutKind.Sequential)] public struct BITMAP {
+        public int Type, Width, Height, WidthBytes;
+        public ushort Planes, BitsPerPixel;
+        public IntPtr Bits;
+    }
     public delegate bool WindowCallback(IntPtr window, IntPtr data);
     [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr context);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindow(string className, string title);
@@ -35,6 +43,11 @@ public static class ElitePenUiNative {
         int x, int y, int width, int height, uint flags);
     [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT point);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern bool SetWindowText(IntPtr window, string value);
+    [DllImport("user32.dll")] public static extern IntPtr LoadCursor(IntPtr instance, IntPtr name);
+    [DllImport("user32.dll")] public static extern bool GetIconInfo(IntPtr cursor, out ICONINFO information);
+    [DllImport("gdi32.dll", EntryPoint="GetObjectW")] public static extern int GetBitmapObject(
+        IntPtr bitmap, int size, out BITMAP information);
+    [DllImport("gdi32.dll")] public static extern bool DeleteObject(IntPtr value);
     public static int CountClass(string className) {
         int count = 0;
         EnumWindows((window, data) => {
@@ -175,6 +188,43 @@ try {
     if ($palette -eq [IntPtr]::Zero) { throw 'Palette unavailable; remaining UI checks cannot run.' }
 
     Assert-Ui ([ElitePenUiNative]::CountClass('ElitePen.Overlay') -ge 1) 'No monitor overlay was created.'
+
+    # Freehand drawing uses a native DPI-aware pencil, never the generic crosshair.
+    $drawingOverlay = Wait-Window 'ElitePen.Overlay'
+    $drawingCursor = [ElitePenUiNative]::SendMessage(
+        $drawingOverlay, 0x805F, [IntPtr]::Zero, [IntPtr]::Zero)
+    $crosshairCursor = [ElitePenUiNative]::LoadCursor([IntPtr]::Zero, [IntPtr]32515)
+    Assert-Ui ($drawingCursor -ne [IntPtr]::Zero -and $drawingCursor -ne $crosshairCursor) `
+        'Pen mode still uses the generic crosshair instead of the pencil cursor.'
+    if ($drawingCursor -ne [IntPtr]::Zero) {
+        $cursorIcon = New-Object ElitePenUiNative+ICONINFO
+        $cursorInfoAvailable = [ElitePenUiNative]::GetIconInfo($drawingCursor, [ref]$cursorIcon)
+        Assert-Ui $cursorInfoAvailable 'Pencil cursor bitmap could not be inspected.'
+        if ($cursorInfoAvailable) {
+            try {
+                $cursorBitmap = New-Object ElitePenUiNative+BITMAP
+                $bitmapAvailable = [ElitePenUiNative]::GetBitmapObject(
+                    $cursorIcon.Color,
+                    [Runtime.InteropServices.Marshal]::SizeOf($cursorBitmap),
+                    [ref]$cursorBitmap) -ne 0
+                Assert-Ui $bitmapAvailable 'Pencil cursor has no color bitmap.'
+                if ($bitmapAvailable) {
+                    Assert-Ui ($cursorBitmap.Width -ge 32 -and $cursorBitmap.Height -ge 32) `
+                        'Pencil cursor is not large enough for a crisp native rendering.'
+                    Assert-Ui ($cursorIcon.HotspotX -le [Math]::Floor($cursorBitmap.Width / 4) -and
+                               $cursorIcon.HotspotY -ge [Math]::Floor($cursorBitmap.Height * 3 / 4)) `
+                        'Pencil cursor hotspot is not anchored to its graphite tip.'
+                }
+            } finally {
+                if ($cursorIcon.Mask -ne [IntPtr]::Zero) {
+                    $null = [ElitePenUiNative]::DeleteObject($cursorIcon.Mask)
+                }
+                if ($cursorIcon.Color -ne [IntPtr]::Zero) {
+                    $null = [ElitePenUiNative]::DeleteObject($cursorIcon.Color)
+                }
+            }
+        }
+    }
 
     $paletteBounds = New-Object ElitePenUiNative+RECT
     $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$paletteBounds)

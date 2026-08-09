@@ -1,5 +1,17 @@
 # Historial de cambios
 
+## 1.9.0 — 2026-08-09
+
+- El modo Lápiz reemplaza la cruz genérica de Windows por un cursor nativo de lápiz
+  inclinado, compacto y reconocible, siguiendo el lenguaje funcional de Epic Pen.
+- La punta de grafito es el hotspot real: el trazo comienza exactamente allí, sin
+  desplazamiento visual respecto del ratón o stylus.
+- El cursor se rasteriza con antialiasing 4x, contorno claro/oscuro y tamaño adaptado
+  al DPI de cada monitor; Resaltador comparte el lápiz y las figuras conservan la
+  cruceta de precisión.
+- QA inspecciona el bitmap nativo, descarta el cursor `X` y verifica dimensiones,
+  color y ubicación proporcional del hotspot.
+
 ## 1.8.1 — 2026-08-08
 
 - Corregido el rectángulo negro que podía envolver la paleta después de cambiar
