@@ -39,11 +39,22 @@ constexpr UINT kQaQueryThicknessMessage = WM_APP + 92;
 constexpr UINT kQaCommitInlineTextMessage = WM_APP + 93;
 constexpr UINT kQaQueryDocumentCountMessage = WM_APP + 94;
 constexpr UINT_PTR kTrayId = 1;
-constexpr float kPaletteScale = 0.60F;
 constexpr int kPaletteDesignWidth = 290;
 constexpr int kPaletteDesignHeight = 280;
-constexpr int kPaletteWidth = static_cast<int>(kPaletteDesignWidth * kPaletteScale);
-constexpr int kPaletteHeight = static_cast<int>(kPaletteDesignHeight * kPaletteScale);
+constexpr std::array<float, 4> kPaletteScales{0.48F, 0.60F, 0.75F, 0.90F};
+
+float palette_scale_for_size(int size) noexcept {
+    return kPaletteScales[static_cast<std::size_t>(
+        std::clamp(size, 0, static_cast<int>(kPaletteScales.size()) - 1))];
+}
+
+int palette_pixel_width(float scale) noexcept {
+    return static_cast<int>(std::lround(static_cast<float>(kPaletteDesignWidth) * scale));
+}
+
+int palette_pixel_height(float scale) noexcept {
+    return static_cast<int>(std::lround(static_cast<float>(kPaletteDesignHeight) * scale));
+}
 
 constexpr int kHotkeyInteract = 1;
 constexpr int kHotkeyVisibility = 2;
@@ -128,6 +139,9 @@ public:
     void show_notification(const wchar_t* title, const std::wstring& message);
     [[nodiscard]] bool activate_command_at(POINT point);
     [[nodiscard]] bool contains_screen_point(POINT point) const;
+    void apply_size(int size);
+    [[nodiscard]] int pixel_width() const noexcept { return palette_pixel_width(scale_); }
+    [[nodiscard]] int pixel_height() const noexcept { return palette_pixel_height(scale_); }
 
 protected:
     LRESULT handle_message(UINT message, WPARAM wparam, LPARAM lparam) override;
@@ -146,6 +160,7 @@ private:
     NOTIFYICONDATAW tray_{};
     bool escape_down_{};
     HWND tooltip_{};
+    float scale_{kPaletteScales[1]};
 };
 
 class ColorWindow final : public WindowBase {
@@ -222,9 +237,13 @@ protected:
 
 private:
     void paint_background(HDC dc);
+    void paint_shortcuts(HDC dc, RECT bounds);
     void refresh_controls();
+    void show_tab(int tab);
     HWND title_{};
     HWND subtitle_{};
+    HWND tab_general_{};
+    HWND tab_shortcuts_{};
     HWND capture_{};
     HWND confirm_clear_{};
     HWND start_interact_{};
@@ -238,6 +257,9 @@ private:
     HWND zoom_view_label_{};
     HWND zoom_view_{};
     HWND zoom_invert_{};
+    HWND palette_size_label_{};
+    HWND palette_size_{};
+    HWND palette_size_hint_{};
     HWND reset_position_{};
     HWND shortcuts_{};
     HWND close_{};
@@ -247,6 +269,7 @@ private:
     HFONT small_font_{};
     HBRUSH background_brush_{};
     HBRUSH card_brush_{};
+    int active_tab_{};
 };
 
 class ZoomWindow final : public WindowBase {
@@ -343,6 +366,7 @@ public:
     void save_palette_position();
     void show_settings_window();
     void apply_capture_preference();
+    void set_palette_size(int size);
     void reset_palette_position();
     void save_preferences();
 
@@ -553,19 +577,19 @@ bool point_near_segment(POINT point, float start_x, float start_y,
     return point_in_circle(point, closest_x, closest_y, radius);
 }
 
-POINT palette_logical_point(POINT point) noexcept {
+POINT palette_logical_point(POINT point, float scale) noexcept {
     return {
-        static_cast<LONG>(std::lround(static_cast<float>(point.x) / kPaletteScale)),
-        static_cast<LONG>(std::lround(static_cast<float>(point.y) / kPaletteScale))
+        static_cast<LONG>(std::lround(static_cast<float>(point.x) / scale)),
+        static_cast<LONG>(std::lround(static_cast<float>(point.y) / scale))
     };
 }
 
-RECT palette_scaled_rect(RECT bounds) noexcept {
+RECT palette_scaled_rect(RECT bounds, float scale) noexcept {
     return {
-        static_cast<LONG>(std::lround(static_cast<float>(bounds.left) * kPaletteScale)),
-        static_cast<LONG>(std::lround(static_cast<float>(bounds.top) * kPaletteScale)),
-        static_cast<LONG>(std::lround(static_cast<float>(bounds.right) * kPaletteScale)),
-        static_cast<LONG>(std::lround(static_cast<float>(bounds.bottom) * kPaletteScale))
+        static_cast<LONG>(std::lround(static_cast<float>(bounds.left) * scale)),
+        static_cast<LONG>(std::lround(static_cast<float>(bounds.top) * scale)),
+        static_cast<LONG>(std::lround(static_cast<float>(bounds.right) * scale)),
+        static_cast<LONG>(std::lround(static_cast<float>(bounds.bottom) * scale))
     };
 }
 
@@ -1177,8 +1201,9 @@ void OverlayWindow::render() {
 bool PaletteWindow::initialize(GraphicsDevice& graphics) {
     const int work_left = GetSystemMetrics(SM_XVIRTUALSCREEN);
     const int work_top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+    scale_ = palette_scale_for_size(controller_.preferences().palette_size);
     const RECT bounds{work_left + 28, work_top + 28,
-                      work_left + 28 + kPaletteWidth, work_top + 28 + kPaletteHeight};
+                      work_left + 28 + pixel_width(), work_top + 28 + pixel_height()};
     constexpr DWORD ex_style = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE |
                                WS_EX_LAYERED;
     if (!create(L"ElitePen.Palette", L"Elite Pen", ex_style, WS_POPUP, bounds)) return false;
@@ -1194,6 +1219,41 @@ bool PaletteWindow::initialize(GraphicsDevice& graphics) {
     add_tray_icon();
     SetTimer(window_, 20, 33, nullptr);
     return true;
+}
+
+void PaletteWindow::apply_size(int size) {
+    const float next_scale = palette_scale_for_size(size);
+    if (std::abs(next_scale - scale_) < 0.001F) return;
+
+    RECT current{};
+    if (!GetWindowRect(window_, &current)) return;
+    const int next_width = palette_pixel_width(next_scale);
+    const int next_height = palette_pixel_height(next_scale);
+    const int center_x = current.left + (current.right - current.left) / 2;
+    const int center_y = current.top + (current.bottom - current.top) / 2;
+    RECT desired{center_x - next_width / 2, center_y - next_height / 2,
+                 center_x - next_width / 2 + next_width,
+                 center_y - next_height / 2 + next_height};
+    HMONITOR monitor = MonitorFromRect(&current, MONITOR_DEFAULTTONEAREST);
+    MONITORINFO info{};
+    info.cbSize = sizeof(info);
+    GetMonitorInfoW(monitor, &info);
+    desired.left = static_cast<LONG>(std::clamp(
+        static_cast<int>(desired.left), static_cast<int>(info.rcWork.left),
+        static_cast<int>(info.rcWork.right) - next_width));
+    desired.top = static_cast<LONG>(std::clamp(
+        static_cast<int>(desired.top), static_cast<int>(info.rcWork.top),
+        static_cast<int>(info.rcWork.bottom) - next_height));
+
+    scale_ = next_scale;
+    SetWindowPos(window_, nullptr, desired.left, desired.top, next_width, next_height,
+                 SWP_NOACTIVATE | SWP_NOZORDER);
+    if (tooltip_) {
+        DestroyWindow(tooltip_);
+        tooltip_ = nullptr;
+    }
+    install_tooltips();
+    invalidate();
 }
 
 void PaletteWindow::install_tooltips() {
@@ -1227,7 +1287,7 @@ void PaletteWindow::install_tooltips() {
         information.uFlags = TTF_SUBCLASS | TTF_TRANSPARENT;
         information.hwnd = window_;
         information.uId = tip.id;
-        information.rect = palette_scaled_rect(tip.bounds);
+        information.rect = palette_scaled_rect(tip.bounds, scale_);
         information.lpszText = const_cast<wchar_t*>(tip.text);
         SendMessageW(tooltip_, TTM_ADDTOOLW, 0,
                      reinterpret_cast<LPARAM>(&information));
@@ -1316,7 +1376,7 @@ void PaletteWindow::show_tray_menu() {
 }
 
 bool PaletteWindow::command_at(POINT point) const {
-    point = palette_logical_point(point);
+    point = palette_logical_point(point, scale_);
     constexpr std::array<float, 5> thickness_y{32.0F, 49.0F, 69.0F, 93.0F, 122.0F};
     for (const float y : thickness_y) {
         if (point_in_circle(point, 23.0F, y, 11.0F)) return true;
@@ -1349,7 +1409,7 @@ bool PaletteWindow::activate_command_at(POINT point) {
 
 void PaletteWindow::activate_at(POINT point) {
     const POINT physical_point = point;
-    point = palette_logical_point(point);
+    point = palette_logical_point(point, scale_);
     constexpr std::array<float, 5> thicknesses{2.0F, 4.0F, 7.0F, 12.0F, 20.0F};
     constexpr std::array<float, 5> thickness_y{32.0F, 49.0F, 69.0F, 93.0F, 122.0F};
     for (std::size_t index = 0; index < thickness_y.size(); ++index) {
@@ -1440,7 +1500,7 @@ LRESULT PaletteWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
             return 0;
         case WM_RBUTTONUP:
             if (const POINT point = palette_logical_point(
-                    {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)});
+                    {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)}, scale_);
                 point.x >= 88 && point.x <= 116 && point.y >= 155 && point.y <= 184) {
                 controller_.toggle_blackboard();
             } else {
@@ -1503,7 +1563,7 @@ LRESULT PaletteWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
 void PaletteWindow::render() {
     auto* context = surface_.begin_draw(D2D1::ColorF(0, 0.0F));
     if (!context) return;
-    context->SetTransform(D2D1::Matrix3x2F::Scale(kPaletteScale, kPaletteScale));
+    context->SetTransform(D2D1::Matrix3x2F::Scale(scale_, scale_));
 
     ComPtr<ID2D1SolidColorBrush> cream;
     ComPtr<ID2D1SolidColorBrush> shadow;
@@ -2415,7 +2475,7 @@ SettingsWindow::~SettingsWindow() {
 }
 
 bool SettingsWindow::initialize() {
-    const RECT bounds{0, 0, 590, 575};
+    const RECT bounds{0, 0, 590, 590};
     if (!create(L"ElitePen.Settings", L"Configuracion — Elite Pen",
                 WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
                 WS_POPUP, bounds)) return false;
@@ -2434,97 +2494,121 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 1.7.0",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 1.8.0",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
                                   BS_OWNERDRAW, 541, 14, 32, 32, window_,
                                   reinterpret_cast<HMENU>(IDCANCEL),
                                   GetModuleHandleW(nullptr), nullptr);
+    tab_general_ = CreateWindowW(L"BUTTON", L"General", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
+                                 BS_OWNERDRAW, 18, 68, 150, 34, window_,
+                                 reinterpret_cast<HMENU>(4101),
+                                 GetModuleHandleW(nullptr), nullptr);
+    tab_shortcuts_ = CreateWindowW(L"BUTTON", L"Atajos", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
+                                   BS_OWNERDRAW, 174, 68, 150, 34, window_,
+                                   reinterpret_cast<HMENU>(4102),
+                                   GetModuleHandleW(nullptr), nullptr);
     capture_ = CreateWindowW(L"BUTTON", L"Ocultar la paleta en capturas de pantalla",
                              WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
-                             24, 68, 500, 25, window_, reinterpret_cast<HMENU>(4001),
+                             24, 119, 500, 25, window_, reinterpret_cast<HMENU>(4001),
                              GetModuleHandleW(nullptr), nullptr);
     confirm_clear_ = CreateWindowW(L"BUTTON", L"Pedir confirmación antes de limpiar",
                                    WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
-                                   24, 103, 500, 25, window_, reinterpret_cast<HMENU>(4002),
+                                   24, 150, 500, 25, window_, reinterpret_cast<HMENU>(4002),
                                    GetModuleHandleW(nullptr), nullptr);
     start_interact_ = CreateWindowW(L"BUTTON", L"Iniciar en modo cursor normal",
                                     WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
-                                    24, 138, 500, 25, window_, reinterpret_cast<HMENU>(4003),
+                                    24, 181, 500, 25, window_, reinterpret_cast<HMENU>(4003),
                                     GetModuleHandleW(nullptr), nullptr);
     highlight_cursor_ = CreateWindowW(L"BUTTON", L"Resaltar la posición del cursor",
                                       WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
-                                      24, 173, 270, 25, window_, reinterpret_cast<HMENU>(4008),
+                                      24, 212, 270, 25, window_, reinterpret_cast<HMENU>(4008),
                                       GetModuleHandleW(nullptr), nullptr);
-    fade_label_ = CreateWindowW(L"STATIC", L"Tinta temporal:", WS_CHILD | WS_VISIBLE,
-                                316, 176, 112, 22, window_, nullptr,
+    fade_label_ = CreateWindowW(L"STATIC", L"Tinta:", WS_CHILD | WS_VISIBLE,
+                                316, 215, 52, 22, window_, nullptr,
                                 GetModuleHandleW(nullptr), nullptr);
     fade_ = CreateWindowW(L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-                          CBS_DROPDOWNLIST, 430, 171, 128, 130, window_,
+                          CBS_DROPDOWNLIST, 370, 210, 188, 130, window_,
                           reinterpret_cast<HMENU>(4009), GetModuleHandleW(nullptr), nullptr);
     for (const wchar_t* value : {L"Permanente", L"3 segundos", L"8 segundos", L"15 segundos"}) {
         SendMessageW(fade_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(value));
     }
+    palette_size_label_ = CreateWindowW(L"STATIC", L"Tamaño:",
+                                        WS_CHILD | WS_VISIBLE, 24, 270, 72, 24,
+                                        window_, nullptr, GetModuleHandleW(nullptr), nullptr);
+    palette_size_ = CreateWindowW(L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
+                                  CBS_DROPDOWNLIST, 100, 265, 246, 150, window_,
+                                  reinterpret_cast<HMENU>(4011),
+                                  GetModuleHandleW(nullptr), nullptr);
+    for (const wchar_t* value : {L"Compacta · 80 %", L"Estándar · 100 %",
+                                  L"Grande · 125 %", L"Muy grande · 150 %"}) {
+        SendMessageW(palette_size_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(value));
+    }
     thickness_label_ = CreateWindowW(L"STATIC", L"Grosor inicial:", WS_CHILD | WS_VISIBLE,
-                                     24, 220, 145, 24, window_, nullptr,
+                                     365, 270, 105, 24, window_, nullptr,
                                      GetModuleHandleW(nullptr), nullptr);
     thickness_ = CreateWindowW(L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-                               CBS_DROPDOWNLIST, 165, 216, 116, 160, window_,
+                               CBS_DROPDOWNLIST, 470, 265, 88, 160, window_,
                                reinterpret_cast<HMENU>(4010), GetModuleHandleW(nullptr), nullptr);
     for (const wchar_t* value : {L"2 px", L"4 px", L"7 px", L"12 px", L"20 px"}) {
         SendMessageW(thickness_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(value));
     }
     zoom_label_ = CreateWindowW(L"STATIC", L"Ampliación:", WS_CHILD | WS_VISIBLE,
-                                304, 220, 112, 24, window_, nullptr,
+                                24, 313, 102, 24, window_, nullptr,
                                 GetModuleHandleW(nullptr), nullptr);
     zoom_ = CreateWindowW(L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-                          CBS_DROPDOWNLIST, 414, 216, 144, 180, window_,
+                          CBS_DROPDOWNLIST, 130, 308, 120, 180, window_,
                           reinterpret_cast<HMENU>(4004), GetModuleHandleW(nullptr), nullptr);
     for (const wchar_t* value : {L"1.5×", L"2×", L"3×", L"4×", L"6×", L"8×"}) {
         SendMessageW(zoom_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(value));
     }
-    zoom_view_label_ = CreateWindowW(L"STATIC", L"Vista de ampliación:",
-                                     WS_CHILD | WS_VISIBLE, 24, 263, 170, 24,
+    zoom_view_label_ = CreateWindowW(L"STATIC", L"Vista:",
+                                     WS_CHILD | WS_VISIBLE, 275, 313, 56, 24,
                                      window_, nullptr, GetModuleHandleW(nullptr), nullptr);
     zoom_view_ = CreateWindowW(L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-                               CBS_DROPDOWNLIST, 195, 258, 210, 150, window_,
+                               CBS_DROPDOWNLIST, 335, 308, 223, 150, window_,
                                reinterpret_cast<HMENU>(4006), GetModuleHandleW(nullptr), nullptr);
     for (const wchar_t* value : {L"Pantalla completa", L"Lente", L"Acoplada"}) {
         SendMessageW(zoom_view_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(value));
     }
     zoom_invert_ = CreateWindowW(L"BUTTON", L"Invertir colores durante la ampliación",
                                  WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
-                                 24, 301, 500, 25, window_, reinterpret_cast<HMENU>(4007),
+                                 24, 352, 500, 25, window_, reinterpret_cast<HMENU>(4007),
                                  GetModuleHandleW(nullptr), nullptr);
+    palette_size_hint_ = CreateWindowW(L"STATIC",
+        L"Escala paleta, colores, puntos, pincel y zonas de clic como una sola unidad.",
+        WS_CHILD | WS_VISIBLE, 24, 384, 534, 20, window_, nullptr,
+        GetModuleHandleW(nullptr), nullptr);
     reset_position_ = CreateWindowW(L"BUTTON", L"Restablecer posición de la paleta",
                                     WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
-                                    24, 344, 260, 31, window_, reinterpret_cast<HMENU>(4005),
+                                    24, 432, 260, 31, window_, reinterpret_cast<HMENU>(4005),
                                     GetModuleHandleW(nullptr), nullptr);
-    shortcuts_ = CreateWindowW(L"STATIC",
-        L"Atajos: Ctrl+Shift+P cursor/lápiz · H ocultar · W pizarra\r\n"
-        L"Z deshacer · Y rehacer · C limpiar · M zoom · Esc salir del modo\r\n"
-        L"En zoom: F completa · L lente · D acoplada · I invertir · 0 vista 1×\r\n"
-        L"Pizarra negra: clic derecho en la parte blanca o Ctrl+Shift+B",
-        WS_CHILD | WS_VISIBLE, 24, 395, 540, 88, window_, nullptr,
-        GetModuleHandleW(nullptr), nullptr);
+    shortcuts_ = CreateWindowW(L"STATIC", L"Atajos de Elite Pen",
+        WS_CHILD | SS_OWNERDRAW, 24, 119, 540, 400, window_,
+        reinterpret_cast<HMENU>(4103), GetModuleHandleW(nullptr), nullptr);
     close_ = CreateWindowW(L"BUTTON", L"Cerrar", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-                           BS_OWNERDRAW, 455, 498, 100, 32, window_,
+                           BS_OWNERDRAW, 455, 542, 100, 32, window_,
                            reinterpret_cast<HMENU>(IDOK), GetModuleHandleW(nullptr), nullptr);
-    for (HWND child : {title_, subtitle_, capture_, confirm_clear_, start_interact_, highlight_cursor_,
+    for (HWND child : {title_, subtitle_, tab_general_, tab_shortcuts_, capture_, confirm_clear_,
+                       start_interact_, highlight_cursor_,
                        fade_label_, fade_, thickness_label_, thickness_, zoom_label_,
-                       zoom_, zoom_view_label_, zoom_view_, zoom_invert_, reset_position_,
+                       zoom_, zoom_view_label_, zoom_view_, zoom_invert_, palette_size_label_,
+                       palette_size_, palette_size_hint_, reset_position_,
                        shortcuts_, close_, chrome_close_}) {
         SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(body_font_), TRUE);
         SetWindowTheme(child, L"DarkMode_Explorer", nullptr);
     }
     SendMessageW(title_, WM_SETFONT, reinterpret_cast<WPARAM>(title_font_), TRUE);
     SendMessageW(subtitle_, WM_SETFONT, reinterpret_cast<WPARAM>(small_font_), TRUE);
+    SendMessageW(palette_size_hint_, WM_SETFONT, reinterpret_cast<WPARAM>(small_font_), TRUE);
     SendMessageW(shortcuts_, WM_SETFONT, reinterpret_cast<WPARAM>(small_font_), TRUE);
     SetWindowSubclass(fade_, premium_combo_subclass, 4009, 0);
     SetWindowSubclass(thickness_, premium_combo_subclass, 4010, 0);
     SetWindowSubclass(zoom_, premium_combo_subclass, 4004, 0);
     SetWindowSubclass(zoom_view_, premium_combo_subclass, 4006, 0);
+    SetWindowSubclass(palette_size_, premium_combo_subclass, 4011, 0);
+    show_tab(0);
     return true;
 }
 
@@ -2552,19 +2636,95 @@ void SettingsWindow::paint_background(HDC dc) {
     HPEN border = CreatePen(PS_SOLID, 1, RGB(50, 57, 69));
     old_brush = SelectObject(dc, card_brush_);
     old_pen = SelectObject(dc, border);
-    RoundRect(dc, 15, 62, 575, 207, 18, 18);
-    RoundRect(dc, 15, 208, 575, 335, 18, 18);
-    RoundRect(dc, 15, 336, 575, 486, 18, 18);
+    if (active_tab_ == 0) {
+        RoundRect(dc, 15, 110, 575, 252, 18, 18);
+        RoundRect(dc, 15, 253, 575, 413, 18, 18);
+        RoundRect(dc, 15, 414, 575, 530, 18, 18);
+    } else {
+        RoundRect(dc, 15, 110, 575, 530, 18, 18);
+    }
     SelectObject(dc, old_pen);
     SelectObject(dc, old_brush);
     DeleteObject(border);
 
     HPEN gold_pen = CreatePen(PS_SOLID, 3, RGB(216, 182, 109));
     old_pen = SelectObject(dc, gold_pen);
-    MoveToEx(dc, 25, 62, nullptr);
-    LineTo(dc, 92, 62);
+    MoveToEx(dc, 25, 110, nullptr);
+    LineTo(dc, 92, 110);
     SelectObject(dc, old_pen);
     DeleteObject(gold_pen);
+}
+
+void SettingsWindow::paint_shortcuts(HDC dc, RECT bounds) {
+    FillRect(dc, &bounds, card_brush_);
+    struct ShortcutRow {
+        const wchar_t* key;
+        const wchar_t* description;
+        bool heading;
+    };
+    constexpr std::array rows{
+        ShortcutRow{L"DIBUJO Y VISIBILIDAD", L"", true},
+        ShortcutRow{L"Ctrl + Shift + P", L"Alternar entre cursor normal y lápiz", false},
+        ShortcutRow{L"Ctrl + Shift + H", L"Ocultar o mostrar todas las anotaciones", false},
+        ShortcutRow{L"Esc", L"Salir de la herramienta temporal activa", false},
+        ShortcutRow{L"EDICIÓN", L"", true},
+        ShortcutRow{L"Ctrl + Shift + Z", L"Deshacer la última acción", false},
+        ShortcutRow{L"Ctrl + Shift + Y", L"Rehacer la acción deshecha", false},
+        ShortcutRow{L"Ctrl + Shift + C", L"Limpiar todas las anotaciones", false},
+        ShortcutRow{L"PIZARRAS", L"", true},
+        ShortcutRow{L"Ctrl + Shift + W / B", L"Pizarra blanca / pizarra negra", false},
+        ShortcutRow{L"ZOOM", L"", true},
+        ShortcutRow{L"Ctrl + Shift + M", L"Abrir o cerrar el zoom", false},
+        ShortcutRow{L"Rueda / + / −", L"Aumentar o reducir la ampliación", false},
+        ShortcutRow{L"F / L / D", L"Vista completa / lente / acoplada", false},
+        ShortcutRow{L"I / 0", L"Invertir colores / vista general 1×", false},
+        ShortcutRow{L"M / Espacio", L"Cambiar la vista mientras el zoom está abierto", false},
+        ShortcutRow{L"Esc / F4 / clic derecho", L"Cerrar el zoom", false},
+        ShortcutRow{L"TEXTO", L"", true},
+        ShortcutRow{L"Ctrl + Enter", L"Insertar el texto escrito", false},
+        ShortcutRow{L"Enter / Tab", L"Nueva línea / cuatro espacios", false},
+        ShortcutRow{L"Ctrl + V", L"Pegar texto desde el portapapeles", false},
+        ShortcutRow{L"Retroceso / Esc", L"Borrar carácter / cancelar el texto", false}
+    };
+    SetBkMode(dc, TRANSPARENT);
+    int y = bounds.top + 2;
+    for (const auto& row : rows) {
+        if (row.heading) {
+            HGDIOBJ previous_font = SelectObject(dc, body_font_);
+            SetTextColor(dc, RGB(226, 193, 120));
+            RECT text{bounds.left, y, bounds.right, y + 19};
+            DrawTextW(dc, row.key, -1, &text, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+            SelectObject(dc, previous_font);
+            y += 21;
+        } else {
+            HGDIOBJ previous_font = SelectObject(dc, small_font_);
+            SetTextColor(dc, RGB(240, 242, 246));
+            RECT key{bounds.left, y, bounds.left + 155, y + 17};
+            DrawTextW(dc, row.key, -1, &key,
+                      DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+            SetTextColor(dc, RGB(152, 161, 176));
+            RECT description{bounds.left + 160, y, bounds.right, y + 17};
+            DrawTextW(dc, row.description, -1, &description,
+                      DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+            SelectObject(dc, previous_font);
+            y += 17;
+        }
+    }
+}
+
+void SettingsWindow::show_tab(int tab) {
+    active_tab_ = std::clamp(tab, 0, 1);
+    const int general_visibility = active_tab_ == 0 ? SW_SHOW : SW_HIDE;
+    for (HWND control : {capture_, confirm_clear_, start_interact_, highlight_cursor_,
+                         fade_label_, fade_, palette_size_label_, palette_size_,
+                         palette_size_hint_, thickness_label_, thickness_, zoom_label_, zoom_,
+                         zoom_view_label_, zoom_view_, zoom_invert_, reset_position_}) {
+        ShowWindow(control, general_visibility);
+    }
+    ShowWindow(shortcuts_, active_tab_ == 1 ? SW_SHOW : SW_HIDE);
+    InvalidateRect(tab_general_, nullptr, TRUE);
+    InvalidateRect(tab_shortcuts_, nullptr, TRUE);
+    InvalidateRect(window_, nullptr, TRUE);
 }
 
 void SettingsWindow::refresh_controls() {
@@ -2577,6 +2737,8 @@ void SettingsWindow::refresh_controls() {
                  preferences.start_in_interact_mode ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessageW(highlight_cursor_, BM_SETCHECK,
                  preferences.highlight_cursor ? BST_CHECKED : BST_UNCHECKED, 0);
+    SendMessageW(palette_size_, CB_SETCURSEL,
+                 static_cast<WPARAM>(std::clamp(preferences.palette_size, 0, 3)), 0);
     constexpr std::array<int, 4> fade_values{0, 3, 8, 15};
     std::size_t fade_selection = 0;
     for (std::size_t index = 0; index < fade_values.size(); ++index) {
@@ -2617,13 +2779,13 @@ void SettingsWindow::show_settings() {
     info.cbSize = sizeof(info);
     GetMonitorInfoW(monitor, &info);
     const int x = info.rcWork.left + (info.rcWork.right - info.rcWork.left - 590) / 2;
-    const int y = info.rcWork.top + (info.rcWork.bottom - info.rcWork.top - 575) / 2;
-    SetWindowPos(window_, HWND_TOPMOST, x, y, 590, 575, SWP_SHOWWINDOW);
-    SetWindowRgn(window_, CreateRoundRectRgn(0, 0, 591, 576, 22, 22), TRUE);
+    const int y = info.rcWork.top + (info.rcWork.bottom - info.rcWork.top - 590) / 2;
+    SetWindowPos(window_, HWND_TOPMOST, x, y, 590, 590, SWP_SHOWWINDOW);
+    SetWindowRgn(window_, CreateRoundRectRgn(0, 0, 591, 591, 22, 22), TRUE);
     InvalidateRect(window_, nullptr, TRUE);
     UpdateWindow(window_);
     SetForegroundWindow(window_);
-    SetFocus(capture_);
+    SetFocus(active_tab_ == 0 ? capture_ : tab_shortcuts_);
 }
 
 LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
@@ -2637,6 +2799,14 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
         }
         case WM_COMMAND: {
             const int id = LOWORD(wparam);
+            if (id == 4101 && HIWORD(wparam) == BN_CLICKED) {
+                show_tab(0);
+                return 0;
+            }
+            if (id == 4102 && HIWORD(wparam) == BN_CLICKED) {
+                show_tab(1);
+                return 0;
+            }
             if (id == 4001 && HIWORD(wparam) == BN_CLICKED) {
                 SendMessageW(capture_, BM_SETCHECK,
                     SendMessageW(capture_, BM_GETCHECK, 0, 0) == BST_CHECKED
@@ -2699,6 +2869,13 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
                 }
                 return 0;
             }
+            if (id == 4011 && HIWORD(wparam) == CBN_SELCHANGE) {
+                const LRESULT selection = SendMessageW(palette_size_, CB_GETCURSEL, 0, 0);
+                if (selection >= 0 && selection < static_cast<LRESULT>(kPaletteScales.size())) {
+                    controller_.set_palette_size(static_cast<int>(selection));
+                }
+                return 0;
+            }
             if (id == 4004 && HIWORD(wparam) == CBN_SELCHANGE) {
                 constexpr std::array<float, 6> factors{1.5F, 2.0F, 3.0F, 4.0F, 6.0F, 8.0F};
                 const LRESULT selection = SendMessageW(zoom_, CB_GETCURSEL, 0, 0);
@@ -2742,13 +2919,42 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
         }
         case WM_DRAWITEM: {
             const auto* item = reinterpret_cast<const DRAWITEMSTRUCT*>(lparam);
-            if (!item || item->CtlType != ODT_BUTTON) break;
+            if (!item) break;
+            if (item->CtlType == ODT_STATIC && item->hwndItem == shortcuts_) {
+                RECT bounds = item->rcItem;
+                paint_shortcuts(item->hDC, bounds);
+                return TRUE;
+            }
+            if (item->CtlType != ODT_BUTTON) break;
             const int id = static_cast<int>(item->CtlID);
             const bool checkbox = id == 4001 || id == 4002 || id == 4003 ||
                                   id == 4007 || id == 4008;
             const bool pressed = (item->itemState & ODS_SELECTED) != 0;
             const bool focused = (item->itemState & ODS_FOCUS) != 0;
             SetBkMode(item->hDC, TRANSPARENT);
+            if (id == 4101 || id == 4102) {
+                const bool active = (id == 4101 && active_tab_ == 0) ||
+                                    (id == 4102 && active_tab_ == 1);
+                FillRect(item->hDC, &item->rcItem, background_brush_);
+                HBRUSH face = CreateSolidBrush(active ? RGB(31, 36, 45) : RGB(20, 23, 29));
+                HPEN outline = CreatePen(PS_SOLID, active || focused ? 2 : 1,
+                    active || focused ? RGB(216, 182, 109) : RGB(58, 66, 80));
+                HGDIOBJ previous_brush = SelectObject(item->hDC, face);
+                HGDIOBJ previous_pen = SelectObject(item->hDC, outline);
+                RoundRect(item->hDC, item->rcItem.left, item->rcItem.top,
+                          item->rcItem.right, item->rcItem.bottom, 11, 11);
+                SelectObject(item->hDC, previous_pen);
+                SelectObject(item->hDC, previous_brush);
+                DeleteObject(outline);
+                DeleteObject(face);
+                wchar_t value[64]{};
+                GetWindowTextW(item->hwndItem, value, 64);
+                SetTextColor(item->hDC, active ? RGB(244, 219, 154) : RGB(184, 191, 202));
+                RECT text_rect = item->rcItem;
+                DrawTextW(item->hDC, value, -1, &text_rect,
+                          DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+                return TRUE;
+            }
             if (checkbox) {
                 FillRect(item->hDC, &item->rcItem, card_brush_);
                 const int top = (item->rcItem.bottom - 18) / 2;
@@ -2835,7 +3041,8 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
             const HWND control = reinterpret_cast<HWND>(lparam);
             SetBkMode(dc, TRANSPARENT);
             if (control == title_) SetTextColor(dc, RGB(226, 193, 120));
-            else if (control == subtitle_ || control == shortcuts_)
+            else if (control == subtitle_ || control == shortcuts_ ||
+                     control == palette_size_hint_)
                 SetTextColor(dc, RGB(152, 161, 176));
             else SetTextColor(dc, RGB(240, 242, 246));
             return reinterpret_cast<LRESULT>(
@@ -3131,10 +3338,10 @@ bool Controller::initialize(std::wstring& error) {
             GetMonitorInfoW(monitor, &info);
             const int x = std::clamp(preferences_.palette_x,
                                      static_cast<int>(info.rcWork.left),
-                                     static_cast<int>(info.rcWork.right) - kPaletteWidth);
+                                     static_cast<int>(info.rcWork.right) - palette_->pixel_width());
             const int y = std::clamp(preferences_.palette_y,
                                      static_cast<int>(info.rcWork.top),
-                                     static_cast<int>(info.rcWork.bottom) - kPaletteHeight);
+                                     static_cast<int>(info.rcWork.bottom) - palette_->pixel_height());
             SetWindowPos(palette_->hwnd(), HWND_TOPMOST, x, y, 0, 0,
                          SWP_NOSIZE | SWP_NOACTIVATE);
         }
@@ -3600,6 +3807,14 @@ void Controller::apply_capture_preference() {
     if (colors_ && colors_->hwnd()) SetWindowDisplayAffinity(colors_->hwnd(), affinity);
     if (tools_ && tools_->hwnd()) SetWindowDisplayAffinity(tools_->hwnd(), affinity);
     if (text_input_ && text_input_->hwnd()) SetWindowDisplayAffinity(text_input_->hwnd(), affinity);
+}
+
+void Controller::set_palette_size(int size) {
+    const int clamped = std::clamp(size, 0, static_cast<int>(kPaletteScales.size()) - 1);
+    preferences_.palette_size = clamped;
+    if (palette_) palette_->apply_size(clamped);
+    save_palette_position();
+    save_preferences();
 }
 
 void Controller::reset_palette_position() {

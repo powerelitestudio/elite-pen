@@ -274,6 +274,59 @@ try {
     $settings = Wait-Window 'ElitePen.Settings' 1000
     Assert-Ui ($settings -ne [IntPtr]::Zero -and [ElitePenUiNative]::IsWindowVisible($settings)) 'Settings window did not open.'
     if ($settings -ne [IntPtr]::Zero) {
+        $settingsBounds = New-Object ElitePenUiNative+RECT
+        $null = [ElitePenUiNative]::GetWindowRect($settings, [ref]$settingsBounds)
+        Assert-Ui (($settingsBounds.Bottom - $settingsBounds.Top) -eq 590) 'Tabbed Settings window has an unexpected height.'
+        $generalTab = [ElitePenUiNative]::GetDlgItem($settings, 4101)
+        $shortcutsTab = [ElitePenUiNative]::GetDlgItem($settings, 4102)
+        $shortcutGuide = [ElitePenUiNative]::GetDlgItem($settings, 4103)
+        Assert-Ui ($generalTab -ne [IntPtr]::Zero -and $shortcutsTab -ne [IntPtr]::Zero -and
+                   $shortcutGuide -ne [IntPtr]::Zero) 'Settings tabs or shortcut guide are missing.'
+        $null = [ElitePenUiNative]::SendMessage($shortcutsTab, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
+        Assert-Ui ([ElitePenUiNative]::IsWindowVisible($shortcutGuide)) 'Shortcuts tab did not reveal the complete guide.'
+        $null = [ElitePenUiNative]::SendMessage($generalTab, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
+        Assert-Ui (-not [ElitePenUiNative]::IsWindowVisible($shortcutGuide)) 'General tab did not hide the shortcut guide.'
+
+        $paletteSize = [ElitePenUiNative]::GetDlgItem($settings, 4011)
+        Assert-Ui ($paletteSize -ne [IntPtr]::Zero) 'Whole-unit size selector is missing.'
+        $null = [ElitePenUiNative]::SendMessage($paletteSize, 0x014E, [IntPtr]0, [IntPtr]::Zero)
+        $null = [ElitePenUiNative]::SendMessage($settings, 0x0111, [IntPtr]0x00010FAB, $paletteSize)
+        $script:paletteScale = 0.48
+        $compactBounds = New-Object ElitePenUiNative+RECT
+        $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$compactBounds)
+        Assert-Ui (($compactBounds.Right - $compactBounds.Left) -eq 139 -and
+                   ($compactBounds.Bottom - $compactBounds.Top) -eq 134) 'Compact size did not scale the complete unit to 80 percent.'
+        Click-PaletteWindow $palette 169 53
+        $compactColor = [ElitePenUiNative]::SendMessage($palette, 0x805B, [IntPtr]::Zero, [IntPtr]::Zero)
+        Assert-Ui ($compactColor.ToInt64() -eq 4293870660) 'Compact palette did not scale its color hit zones.'
+        $null = [ElitePenUiNative]::SendMessage($paletteSize, 0x014E, [IntPtr]2, [IntPtr]::Zero)
+        $null = [ElitePenUiNative]::SendMessage($settings, 0x0111, [IntPtr]0x00010FAB, $paletteSize)
+        $script:paletteScale = 0.75
+        $largeBounds = New-Object ElitePenUiNative+RECT
+        $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$largeBounds)
+        Assert-Ui (($largeBounds.Right - $largeBounds.Left) -eq 218 -and
+                   ($largeBounds.Bottom - $largeBounds.Top) -eq 210) 'Large size did not scale the complete unit to 125 percent.'
+        Click-PaletteWindow $palette 23 122
+        $largeThickness = [ElitePenUiNative]::SendMessage($palette, 0x805C, [IntPtr]::Zero, [IntPtr]::Zero)
+        Assert-Ui ($largeThickness.ToInt64() -eq 200) 'Large palette did not scale its thickness hit zones.'
+        $null = [ElitePenUiNative]::SendMessage($paletteSize, 0x014E, [IntPtr]3, [IntPtr]::Zero)
+        $null = [ElitePenUiNative]::SendMessage($settings, 0x0111, [IntPtr]0x00010FAB, $paletteSize)
+        $script:paletteScale = 0.90
+        $veryLargeBounds = New-Object ElitePenUiNative+RECT
+        $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$veryLargeBounds)
+        Assert-Ui (($veryLargeBounds.Right - $veryLargeBounds.Left) -eq 261 -and
+                   ($veryLargeBounds.Bottom - $veryLargeBounds.Top) -eq 252) 'Very large size did not scale the complete unit to 150 percent.'
+        Click-PaletteWindow $palette 69 60
+        $veryLargeColor = [ElitePenUiNative]::SendMessage($palette, 0x805B, [IntPtr]::Zero, [IntPtr]::Zero)
+        Assert-Ui ($veryLargeColor.ToInt64() -eq 4294950445) 'Very large palette did not scale its color hit zones.'
+        $null = [ElitePenUiNative]::SendMessage($paletteSize, 0x014E, [IntPtr]1, [IntPtr]::Zero)
+        $null = [ElitePenUiNative]::SendMessage($settings, 0x0111, [IntPtr]0x00010FAB, $paletteSize)
+        $script:paletteScale = 0.60
+        $standardBounds = New-Object ElitePenUiNative+RECT
+        $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$standardBounds)
+        Assert-Ui (($standardBounds.Right - $standardBounds.Left) -eq 174 -and
+                   ($standardBounds.Bottom - $standardBounds.Top) -eq 168) 'Standard size did not restore the current 100 percent dimensions.'
+
         $highlight = [ElitePenUiNative]::GetDlgItem($settings, 4008)
         $null = [ElitePenUiNative]::SendMessage($highlight, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
         $fade = [ElitePenUiNative]::GetDlgItem($settings, 4009)

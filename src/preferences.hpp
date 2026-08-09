@@ -17,6 +17,7 @@ struct Preferences {
     bool has_palette_position{false};
     int palette_x{};
     int palette_y{};
+    int palette_size{1};
     float zoom_factor{2.0F};
     int zoom_view{0};
     bool zoom_invert{false};

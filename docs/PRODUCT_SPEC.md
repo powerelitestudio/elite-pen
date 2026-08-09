@@ -1,6 +1,6 @@
-# Elite Pen 1.7 — contrato de producto
+# Elite Pen 1.8 — contrato de producto
 
-Estado: version 1.7.0 implementada.
+Estado: version 1.8.0 implementada.
 
 ## 1. Identidad e interaccion principal
 
@@ -34,6 +34,11 @@ la aplicacion sobre la que se presenta.
   posición ya desplazada de la ventana; debe seguir cada delta sin rebote ni lastre.
 - El componente principal mide 174 x 168 pixeles fisicos a escala 100 %, una
   reduccion uniforme del 40 % respecto del lienzo visual anterior de 290 x 280.
+- Configuración ofrece tamaños Compacta 80 %, Estándar 100 %, Grande 125 % y Muy
+  grande 150 %. El tamaño Estándar conserva exactamente los 174 x 168 píxeles.
+- El escalado se aplica a la unidad completa: forma, puntos, colores, ojo, pincel,
+  papelera, ayudas y zonas interactivas; conserva el centro visual y se limita al
+  área útil del monitor.
 - Todos los comandos permanecen por encima del lienzo y muestran cursor de mano, por
   lo que color, grosor y herramienta se seleccionan sin abandonar el modo de dibujo.
 
@@ -114,6 +119,8 @@ añade una fila independiente para Configuracion.
 - Resaltado de cursor configurable para presentaciones.
 - Atajo de emergencia `Esc` devuelve interaccion al escritorio.
 - Icono de bandeja con acciones equivalentes y salida explicita.
+- Configuración separa `General` y `Atajos`; la segunda pestaña explica todas las
+  combinaciones globales y contextuales sin depender de memorización previa.
 
 ## 7. Criterios de aceptacion 1.0
 

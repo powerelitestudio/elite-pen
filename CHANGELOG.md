@@ -1,5 +1,19 @@
 # Historial de cambios
 
+## 1.8.0 — 2026-08-08
+
+- Nuevo selector de tamaño integral con cuatro niveles: Compacta 80 %, Estándar
+  100 %, Grande 125 % y Muy grande 150 %.
+- El tamaño actual se conserva como Estándar y el escalado transforma conjuntamente
+  paleta, colores, puntos de grosor, ojo, pincel, papelera, tooltips y zonas de clic.
+- El cambio de tamaño mantiene el centro visual, respeta los límites del monitor y
+  persiste entre sesiones para las ediciones portable e instalada.
+- Configuración se reorganiza en pestañas premium `General` y `Atajos`.
+- La pestaña Atajos documenta dibujo, visibilidad, edición, pizarras, zoom y entrada
+  de texto con la acción exacta de cada combinación.
+- QA automatizado para tamaños compacto, estándar y grande, incluyendo dimensiones
+  reales y selección correcta de color y grosor después del escalado.
+
 ## 1.7.0 — 2026-08-08
 
 - Arrastre reconstruido con coordenadas absolutas de pantalla: la paleta sigue al

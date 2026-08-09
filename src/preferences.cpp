@@ -78,6 +78,7 @@ Preferences PreferencesStore::load() const {
     result.has_palette_position = read_int(path_, L"HasPalettePosition", 0) != 0;
     result.palette_x = read_int(path_, L"PaletteX", 0);
     result.palette_y = read_int(path_, L"PaletteY", 0);
+    result.palette_size = std::clamp(read_int(path_, L"PaletteSize", 1), 0, 3);
     result.zoom_factor = std::clamp(read_float(path_, L"ZoomFactor", 2.0F), 1.25F, 8.0F);
     result.zoom_view = std::clamp(read_int(path_, L"ZoomView", 0), 0, 2);
     result.zoom_invert = read_int(path_, L"ZoomInvert", 0) != 0;
@@ -103,6 +104,7 @@ bool PreferencesStore::save(const Preferences& preferences) const {
     content << "HasPalettePosition=" << (preferences.has_palette_position ? 1 : 0) << "\r\n";
     content << "PaletteX=" << preferences.palette_x << "\r\n";
     content << "PaletteY=" << preferences.palette_y << "\r\n";
+    content << "PaletteSize=" << preferences.palette_size << "\r\n";
     content << "ZoomFactor=" << preferences.zoom_factor << "\r\n";
     content << "ZoomView=" << preferences.zoom_view << "\r\n";
     content << "ZoomInvert=" << (preferences.zoom_invert ? 1 : 0) << "\r\n";
