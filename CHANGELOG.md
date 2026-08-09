@@ -1,5 +1,14 @@
 # Historial de cambios
 
+## 1.8.1 — 2026-08-08
+
+- Corregido el rectángulo negro que podía envolver la paleta después de cambiar
+  su tamaño: DirectComposition conserva ahora la transparencia por píxel al
+  redimensionar la cadena gráfica.
+- Nueva regresión visual aislada que coloca la paleta sobre blanco, prueba las
+  cuatro escalas y valida por píxeles tanto las zonas transparentes como el
+  contenido visible.
+
 ## 1.8.0 — 2026-08-08
 
 - Nuevo selector de tamaño integral con cuatro niveles: Compacta 80 %, Estándar

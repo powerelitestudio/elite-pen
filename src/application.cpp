@@ -1204,10 +1204,14 @@ bool PaletteWindow::initialize(GraphicsDevice& graphics) {
     scale_ = palette_scale_for_size(controller_.preferences().palette_size);
     const RECT bounds{work_left + 28, work_top + 28,
                       work_left + 28 + pixel_width(), work_top + 28 + pixel_height()};
+    // DirectComposition owns the palette pixels, including their premultiplied
+    // alpha. A legacy layered-window backing bitmap can become opaque after the
+    // swap chain is resized, exposing the window as a black rectangle. Keeping
+    // the HWND out of the redirection surface lets DirectComposition preserve
+    // per-pixel transparency at every palette scale.
     constexpr DWORD ex_style = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE |
-                               WS_EX_LAYERED;
+                               WS_EX_NOREDIRECTIONBITMAP;
     if (!create(L"ElitePen.Palette", L"Elite Pen", ex_style, WS_POPUP, bounds)) return false;
-    SetLayeredWindowAttributes(window_, 0, 255, LWA_ALPHA);
     if (!initialize_surface(graphics)) return false;
 #ifndef ELITE_PEN_DEBUG
     if (controller_.preferences().exclude_palette_from_capture)
@@ -2494,7 +2498,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 1.8.0",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 1.8.1",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |

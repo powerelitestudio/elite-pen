@@ -1,6 +1,6 @@
-# Elite Pen 1.8 — contrato de producto
+# Elite Pen 1.8.1 — contrato de producto
 
-Estado: version 1.8.0 implementada.
+Estado: version 1.8.1 implementada.
 
 ## 1. Identidad e interaccion principal
 

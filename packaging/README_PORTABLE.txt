@@ -49,4 +49,4 @@ Configuracion.
 
 SOPORTE
 -------
-Producto de Power Elite Studio. Version 1.8.0.
+Producto de Power Elite Studio. Version 1.8.1.
