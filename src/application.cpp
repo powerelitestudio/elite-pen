@@ -136,11 +136,8 @@ private:
     [[nodiscard]] bool command_at(POINT point) const;
     void activate_at(POINT point);
     void show_tool_menu();
-    void show_geometry_menu();
-    void select_text_tool();
     void show_tray_menu();
     void choose_custom_color();
-    void show_settings();
     bool dragging_{};
     POINT drag_origin_{};
     POINT window_origin_{};
@@ -399,6 +396,21 @@ bool point_in_circle(POINT point, float cx, float cy, float radius) {
     const float dx = static_cast<float>(point.x) - cx;
     const float dy = static_cast<float>(point.y) - cy;
     return dx * dx + dy * dy <= radius * radius;
+}
+
+bool point_near_segment(POINT point, float start_x, float start_y,
+                        float end_x, float end_y, float radius) {
+    const float segment_x = end_x - start_x;
+    const float segment_y = end_y - start_y;
+    const float length_squared = segment_x * segment_x + segment_y * segment_y;
+    if (length_squared <= 0.0F) return point_in_circle(point, start_x, start_y, radius);
+    const float offset_x = static_cast<float>(point.x) - start_x;
+    const float offset_y = static_cast<float>(point.y) - start_y;
+    const float position = std::clamp(
+        (offset_x * segment_x + offset_y * segment_y) / length_squared, 0.0F, 1.0F);
+    const float closest_x = start_x + position * segment_x;
+    const float closest_y = start_y + position * segment_y;
+    return point_in_circle(point, closest_x, closest_y, radius);
 }
 
 POINT palette_logical_point(POINT point) noexcept {
@@ -1066,10 +1078,7 @@ void PaletteWindow::install_tooltips() {
         Tip{9, {104, 61, 148, 105}, L"Ocultar o mostrar anotaciones"},
         Tip{10, {42, 120, 86, 174}, L"Alternar entre lapiz y cursor normal"},
         Tip{11, {88, 151, 116, 184}, L"Pizarra blanca (clic) o negra (clic derecho)"},
-        Tip{12, {111, 170, 234, 238}, L"Abrir todas las herramientas"},
-        Tip{13, {143, 177, 169, 203}, L"Texto"},
-        Tip{14, {169, 190, 195, 216}, L"Figuras geometricas"},
-        Tip{15, {195, 203, 221, 229}, L"Configuracion"},
+        Tip{12, {102, 159, 230, 239}, L"Abrir herramientas y configuracion"},
         Tip{16, {237, 214, 279, 276}, L"Papelera: limpiar todas las anotaciones"}
     };
     for (const auto& tip : tips) {
@@ -1134,20 +1143,8 @@ void PaletteWindow::show_tool_menu() {
     controller_.toggle_tool_panel();
 }
 
-void PaletteWindow::show_geometry_menu() {
-    controller_.toggle_geometry_panel();
-}
-
-void PaletteWindow::select_text_tool() {
-    controller_.set_tool(Tool::Text);
-}
-
 void PaletteWindow::choose_custom_color() {
     controller_.toggle_color_panel();
-}
-
-void PaletteWindow::show_settings() {
-    controller_.show_settings_window();
 }
 
 void PaletteWindow::show_tray_menu() {
@@ -1193,12 +1190,9 @@ bool PaletteWindow::command_at(POINT point) const {
     }
     return point_in_circle(point, 126, 83, 23) ||
            point_in_circle(point, 256, 244, 25) ||
-           point_in_circle(point, 156, 190, 14) ||
-           point_in_circle(point, 182, 203, 14) ||
-           point_in_circle(point, 208, 216, 14) ||
            (point.x >= 42 && point.x <= 86 && point.y >= 120 && point.y <= 174) ||
            (point.x >= 88 && point.x <= 116 && point.y >= 151 && point.y <= 184) ||
-           (point.x >= 111 && point.x <= 234 && point.y >= 170 && point.y <= 238);
+           point_near_segment(point, 106, 173, 216, 225, 14);
 }
 
 bool PaletteWindow::contains_screen_point(POINT point) const {
@@ -1238,9 +1232,6 @@ void PaletteWindow::activate_at(POINT point) {
     if (point_in_circle(point, 113, 139, 16)) { choose_custom_color(); return; }
     if (point_in_circle(point, 126, 83, 22)) { controller_.toggle_visibility(); return; }
     if (point_in_circle(point, 256, 244, 24)) { controller_.clear_document(); return; }
-    if (point_in_circle(point, 156, 190, 14)) { select_text_tool(); return; }
-    if (point_in_circle(point, 182, 203, 14)) { show_geometry_menu(); return; }
-    if (point_in_circle(point, 208, 216, 14)) { show_settings(); return; }
     if (point.x >= 42 && point.x <= 86 && point.y >= 120 && point.y <= 174) {
         controller_.set_tool(controller_.state().tool == Tool::Interact
             ? Tool::Pen : Tool::Interact);
@@ -1249,7 +1240,7 @@ void PaletteWindow::activate_at(POINT point) {
     if (point.x >= 88 && point.x <= 116 && point.y >= 155 && point.y <= 184) {
         controller_.toggle_whiteboard(); return;
     }
-    if (point.x >= 111 && point.x <= 234 && point.y >= 170 && point.y <= 238) {
+    if (point_near_segment(point, 106, 173, 216, 225, 14)) {
         show_tool_menu(); return;
     }
 
@@ -1464,7 +1455,7 @@ void PaletteWindow::render() {
         context->DrawLine(D2D1::Point2F(138, 87), D2D1::Point2F(142, 92), ink.Get(), 1.6F);
     }
 
-    // Functional brush: tip mode, white ferrule/board and compact blue handle commands.
+    // Functional brush: tip mode, white ferrule/board and a clean tool-menu handle.
     ComPtr<ID2D1SolidColorBrush> bristle;
     ComPtr<ID2D1SolidColorBrush> red;
     ComPtr<ID2D1SolidColorBrush> ferrule;
@@ -1473,9 +1464,9 @@ void PaletteWindow::render() {
     context->CreateSolidColorBrush(D2D1::ColorF(0xFF6868), red.GetAddressOf());
     context->CreateSolidColorBrush(D2D1::ColorF(0xF7F7F4), ferrule.GetAddressOf());
     context->CreateSolidColorBrush(D2D1::ColorF(0x27A9D2), handle.GetAddressOf());
-    context->DrawLine(D2D1::Point2F(106, 177), D2D1::Point2F(228, 235),
+    context->DrawLine(D2D1::Point2F(106, 177), D2D1::Point2F(216, 229),
                       shadow.Get(), 20.0F);
-    context->DrawLine(D2D1::Point2F(106, 173), D2D1::Point2F(228, 231),
+    context->DrawLine(D2D1::Point2F(106, 173), D2D1::Point2F(216, 225),
                       handle.Get(), 17.0F);
     D2D1_POINT_2F ferrule_points[]{{82, 151}, {110, 164}, {102, 182}, {75, 169}};
     ComPtr<ID2D1PathGeometry> ferrule_geometry;
@@ -1518,31 +1509,6 @@ void PaletteWindow::render() {
                              ferrule.Get());
     }
 
-    // Text, geometry and settings rest directly on the blue handle without badges.
-    ComPtr<IDWriteTextFormat> command_format;
-    controller_.graphics().dwrite()->CreateTextFormat(L"Segoe UI", nullptr,
-        DWRITE_FONT_WEIGHT_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
-        10.0F, L"es-CO", command_format.GetAddressOf());
-    if (command_format) {
-        command_format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-        command_format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-        context->DrawTextW(L"T", 1, command_format.Get(),
-                           D2D1::RectF(148, 182, 164, 198), ferrule.Get());
-    }
-    context->DrawRectangle(D2D1::RectF(177, 198, 184, 205), ferrule.Get(), 1.4F);
-    context->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(185, 206), 3.0F, 2.4F),
-                         ferrule.Get(), 1.3F);
-    context->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(208, 216), 3.8F, 3.8F),
-                         ferrule.Get(), 1.4F);
-    context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(208, 216), 1.3F, 1.3F), ferrule.Get());
-    for (int index = 0; index < 6; ++index) {
-        const float angle = static_cast<float>(index) * 1.047198F;
-        context->DrawLine(D2D1::Point2F(208 + std::cos(angle) * 4.2F,
-                                        216 + std::sin(angle) * 4.2F),
-                          D2D1::Point2F(208 + std::cos(angle) * 5.8F,
-                                        216 + std::sin(angle) * 5.8F), ferrule.Get(), 1.2F);
-    }
-
     // A familiar trash can makes the destructive action immediately recognizable.
     context->DrawRoundedRectangle(
         D2D1::RoundedRect(D2D1::RectF(244, 233, 268, 263), 3, 3), handle.Get(), 2.2F);
@@ -1556,26 +1522,6 @@ void PaletteWindow::render() {
                       handle.Get(), 1.7F);
     context->DrawLine(D2D1::Point2F(262, 239), D2D1::Point2F(262, 257),
                       handle.Get(), 1.7F);
-
-    ComPtr<IDWriteTextFormat> label_format;
-    controller_.graphics().dwrite()->CreateTextFormat(L"Segoe UI", nullptr,
-        DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
-        DWRITE_FONT_STRETCH_NORMAL, 10.5F, L"es-CO", label_format.GetAddressOf());
-    if (label_format) {
-        ComPtr<ID2D1SolidColorBrush> active_color;
-        context->CreateSolidColorBrush(d2d_color(controller_.state().color),
-                                       active_color.GetAddressOf());
-        const float normalized_thickness =
-            (std::clamp(controller_.state().thickness, 2.0F, 20.0F) - 2.0F) / 18.0F;
-        const float sample_width = 1.5F + normalized_thickness * 5.5F;
-        context->DrawLine(D2D1::Point2F(168, 211), D2D1::Point2F(238, 245),
-                          ink.Get(), sample_width + 2.0F);
-        context->DrawLine(D2D1::Point2F(168, 211), D2D1::Point2F(238, 245),
-                          active_color.Get(), sample_width);
-        const wchar_t* status = tool_name(controller_.state().tool);
-        context->DrawTextW(status, static_cast<UINT32>(wcslen(status)),
-                           label_format.Get(), D2D1::RectF(150, 247, 240, 267), ink.Get());
-    }
 
     std::wstring error;
     if (!surface_.end_draw(error)) controller_.report_runtime_error(error);
@@ -1710,7 +1656,7 @@ void ColorWindow::render() {
 }
 
 bool ToolWindow::initialize(GraphicsDevice& graphics) {
-    const RECT bounds{0, 0, 366, 354};
+    const RECT bounds{0, 0, 366, 400};
     constexpr DWORD ex_style = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE |
                                WS_EX_LAYERED;
     if (!create(L"ElitePen.Tools", L"Herramientas — Elite Pen", ex_style, WS_POPUP,
@@ -1742,7 +1688,7 @@ Tool ToolWindow::tool_at(std::size_t index) const noexcept {
 
 void ToolWindow::show_near(HWND anchor, bool geometry_only) {
     geometry_only_ = geometry_only;
-    const int panel_height = geometry_only_ ? 112 : 354;
+    const int panel_height = geometry_only_ ? 112 : 400;
     RECT anchor_rect{};
     GetWindowRect(anchor, &anchor_rect);
     RECT desired{anchor_rect.right + 10, anchor_rect.top,
@@ -1781,6 +1727,14 @@ LRESULT ToolWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
                 const Tool tool = tool_at(index);
                 hide();
                 controller_.set_tool(tool);
+                return 0;
+            }
+        }
+        if (!geometry_only_) {
+            constexpr RECT settings_item{15, 340, 351, 382};
+            if (PtInRect(&settings_item, point)) {
+                hide();
+                controller_.show_settings_window();
                 return 0;
             }
         }
@@ -1928,6 +1882,25 @@ void ToolWindow::render() {
             context->DrawTextW(name, static_cast<UINT32>(wcslen(name)), item_format.Get(),
                                D2D1::RectF(left + 40, top + 11, left + 155, top + 35),
                                text.Get());
+        }
+    }
+    if (!geometry_only_) {
+        const auto settings_item = D2D1::RoundedRect(D2D1::RectF(15, 340, 351, 382), 9, 9);
+        context->DrawRoundedRectangle(settings_item, border.Get(), 1.0F);
+        constexpr D2D1_POINT_2F gear_center{35, 361};
+        context->DrawEllipse(D2D1::Ellipse(gear_center, 6.0F, 6.0F), text.Get(), 1.8F);
+        context->FillEllipse(D2D1::Ellipse(gear_center, 2.0F, 2.0F), text.Get());
+        for (int index = 0; index < 8; ++index) {
+            const float angle = static_cast<float>(index) * 0.785398F;
+            context->DrawLine(
+                D2D1::Point2F(gear_center.x + std::cos(angle) * 7.0F,
+                               gear_center.y + std::sin(angle) * 7.0F),
+                D2D1::Point2F(gear_center.x + std::cos(angle) * 9.0F,
+                               gear_center.y + std::sin(angle) * 9.0F), text.Get(), 1.6F);
+        }
+        if (item_format) {
+            context->DrawTextW(L"Configuracion", 13, item_format.Get(),
+                               D2D1::RectF(55, 350, 220, 376), text.Get());
         }
     }
     std::wstring error;
@@ -2108,7 +2081,7 @@ bool SettingsWindow::initialize() {
                 WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
                 WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU, bounds)) return false;
     HFONT regular = static_cast<HFONT>(GetStockObject(DEFAULT_GUI_FONT));
-    title_ = CreateWindowW(L"STATIC", L"Elite Pen 1.4.0", WS_CHILD | WS_VISIBLE,
+    title_ = CreateWindowW(L"STATIC", L"Elite Pen 1.5.0", WS_CHILD | WS_VISIBLE,
                            24, 20, 510, 24, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
     capture_ = CreateWindowW(L"BUTTON", L"Ocultar la paleta en capturas de pantalla",

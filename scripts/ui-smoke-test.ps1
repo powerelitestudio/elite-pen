@@ -138,7 +138,7 @@ function Click-PaletteWindow([IntPtr]$Window, [int]$X, [int]$Y) {
 }
 
 function Select-Tool([IntPtr]$Palette, [int]$Index) {
-    Click-PaletteWindow $Palette 225 232
+    Click-PaletteWindow $Palette 180 205
     $tools = Wait-Window 'ElitePen.Tools' 1000
     Assert-Ui ($tools -ne [IntPtr]::Zero -and [ElitePenUiNative]::IsWindowVisible($tools)) 'Tool panel did not open.'
     if ($tools -eq [IntPtr]::Zero) { return }
@@ -234,24 +234,18 @@ try {
     Assert-Ui ($routedThickness.ToInt64() -eq 200) 'Overlay click did not select the thickness command.'
     Click-ThroughOverlay $palette 23 69
 
-    # Dedicated text and geometry commands embedded in the shortened handle.
-    Click-ThroughOverlay $palette 156 190
-    $directText = [ElitePenUiNative]::SendMessage($palette, 0x805A, [IntPtr]::Zero, [IntPtr]::Zero)
-    Assert-Ui ($directText.ToInt64() -eq 9) 'Handle T command did not select Text.'
-    Click-ThroughOverlay $palette 182 203
-    $geometryPanel = Wait-Window 'ElitePen.Tools' 1000
-    Assert-Ui ($geometryPanel -ne [IntPtr]::Zero -and [ElitePenUiNative]::IsWindowVisible($geometryPanel)) 'Direct geometry panel did not open.'
-    if ($geometryPanel -ne [IntPtr]::Zero) {
-        $geometryBounds = New-Object ElitePenUiNative+RECT
-        $null = [ElitePenUiNative]::GetWindowRect($geometryPanel, [ref]$geometryBounds)
-        Assert-Ui (($geometryBounds.Bottom - $geometryBounds.Top) -eq 112) 'Icon-only geometry panel was not compact.'
-        Click-Window $geometryPanel 43 69
-        $directGeometry = [ElitePenUiNative]::SendMessage($palette, 0x805A, [IntPtr]::Zero, [IntPtr]::Zero)
-        Assert-Ui ($directGeometry.ToInt64() -eq 4) 'Geometry panel did not select Line.'
+    # The clean blue handle opens one complete panel, including Settings.
+    Click-ThroughOverlay $palette 180 205
+    $toolPanel = Wait-Window 'ElitePen.Tools' 1000
+    Assert-Ui ($toolPanel -ne [IntPtr]::Zero -and [ElitePenUiNative]::IsWindowVisible($toolPanel)) 'Clean handle did not open the complete tool panel.'
+    if ($toolPanel -ne [IntPtr]::Zero) {
+        $toolPanelBounds = New-Object ElitePenUiNative+RECT
+        $null = [ElitePenUiNative]::GetWindowRect($toolPanel, [ref]$toolPanelBounds)
+        Assert-Ui (($toolPanelBounds.Bottom - $toolPanelBounds.Top) -eq 400) 'Complete tool panel did not expose its Settings row.'
+        Click-Window $toolPanel 180 361
     }
 
-    # Settings is a real window and can close without ending the application.
-    Click-ThroughOverlay $palette 208 216
+    # Settings remains directly accessible through the handle panel.
     $settings = Wait-Window 'ElitePen.Settings' 1000
     Assert-Ui ($settings -ne [IntPtr]::Zero -and [ElitePenUiNative]::IsWindowVisible($settings)) 'Settings window did not open.'
     if ($settings -ne [IntPtr]::Zero) {

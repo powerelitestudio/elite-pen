@@ -1,6 +1,6 @@
-# Elite Pen 1.4 — contrato de producto
+# Elite Pen 1.5 — contrato de producto
 
-Estado: version 1.4.0 implementada.
+Estado: version 1.5.0 implementada.
 
 ## 1. Identidad e interaccion principal
 
@@ -26,16 +26,14 @@ la aplicacion sobre la que se presenta.
 ### Pincel
 
 - Punta del pincel: alterna entre Lapiz e Interactuar (cursor normal).
-- Mango azul, acortado 40 %, unido y alineado con la ferula blanca: su zona libre
-  abre todas las herramientas.
-- Primer control del mango: `T`, selecciona Texto directamente.
-- Segundo control del mango: abre el panel compacto de figuras geometricas.
-- Tercer control del mango: abre Configuracion.
-- Los tres iconos se dibujan directamente sobre el azul, sin fondos ni contenedores.
+- Mango azul limpio, unido y alineado con la ferula blanca, y un 10 % mas corto que
+  en la version 1.4.
+- Cualquier punto del mango abre un unico panel con todas las herramientas y
+  Configuracion; no contiene iconos ni comandos diminutos sobre su superficie.
 - Ferula blanca: clic alterna la pizarra blanca; clic derecho alterna la negra.
 - Papelera: limpia el documento mediante una operacion reversible.
-- Debajo del mango, una muestra corta e inclinada enseña color y grosor activos sin
-  tarjeta de fondo; una etiqueta compacta identifica la herramienta actual.
+- No se dibujan etiquetas, nombres, muestras de color ni indicadores de grosor debajo
+  del mango.
 
 ## 2. Herramientas
 
@@ -56,8 +54,8 @@ la aplicacion sobre la que se presenta.
 12. Zoom: ampliacion en vivo centrada en el puntero, ajuste con rueda y salida con
     `Esc`.
 
-El panel directo de Figuras presenta los cinco iconos en una sola fila, sin nombres
-redundantes, y ocupa 112 pixeles de alto.
+El panel abierto desde el mango reune todas las herramientas en un solo lugar y
+añade una fila independiente para Configuracion.
 
 ## 3. Documento e historial
 

@@ -1,5 +1,16 @@
 # Historial de cambios
 
+## 1.5.0 — 2026-08-08
+
+- Mango azul completamente limpio: se retiran los iconos de Texto, Figuras y
+  Configuracion.
+- Un clic en cualquier punto del mango abre el panel general con todas las
+  herramientas y un nuevo acceso a Configuracion.
+- El mango se acorta un 10 % adicional sin separarse de la ferula blanca.
+- Se eliminan por completo la etiqueta de herramienta seleccionada y la muestra
+  inferior de color y grosor activos.
+- La zona interactiva del mango ahora sigue exactamente su segmento visible.
+
 ## 1.4.0 — 2026-08-08
 
 - Todo el componente principal se reduce de 290 x 280 a 174 x 168 px: 40 % menos
