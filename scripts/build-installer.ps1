@@ -25,5 +25,5 @@ if (-not $compiler) {
 
 & $compiler (Join-Path $repoRoot 'packaging\ElitePen.iss')
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-$installer = Join-Path $repoRoot 'dist\installer\Elite Pen Setup 1.5.0.exe'
+$installer = Join-Path $repoRoot 'dist\installer\Elite Pen Setup 1.6.0.exe'
 Write-Output "Installer: $installer"

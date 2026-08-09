@@ -76,7 +76,7 @@ if (-not $TestsOnly) {
         $libraries = @(
             '-ld2d1', '-ldwrite', '-ld3d11', '-ldxgi', '-ldcomp', '-ldwmapi',
             '-lcomctl32', '-lcomdlg32', '-lshell32', '-lole32', '-luuid',
-            '-lshlwapi', '-lwindowscodecs', '-luser32', '-lgdi32', '-lkernel32'
+            '-lshlwapi', '-luxtheme', '-lwindowscodecs', '-luser32', '-lgdi32', '-lkernel32'
         )
         $linkFlags = @('-municode', '-mwindows', '-static', '-Wl,--gc-sections')
         Invoke-Compiler ($common + @((Join-Path $repoRoot 'src\core.cpp')) +

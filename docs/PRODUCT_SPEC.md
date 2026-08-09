@@ -1,12 +1,24 @@
-# Elite Pen 1.5 — contrato de producto
+# Elite Pen 1.6 — contrato de producto
 
-Estado: version 1.5.0 implementada.
+Estado: version 1.6.0 implementada.
 
 ## 1. Identidad e interaccion principal
 
 La ventana de control es una paleta de pintor compacta, siempre visible, movible y
 escalada por monitor. El fondo exterior es transparente y el control no roba foco a
 la aplicacion sobre la que se presenta.
+
+### Lenguaje visual
+
+- `Obsidian Atelier` combina grafito y obsidiana para las superficies, champaña
+  satinado para selección y jerarquía, y azul eléctrico para el mango funcional.
+- El volumen se comunica con gradientes breves, brillos controlados y sombras
+  contenidas; no se emplean biseles, marcos blancos ni cromados clásicos.
+- Las selecciones siempre disponen de forma, contorno o luminancia además del color.
+- Herramientas, Colores y Configuración comparten radios, elevación, tipografía y
+  comportamiento de foco/hover.
+- Segoe UI Variable es la familia preferida en Windows 11; Windows 10 usa la
+  sustitución nativa Segoe UI sin descargar fuentes ni perder rendimiento.
 
 ### Paleta
 

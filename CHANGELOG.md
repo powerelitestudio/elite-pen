@@ -1,5 +1,20 @@
 # Historial de cambios
 
+## 1.6.0 — 2026-08-08
+
+- Nuevo sistema visual `Obsidian Atelier`: superficies grafito/obsidiana, metal
+  champaña y azul eléctrico como acento funcional.
+- Paleta principal reconstruida con volumen sutil, borde metálico, pozos de color
+  pulidos, selección luminosa y una férula con acabado de metal satinado.
+- Paneles de Herramientas y Colores unificados con tarjetas elevadas, estados hover,
+  jerarquía tipográfica moderna y contraste más claro.
+- Configuración adopta marco propio redondeado, controles oscuros, casillas y botones
+  dibujados a medida, eliminando la apariencia clásica de Windows.
+- La punta conserva visualmente la tinta activa y la papelera gana presencia sin
+  competir con los controles principales.
+- Compatibilidad visual progresiva: Segoe UI Variable y esquinas DWM en Windows 11,
+  con sustitución tipográfica y marco propio en Windows 10.
+
 ## 1.5.0 — 2026-08-08
 
 - Mango azul completamente limpio: se retiran los iconos de Texto, Figuras y
