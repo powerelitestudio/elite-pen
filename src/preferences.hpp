@@ -4,9 +4,44 @@
 
 #include <windows.h>
 
+#include <array>
+#include <cstdint>
 #include <string>
 
 namespace elite_pen::win {
+
+enum class HotkeyAction : std::uint8_t {
+    Interact,
+    Visibility,
+    Whiteboard,
+    Undo,
+    Redo,
+    Clear,
+    Zoom,
+    Blackboard,
+    Count
+};
+
+struct HotkeyBinding {
+    UINT modifiers{};
+    UINT virtual_key{};
+
+    constexpr bool operator==(const HotkeyBinding&) const noexcept = default;
+};
+
+inline constexpr std::size_t kHotkeyActionCount =
+    static_cast<std::size_t>(HotkeyAction::Count);
+
+inline constexpr std::array<HotkeyBinding, kHotkeyActionCount> kDefaultHotkeys{{
+    {MOD_CONTROL | MOD_SHIFT, 'P'},
+    {MOD_CONTROL | MOD_SHIFT, 'H'},
+    {MOD_CONTROL | MOD_SHIFT, 'W'},
+    {MOD_CONTROL | MOD_SHIFT, 'Z'},
+    {MOD_CONTROL | MOD_SHIFT, 'Y'},
+    {MOD_CONTROL | MOD_SHIFT, 'C'},
+    {MOD_CONTROL | MOD_SHIFT, 'M'},
+    {MOD_CONTROL | MOD_SHIFT, 'B'}
+}};
 
 struct Preferences {
     bool confirm_clear{false};
@@ -18,11 +53,13 @@ struct Preferences {
     int palette_x{};
     int palette_y{};
     int palette_size{1};
+    bool palette_collapsed{false};
     float zoom_factor{2.0F};
     int zoom_view{0};
     bool zoom_invert{false};
     float thickness{4.0F};
     Color color{kBlack};
+    std::array<HotkeyBinding, kHotkeyActionCount> hotkeys{kDefaultHotkeys};
 };
 
 class PreferencesStore {

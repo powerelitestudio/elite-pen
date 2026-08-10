@@ -10,6 +10,8 @@
 - `ui`: paleta-pincel, selector de herramientas, selector de color y configuracion.
 - `capture`: seleccion de region, captura GDI con respaldo DXGI Desktop Duplication,
   transferencia al portapapeles y codificacion PNG mediante Windows Imaging Component.
+- `zoom`: control Magnifier nativo para el flujo vivo y una superficie
+  DirectComposition separada para congelación, entrada y anotaciones contextuales.
 
 ## Flujo de datos
 
@@ -20,6 +22,13 @@ la paleta conserva su propia superficie y nunca se mezcla con el documento.
 Cuando cambia la herramienta, las superposiciones recuperan su modo de entrada y el
 controlador restablece despues la paleta en la cima del grupo topmost. Asi sus zonas
 accionables siguen recibiendo clics mientras el lienzo esta en modo de dibujo.
+
+Durante zoom vivo, las superposiciones del escritorio dejan pasar la entrada. Al
+pulsar `P`, se inmoviliza el refresco del control Magnifier y se copia su último cuadro
+a la superficie `ZoomInk`; ésta recibe ratón, lápiz y tacto y conserva un `Document`
+independiente. Al reanudar, la superficie vuelve a ser transparente, mantiene sus
+vectores visibles y el control nativo continúa siguiendo el puntero. No se realizan
+capturas continuas de CPU durante el zoom vivo.
 
 ## Decisiones
 
@@ -51,3 +60,16 @@ queda ignorada por Git; su version y procedencia viven en `tools/toolchain.json`
 La presencia de `portable.flag` mueve el archivo de preferencias a `data` junto al
 ejecutable. La version instalada usa LocalAppData. Ambas rutas mantienen el mismo
 formato y no requieren registro, servicio ni permisos de administrador.
+
+### ADR-006: documento contextual de zoom
+
+La tinta de una sesión de zoom no entra en el documento del escritorio. Esta frontera
+permite que Limpiar, Deshacer y Rehacer sean contextuales, evita transformar coordenadas
+ampliadas al escritorio y garantiza que reanudar no mueva las anotaciones ya realizadas.
+
+### ADR-007: atajos declarativos y registro transaccional
+
+Las ocho acciones globales se almacenan como modificadores y tecla virtual. Al cambiar
+una combinación se desregistran y registran todas como una transacción; si Windows
+rechaza alguna, se restaura el conjunto anterior. El formato INI es idéntico en las
+ediciones instalada y portable.

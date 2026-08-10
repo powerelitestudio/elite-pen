@@ -16,6 +16,8 @@ if (-not $SkipBuild) {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     & (Join-Path $releaseDirectory 'elite-pen-performance-tests.exe')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & (Join-Path $releaseDirectory 'preferences-qa\elite-pen-preferences-tests.exe')
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 }
 
 $resolvedRepo = [IO.Path]::GetFullPath($repoRoot).TrimEnd('\') + '\'
@@ -63,6 +65,10 @@ if ($Destination) {
     }
     New-Item -ItemType Directory -Force -Path $destinationFull | Out-Null
     Copy-Item -Path (Join-Path $staging '*') -Destination $destinationFull -Recurse -Force
+    $preservedData = Join-Path "$destinationFull.previous" 'data'
+    if (Test-Path -LiteralPath $preservedData) {
+        Copy-Item -LiteralPath $preservedData -Destination $destinationFull -Recurse -Force
+    }
     Write-Output "Portable distribution: $destinationFull"
 }
 Write-Output "Staging distribution: $staging"

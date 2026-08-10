@@ -1,6 +1,6 @@
-# Informe de calidad — Elite Pen 1.9.0
+# Informe de calidad — Elite Pen 2.0.0
 
-Fecha: 2026-08-09
+Fecha: 2026-08-10
 Equipo de referencia: Lenovo 80NV, Intel Core i7-6700HQ, 12 GB RAM, Intel HD 530,
 GeForce GTX 960M, Windows 10 Pro 22H2 x64, dos monitores con escalado mixto.
 
@@ -41,6 +41,15 @@ GeForce GTX 960M, Windows 10 Pro 22H2 x64, dos monitores con escalado mixto.
 - Iteración 1.9: cursor de lápiz nativo para Lápiz/Resaltador, rasterizado 4x y
   adaptado por DPI; QA verifica que no sea la cruceta del sistema, que conserve un
   bitmap de color de al menos 32 px y que el hotspot permanezca sobre el grafito.
+- Iteración 2.0: `P` congela y reanuda el zoom; QA dibuja sobre la superficie fija,
+  comprueba que el lápiz se active, que la tinta sobreviva al reanudar y que Limpiar,
+  Deshacer y Rehacer operen sólo sobre el documento del zoom.
+- Regresiones 2.0: `Esc` sale del zoom y de ambas pizarras; la paleta entra en modo
+  hibernación a 52 x 50 px desde el tamaño estándar de 174 x 168 y vuelve a sus
+  dimensiones exactas al expandir.
+- Persistencia 2.0: una prueba portable aislada escribe y vuelve a leer posición con
+  coordenadas negativas, escala, modo contraído, color, grosor, zoom y atajos
+  personalizados; también comprueba el reemplazo atómico sin archivo `.tmp` residual.
 - QA visual mediante capturas reales de Paleta, Herramientas, Colores y Configuración;
   se comprueban jerarquía, alineación, separación, legibilidad y estados activos.
 - Captura: el gesto y el codificador PNG se prueban con una superficie determinista;
@@ -59,10 +68,10 @@ Resultado final en el equipo de referencia:
 
 | Prueba | Resultado | Presupuesto |
 |---|---:|---:|
-| Agregar 5.000 trazos | 27,63 ms | 2.500 ms |
-| 250 borrados fallidos sobre 5.000 objetos | 16,79 ms | 1.500 ms |
-| Limpiar y restaurar 5.000 objetos | 10,76 ms | 2.500 ms |
-| Simplificar 100.000 muestras | 126,17 ms | 1.500 ms |
+| Agregar 5.000 trazos | 26,51 ms | 2.500 ms |
+| 250 borrados fallidos sobre 5.000 objetos | 28,75 ms | 1.500 ms |
+| Limpiar y restaurar 5.000 objetos | 11,44 ms | 2.500 ms |
+| Simplificar 100.000 muestras | 192,68 ms | 1.500 ms |
 
 ## Compatibilidad y recuperacion
 
@@ -70,12 +79,19 @@ Resultado final en el equipo de referencia:
 - DPI por monitor V2, escritorio virtual y coordenadas negativas.
 - Limite de 8.192 muestras vivas por gesto y simplificacion posterior.
 - Historial acotado, instancia unica, `Esc` de emergencia y bandeja de sistema.
-- Preferencias separadas para edicion portable e instalada.
+- Preferencias separadas para edicion portable e instalada, incluidos atajos y
+  estado de hibernación.
+- El zoom vivo permanece en Magnifier nativo; la copia de imagen se realiza una sola
+  vez al congelar y la tinta se compone por GPU, sin bucle de capturas de CPU.
+- En sesiones automatizadas cuyo DC de pantalla omite las superficies
+  DirectComposition, la regresión de transparencia valida dimensiones y orden de
+  ventana y declara el muestreo de píxeles no disponible; en un escritorio
+  interactivo conserva además las muestras alfa por píxel.
 
 ## Riesgos residuales conocidos
 
 - Windows puede denegar la captura del escritorio en una sesion bloqueada, segura o
   no interactiva; Elite Pen informa el fallo y no genera un archivo corrupto.
 - La presion depende del controlador del lapiz y de que Windows entregue WM_POINTER.
-- El binario 1.9.0 no esta firmado digitalmente; los hashes del paquete permiten
+- El binario 2.0.0 no esta firmado digitalmente; los hashes del paquete permiten
   verificar integridad hasta incorporar el certificado de Power Elite Studio.

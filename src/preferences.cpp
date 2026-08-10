@@ -57,6 +57,20 @@ Color read_color(const std::wstring& path, Color fallback) {
             static_cast<std::uint8_t>(std::clamp(blue, 0, 255)), 255};
 }
 
+HotkeyBinding read_hotkey(const std::wstring& path, const wchar_t* key,
+                          HotkeyBinding fallback) {
+    wchar_t buffer[64]{};
+    GetPrivateProfileStringW(L"ElitePen", key, L"", buffer,
+                             static_cast<DWORD>(std::size(buffer)), path.c_str());
+    unsigned int modifiers = 0;
+    unsigned int virtual_key = 0;
+    if (swscanf_s(buffer, L"%u,%u", &modifiers, &virtual_key) != 2) return fallback;
+    constexpr UINT allowed_modifiers = MOD_ALT | MOD_CONTROL | MOD_SHIFT | MOD_WIN;
+    if ((modifiers & ~allowed_modifiers) != 0 || virtual_key == 0 || virtual_key > 0xFEU)
+        return fallback;
+    return {modifiers, virtual_key};
+}
+
 }  // namespace
 
 PreferencesStore::PreferencesStore() {
@@ -79,11 +93,20 @@ Preferences PreferencesStore::load() const {
     result.palette_x = read_int(path_, L"PaletteX", 0);
     result.palette_y = read_int(path_, L"PaletteY", 0);
     result.palette_size = std::clamp(read_int(path_, L"PaletteSize", 1), 0, 3);
+    result.palette_collapsed = read_int(path_, L"PaletteCollapsed", 0) != 0;
     result.zoom_factor = std::clamp(read_float(path_, L"ZoomFactor", 2.0F), 1.25F, 8.0F);
     result.zoom_view = std::clamp(read_int(path_, L"ZoomView", 0), 0, 2);
     result.zoom_invert = read_int(path_, L"ZoomInvert", 0) != 0;
     result.thickness = std::clamp(read_float(path_, L"Thickness", 4.0F), 1.0F, 40.0F);
     result.color = read_color(path_, kBlack);
+    constexpr std::array<const wchar_t*, kHotkeyActionCount> hotkey_keys{{
+        L"HotkeyInteract", L"HotkeyVisibility", L"HotkeyWhiteboard", L"HotkeyUndo",
+        L"HotkeyRedo", L"HotkeyClear", L"HotkeyZoom", L"HotkeyBlackboard"
+    }};
+    for (std::size_t index = 0; index < hotkey_keys.size(); ++index) {
+        result.hotkeys[index] = read_hotkey(path_, hotkey_keys[index],
+                                             kDefaultHotkeys[index]);
+    }
     return result;
 }
 
@@ -105,6 +128,7 @@ bool PreferencesStore::save(const Preferences& preferences) const {
     content << "PaletteX=" << preferences.palette_x << "\r\n";
     content << "PaletteY=" << preferences.palette_y << "\r\n";
     content << "PaletteSize=" << preferences.palette_size << "\r\n";
+    content << "PaletteCollapsed=" << (preferences.palette_collapsed ? 1 : 0) << "\r\n";
     content << "ZoomFactor=" << preferences.zoom_factor << "\r\n";
     content << "ZoomView=" << preferences.zoom_view << "\r\n";
     content << "ZoomInvert=" << (preferences.zoom_invert ? 1 : 0) << "\r\n";
@@ -112,6 +136,14 @@ bool PreferencesStore::save(const Preferences& preferences) const {
     content << "Color=" << static_cast<int>(preferences.color.r) << ','
             << static_cast<int>(preferences.color.g) << ','
             << static_cast<int>(preferences.color.b) << "\r\n";
+    constexpr std::array<const char*, kHotkeyActionCount> hotkey_keys{{
+        "HotkeyInteract", "HotkeyVisibility", "HotkeyWhiteboard", "HotkeyUndo",
+        "HotkeyRedo", "HotkeyClear", "HotkeyZoom", "HotkeyBlackboard"
+    }};
+    for (std::size_t index = 0; index < hotkey_keys.size(); ++index) {
+        content << hotkey_keys[index] << '=' << preferences.hotkeys[index].modifiers
+                << ',' << preferences.hotkeys[index].virtual_key << "\r\n";
+    }
 
     const std::filesystem::path temporary = target.wstring() + L".tmp";
     {

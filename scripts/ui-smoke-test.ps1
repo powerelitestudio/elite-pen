@@ -125,6 +125,7 @@ function Wait-Window([string]$ClassName, [int]$TimeoutMilliseconds = 5000) {
         'ElitePen.Settings' { 'Configuracion — Elite Pen' }
         'ElitePen.TextInput' { 'Insertar texto — Elite Pen' }
         'ElitePen.Zoom' { 'Zoom — Elite Pen' }
+        'ElitePen.ZoomInk' { 'Anotaciones de zoom — Elite Pen' }
         default { $null }
     }
     $elapsed = 0
@@ -334,6 +335,14 @@ try {
                    $shortcutGuide -ne [IntPtr]::Zero) 'Settings tabs or shortcut guide are missing.'
         $null = [ElitePenUiNative]::SendMessage($shortcutsTab, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
         Assert-Ui ([ElitePenUiNative]::IsWindowVisible($shortcutGuide)) 'Shortcuts tab did not reveal the complete guide.'
+        $firstHotkey = [ElitePenUiNative]::GetDlgItem($settings, 4200)
+        $lastHotkey = [ElitePenUiNative]::GetDlgItem($settings, 4207)
+        $resetHotkeys = [ElitePenUiNative]::GetDlgItem($settings, 4300)
+        Assert-Ui ($firstHotkey -ne [IntPtr]::Zero -and $lastHotkey -ne [IntPtr]::Zero -and
+                   $resetHotkeys -ne [IntPtr]::Zero -and
+                   [ElitePenUiNative]::IsWindowVisible($firstHotkey) -and
+                   [ElitePenUiNative]::IsWindowVisible($lastHotkey)) `
+            'Configurable shortcut controls are missing from Settings.'
         $null = [ElitePenUiNative]::SendMessage($generalTab, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
         Assert-Ui (-not [ElitePenUiNative]::IsWindowVisible($shortcutGuide)) 'General tab did not hide the shortcut guide.'
 
@@ -393,6 +402,40 @@ try {
         $null = [ElitePenUiNative]::SendMessage($settings, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)
     }
 
+    # Hibernation collapses the complete unit to 30 percent and leaves one
+    # obvious expansion target. Expanding restores the standard geometry.
+    Click-PaletteWindow $palette 126 113
+    $collapsed = [ElitePenUiNative]::SendMessage($palette, 0x8060, [IntPtr]::Zero, [IntPtr]::Zero)
+    $collapsedBounds = New-Object ElitePenUiNative+RECT
+    $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$collapsedBounds)
+    Assert-Ui ($collapsed.ToInt64() -eq 1) 'Palette collapse control did not enter hibernation.'
+    Assert-Ui (($collapsedBounds.Right - $collapsedBounds.Left) -eq 52 -and
+               ($collapsedBounds.Bottom - $collapsedBounds.Top) -eq 50) `
+        'Hibernated palette is not 70 percent smaller than the standard unit.'
+    Click-Window $palette 24 23
+    $expanded = [ElitePenUiNative]::SendMessage($palette, 0x8060, [IntPtr]::Zero, [IntPtr]::Zero)
+    $expandedBounds = New-Object ElitePenUiNative+RECT
+    $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$expandedBounds)
+    Assert-Ui ($expanded.ToInt64() -eq 0 -and
+               ($expandedBounds.Right - $expandedBounds.Left) -eq 174 -and
+               ($expandedBounds.Bottom - $expandedBounds.Top) -eq 168) `
+        'Expansion did not restore the complete standard palette.'
+
+    # Escape exits both board modes without discarding annotations.
+    $boardOverlay = Wait-Window 'ElitePen.Overlay'
+    $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]3, [IntPtr]::Zero)
+    $whiteboardMode = [ElitePenUiNative]::SendMessage($palette, 0x8063, [IntPtr]::Zero, [IntPtr]::Zero)
+    Assert-Ui ($whiteboardMode.ToInt64() -eq 1) 'Whiteboard shortcut did not enter whiteboard mode.'
+    $null = [ElitePenUiNative]::SendMessage($boardOverlay, 0x0100, [IntPtr]27, [IntPtr]::Zero)
+    $boardAfterEscape = [ElitePenUiNative]::SendMessage($palette, 0x8063, [IntPtr]::Zero, [IntPtr]::Zero)
+    Assert-Ui ($boardAfterEscape.ToInt64() -eq 0) 'Escape did not leave whiteboard mode.'
+    $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]8, [IntPtr]::Zero)
+    $blackboardMode = [ElitePenUiNative]::SendMessage($palette, 0x8063, [IntPtr]::Zero, [IntPtr]::Zero)
+    Assert-Ui ($blackboardMode.ToInt64() -eq 2) 'Blackboard shortcut did not enter blackboard mode.'
+    $null = [ElitePenUiNative]::SendMessage($boardOverlay, 0x0100, [IntPtr]27, [IntPtr]::Zero)
+    $boardAfterEscape = [ElitePenUiNative]::SendMessage($palette, 0x8063, [IntPtr]::Zero, [IntPtr]::Zero)
+    Assert-Ui ($boardAfterEscape.ToInt64() -eq 0) 'Escape did not leave blackboard mode.'
+
     $overlay = Wait-Window 'ElitePen.Overlay'
     Assert-Ui ($overlay -ne [IntPtr]::Zero) 'Overlay disappeared during UI test.'
 
@@ -446,7 +489,8 @@ try {
     $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]4, [IntPtr]::Zero)
     $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]5, [IntPtr]::Zero)
 
-    # Native zoom enters and leaves cleanly.
+    # Native zoom freezes with P, draws on an independent document, preserves
+    # that document on resume and scopes clear/undo/redo to the zoom session.
     Select-Tool $palette 11
     $zoom = Wait-Window 'ElitePen.Zoom' 1000
     Assert-Ui ($zoom -ne [IntPtr]::Zero -and [ElitePenUiNative]::IsWindowVisible($zoom)) 'Zoom window did not activate.'
@@ -465,8 +509,47 @@ try {
         $null = [ElitePenUiNative]::SendMessage($zoom, 0x0100, [IntPtr][char]'0', [IntPtr]::Zero)
         $null = [ElitePenUiNative]::SendMessage($zoom, 0x0100, [IntPtr][char]'0', [IntPtr]::Zero)
         $null = [ElitePenUiNative]::SendMessage($zoom, 0x0100, [IntPtr][char]'F', [IntPtr]::Zero)
+        $null = [ElitePenUiNative]::SendMessage($zoom, 0x0100, [IntPtr][char]'P', [IntPtr]::Zero)
+        Start-Sleep -Milliseconds 180
+        $zoomInk = Wait-Window 'ElitePen.ZoomInk' 1000
+        $frozen = [ElitePenUiNative]::SendMessage($zoom, 0x8061, [IntPtr]::Zero, [IntPtr]::Zero)
+        $freezeTool = [ElitePenUiNative]::SendMessage($palette, 0x805A, [IntPtr]::Zero, [IntPtr]::Zero)
+        Assert-Ui ($zoomInk -ne [IntPtr]::Zero -and [ElitePenUiNative]::IsWindowVisible($zoomInk) -and
+                   $frozen.ToInt64() -eq 1) 'P did not freeze the zoom into its annotation surface.'
+        Assert-Ui ($freezeTool.ToInt64() -eq 1) 'Freezing zoom did not activate the pen automatically.'
+        Assert-Ui ([ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.ZoomInk') -and
+                   [ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.Zoom')) `
+            'Zoom surfaces covered the palette while annotation mode was active.'
+        if ($zoomInk -ne [IntPtr]::Zero) {
+            $start = [IntPtr]((220 -shl 16) -bor 300)
+            $finish = [IntPtr]((290 -shl 16) -bor 430)
+            $null = [ElitePenUiNative]::SendMessage($zoomInk, 0x0201, [IntPtr]1, $start)
+            $null = [ElitePenUiNative]::SendMessage($zoomInk, 0x0200, [IntPtr]1, $finish)
+            $null = [ElitePenUiNative]::SendMessage($zoomInk, 0x0202, [IntPtr]0, $finish)
+            $zoomItems = [ElitePenUiNative]::SendMessage($zoomInk, 0x8062, [IntPtr]::Zero, [IntPtr]::Zero)
+            Assert-Ui ($zoomItems.ToInt64() -eq 1) 'Frozen zoom did not accept pen annotations.'
+            $null = [ElitePenUiNative]::SendMessage($zoomInk, 0x0100, [IntPtr][char]'P', [IntPtr]::Zero)
+            Start-Sleep -Milliseconds 120
+            $resumed = [ElitePenUiNative]::SendMessage($zoom, 0x8061, [IntPtr]::Zero, [IntPtr]::Zero)
+            $zoomItems = [ElitePenUiNative]::SendMessage($zoomInk, 0x8062, [IntPtr]::Zero, [IntPtr]::Zero)
+            Assert-Ui ($resumed.ToInt64() -eq 0 -and $zoomItems.ToInt64() -eq 1) `
+                'Zoom annotations did not persist when live zoom resumed.'
+            $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]6, [IntPtr]::Zero)
+            $clearedZoomItems = [ElitePenUiNative]::SendMessage($zoomInk, 0x8062, [IntPtr]::Zero, [IntPtr]::Zero)
+            Assert-Ui ($clearedZoomItems.ToInt64() -eq 0) 'Clear did not target the zoom document independently.'
+            $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]4, [IntPtr]::Zero)
+            $restoredZoomItems = [ElitePenUiNative]::SendMessage($zoomInk, 0x8062, [IntPtr]::Zero, [IntPtr]::Zero)
+            Assert-Ui ($restoredZoomItems.ToInt64() -eq 1) 'Undo did not restore zoom annotations.'
+            $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]5, [IntPtr]::Zero)
+            $redoneZoomItems = [ElitePenUiNative]::SendMessage($zoomInk, 0x8062, [IntPtr]::Zero, [IntPtr]::Zero)
+            Assert-Ui ($redoneZoomItems.ToInt64() -eq 0) 'Redo did not clear zoom annotations again.'
+            $null = [ElitePenUiNative]::SendMessage($zoom, 0x0100, [IntPtr][char]'P', [IntPtr]::Zero)
+            Start-Sleep -Milliseconds 120
+            $null = [ElitePenUiNative]::SendMessage($zoomInk, 0x0100, [IntPtr]27, [IntPtr]::Zero)
+            Start-Sleep -Milliseconds 120
+            Assert-Ui (-not [ElitePenUiNative]::IsWindowVisible($zoom)) 'Escape did not exit zoom.'
+        }
     }
-    $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]7, [IntPtr]::Zero)
 
     Assert-Ui (-not $process.HasExited) 'Application exited unexpectedly during UI checks.'
 } finally {

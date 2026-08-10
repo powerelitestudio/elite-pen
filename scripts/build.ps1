@@ -57,6 +57,16 @@ Invoke-Compiler ($common + @(
     '-static', '-pthread'
 ))
 
+$preferencesTestDirectory = Join-Path $outputDirectory 'preferences-qa'
+New-Item -ItemType Directory -Force -Path $preferencesTestDirectory | Out-Null
+$preferencesExecutable = Join-Path $preferencesTestDirectory 'elite-pen-preferences-tests.exe'
+Invoke-Compiler ($common + @(
+    (Join-Path $repoRoot 'src\preferences.cpp'),
+    (Join-Path $repoRoot 'tests\preferences_tests.cpp'),
+    '-o', $preferencesExecutable,
+    '-static', '-pthread', '-lshell32', '-lole32'
+))
+
 if (-not $TestsOnly) {
     $applicationSources = Get-ChildItem -LiteralPath (Join-Path $repoRoot 'src') -Filter '*.cpp' |
         Where-Object { $_.Name -ne 'core.cpp' } |
@@ -87,3 +97,4 @@ if (-not $TestsOnly) {
 
 Write-Host "Tests: $testExecutable"
 Write-Host "Performance tests: $performanceExecutable"
+Write-Host "Preferences tests: $preferencesExecutable"

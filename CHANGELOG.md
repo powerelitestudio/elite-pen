@@ -1,5 +1,25 @@
 # Historial de cambios
 
+## 2.0.0 — 2026-08-10
+
+- `P` congela o reanuda el zoom nativo; al congelar se activa automáticamente el
+  lápiz sobre una instantánea estable de la salida ampliada.
+- Nueva capa `ZoomInk` acelerada por GPU con lápiz, resaltador, borrador, texto,
+  líneas, rectángulos, elipses y flechas rectas o Bézier, además de ratón, stylus,
+  presión y tacto.
+- Las anotaciones de zoom permanecen visibles al reanudar y tienen documento,
+  papelera, deshacer y rehacer independientes de la tinta normal.
+- `Esc` cierra el zoom y abandona las pizarras blanca o negra conservando el historial.
+- Nuevo modo de hibernación: el control bajo el ojo oculta toda la herramienta y deja
+  una paleta mínima al 30 % del tamaño normal con una única acción para expandir.
+- Mango azul un 10 % adicional más corto y papelera reubicada junto a su extremo.
+- Los ocho atajos globales se editan individualmente desde Configuración > Atajos,
+  validan duplicados o combinaciones ocupadas y se restablecen con un clic.
+- Atajos, escala, posición y modo contraído persisten de forma atómica tanto en
+  LocalAppData como en `data/settings.ini` de la edición portable.
+- QA automatizado cubre congelación, tinta de zoom, reanudación, limpieza contextual,
+  historial, Escape, ambas pizarras, hibernación, expansión y persistencia portable.
+
 ## 1.9.0 — 2026-08-09
 
 - El modo Lápiz reemplaza la cruz genérica de Windows por un cursor nativo de lápiz

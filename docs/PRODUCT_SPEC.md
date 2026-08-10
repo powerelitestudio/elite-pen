@@ -1,6 +1,6 @@
-# Elite Pen 1.9 — contrato de producto
+# Elite Pen 2.0 — contrato de producto
 
-Estado: version 1.9.0 implementada.
+Estado: version 2.0.0 implementada.
 
 ## 1. Identidad e interaccion principal
 
@@ -27,6 +27,9 @@ la aplicacion sobre la que se presenta.
   y el selector RGB personalizado de Windows.
 - El ojo central abierto muestra las anotaciones; al ocultarlas se transforma en un
   parpado cerrado con pestanas sutiles, sin alterar el historial.
+- Un control menor bajo el ojo contrae la unidad completa. Desaparecen colores,
+  grosores, ojo, pincel y papelera; queda únicamente una paleta oscura al 30 % del
+  tamaño seleccionado con un icono de expansión. Su estado se conserva entre sesiones.
 - Los puntos de grosor seleccionan 2, 4, 7, 12 y 20 pixeles logicos; 4, el segundo
   punto de arriba hacia abajo, es el valor inicial y se configura desde Ajustes.
 - La paleta se arrastra desde cualquier zona vacia y recuerda su posicion por monitor.
@@ -45,8 +48,8 @@ la aplicacion sobre la que se presenta.
 ### Pincel
 
 - Punta del pincel: alterna entre Lapiz e Interactuar (cursor normal).
-- Mango azul limpio, unido y alineado con la ferula blanca, y un 10 % mas corto que
-  en la version 1.4.
+- Mango azul limpio, unido y alineado con la ferula blanca, y un 10 % adicional mas
+  corto que en la version 1.9.
 - Cualquier punto del mango abre un unico panel con todas las herramientas y
   Configuracion; no contiene iconos ni comandos diminutos sobre su superficie.
 - Ferula blanca: clic alterna la pizarra blanca; clic derecho alterna la negra.
@@ -73,8 +76,8 @@ la aplicacion sobre la que se presenta.
     transparente directamente sobre el escritorio. Admite multilinea, pegado,
     `Ctrl+Enter` para confirmar y `Esc` para cancelar, sin dialogo independiente.
 11. Captura: seleccion rectangular, guardado PNG y copia al portapapeles.
-12. Zoom: ampliacion en vivo centrada en el puntero, ajuste con rueda y salida con
-    `Esc`.
+12. Zoom: ampliacion en vivo centrada en el puntero, ajuste con rueda, congelación o
+    reanudación con `P` y salida con `Esc`.
 
 El panel abierto desde el mango reune todas las herramientas en un solo lugar y
 añade una fila independiente para Configuracion.
@@ -96,10 +99,18 @@ añade una fila independiente para Configuracion.
   Elite Pen cambia a amarillo para conservar contraste.
 - Zoom usa la capacidad nativa de Windows en proceso x64. La ventana de control se
   excluye de la captura cuando el sistema lo permite para evitar recursion visual.
+- `P` congela la salida ampliada en una superficie GPU independiente y activa Lapiz.
+  Sobre ella funcionan Lapiz, Resaltador, Borrador, Texto, Linea, Rectangulo, Elipse,
+  Flecha y Flecha curva. `P` reanuda el zoom vivo sin perder esas anotaciones.
+- El zoom mantiene documento e historial propios durante su sesión. Papelera,
+  Deshacer y Rehacer actúan exclusivamente sobre ese documento mientras el zoom
+  está abierto; salir del zoom descarta la sesión sin tocar el documento normal.
 - Factores admitidos: 1.25x a 8x; valor inicial 2x. Las vistas son pantalla completa,
   lente y acoplada; admiten inversion de color y vista general 1x.
 - Con varios monitores, el zoom se limita al monitor que contiene el puntero y migra
   al cruzar de monitor.
+- `Esc` sale del zoom y también abandona las pizarras blanca o negra, conservando las
+  anotaciones vectoriales.
 
 ## 5. Rendimiento y compatibilidad
 
@@ -121,14 +132,19 @@ añade una fila independiente para Configuracion.
 - Resaltado de cursor configurable para presentaciones.
 - Atajo de emergencia `Esc` devuelve interaccion al escritorio.
 - Icono de bandeja con acciones equivalentes y salida explicita.
-- Configuración separa `General` y `Atajos`; la segunda pestaña explica todas las
-  combinaciones globales y contextuales sin depender de memorización previa.
+- Configuración separa `General` y `Atajos`; la segunda pestaña permite capturar una
+  combinación nueva para cada acción global, detecta duplicados o reservas de Windows,
+  restablece los valores de fábrica y explica los atajos contextuales.
+- Los atajos, la escala y el estado contraído se guardan atómicamente en LocalAppData
+  para la instalación o en `data/settings.ini` junto al ejecutable portable.
 
 ## 7. Criterios de aceptacion 1.0
 
 - Todas las herramientas crean el resultado esperado en DPI 100 %, 150 % y 200 %.
 - La entrada no queda capturada al cambiar a Interactuar o pulsar `Esc`.
 - Ocultar/mostrar, pizarra y zoom no pierden el historial.
+- Congelar/reanudar no altera la imagen fija ni el documento del escritorio; limpiar
+  y deshacer seleccionan el documento correcto según el contexto.
 - Limpiar, deshacer y rehacer funcionan con documento vacio y con miles de objetos.
 - Reinicio de Explorer, desconexion de monitor y cambio de resolucion no cierran la
   aplicacion ni dejan una ventana inaccesible.

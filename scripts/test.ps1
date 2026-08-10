@@ -15,4 +15,8 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $performanceExecutable = Join-Path $repoRoot "build\$($Configuration.ToLowerInvariant())\elite-pen-performance-tests.exe"
 & $performanceExecutable
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+$preferencesExecutable = Join-Path $repoRoot "build\$($Configuration.ToLowerInvariant())\preferences-qa\elite-pen-preferences-tests.exe"
+& $preferencesExecutable
 exit $LASTEXITCODE
