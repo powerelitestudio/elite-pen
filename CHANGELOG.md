@@ -1,5 +1,17 @@
 # Historial de cambios
 
+## 2.1.1 — 2026-08-10
+
+- Corregida la instantánea negra al congelar: Elite Pen captura ahora la salida de
+  Magnifier ya compuesta en el escritorio, desactiva temporalmente su exclusión de
+  captura y rechaza imágenes completamente vacías antes de activar la tinta.
+- El clic izquierdo se intercepta directamente en el control nativo Magnifier, por
+  lo que congela igual que `P` en pantalla completa, lente y vista acoplada.
+- El modo `L` incorpora un cursor de lupa propio, con aro champaña, vidrio sutil y
+  retícula azul cuyo centro marca exactamente la zona que se está ampliando.
+- QA comprueba clic real sobre el hijo Magnifier, contenido no vacío de la imagen
+  congelada y activación del cursor específico de lente.
+
 ## 2.1.0 — 2026-08-10
 
 - Corregida la regresión que podía cubrir de negro el zoom al abrirlo con

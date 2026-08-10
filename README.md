@@ -62,9 +62,12 @@ con `scripts/publish-portable.ps1`.
 | Zoom | Herramientas | `Ctrl+Shift+M` |
 | Salir de modo/zoom | — | `Esc` |
 
-En zoom: `F` pantalla completa, `L` lente, `D` acoplado, `I` invertir,
+En zoom: `F` pantalla completa, `L` lente con cursor de lupa y centro de enfoque,
+`D` acoplado, `I` invertir,
 rueda/`+`/`-` para ampliar, `0` para vista general, `Espacio` o `M` para recorrer
 vistas, y `P` o clic para congelar o reanudar. `Esc`, `F4` o clic derecho salen.
+La congelación toma la imagen ampliada que está visible, no una captura del área
+original sin zoom, y rechaza una imagen vacía antes de abrir la capa de tinta.
 Al congelar se activa el lápiz y se admiten colores, texto y geometrías. La tinta del
 zoom usa historial propio: permanece al reanudar y la papelera la limpia sin tocar
 las anotaciones normales.

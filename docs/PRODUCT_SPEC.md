@@ -1,6 +1,6 @@
 # Elite Pen 2.1 — contrato de producto
 
-Estado: version 2.1.0 implementada.
+Estado: version 2.1.1 implementada.
 
 ## 1. Identidad e interaccion principal
 
@@ -104,6 +104,9 @@ añade una fila independiente para Configuracion.
 - El zoom vivo presenta directamente la salida de Magnifier, sin interponer la capa
   de tinta transparente antes de congelar. Esto evita superficies negras o sin
   inicializar al entrar con `Ctrl+Shift+M`.
+- La congelación copia la salida ampliada ya compuesta en pantalla, retirando durante
+  ese instante la afinidad que la excluye de capturas. Una imagen completamente vacía
+  se rechaza y el zoom continúa vivo en vez de mostrar una pizarra negra falsa.
 - `P` o clic congela la salida ampliada en una superficie GPU independiente y activa Lapiz.
   Sobre ella funcionan Lapiz, Resaltador, Borrador, Texto, Linea, Rectangulo, Elipse,
   Flecha y Flecha curva. `P` reanuda el zoom vivo sin perder esas anotaciones.
@@ -112,6 +115,8 @@ añade una fila independiente para Configuracion.
   está abierto; salir del zoom descarta la sesión sin tocar el documento normal.
 - Factores admitidos: 1.25x a 8x; valor inicial 2x. Las vistas son pantalla completa,
   lente y acoplada; admiten inversion de color y vista general 1x.
+- La vista Lente usa un cursor propio con aro de lupa y retícula central para mostrar
+  con precisión qué punto del escritorio alimenta el centro de la ampliación.
 - Con varios monitores, el zoom se limita al monitor que contiene el puntero y migra
   al cruzar de monitor.
 - `Esc` sale del zoom y también abandona las pizarras blanca o negra, conservando las

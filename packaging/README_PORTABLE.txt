@@ -43,12 +43,13 @@ asignar. Se guardan en data\settings.ini junto con las demas preferencias portab
 ZOOM
 ----
 F  Pantalla completa
-L  Lente
+L  Lente con cursor de lupa y reticula central de enfoque
 D  Vista acoplada
 I  Invertir colores
 0  Vista general 1x
 Rueda, + y -  Cambiar ampliacion
-P  Congelar o reanudar. Al congelar se activa el lapiz y se puede anotar sobre la imagen.
+P o clic  Congelar o reanudar. Conserva la ampliacion visible, activa el lapiz y
+          permite anotar sobre esa imagen.
 Espacio o M  Recorrer las tres vistas
 Esc, F4 o clic derecho  Salir del zoom
 
@@ -61,4 +62,4 @@ Configuracion.
 
 SOPORTE
 -------
-Producto de Power Elite Studio. Version 2.1.0.
+Producto de Power Elite Studio. Version 2.1.1.

@@ -44,6 +44,7 @@ constexpr UINT kQaQueryPaletteCollapsedMessage = WM_APP + 96;
 constexpr UINT kQaQueryZoomFrozenMessage = WM_APP + 97;
 constexpr UINT kQaQueryZoomDocumentCountMessage = WM_APP + 98;
 constexpr UINT kQaQueryBoardModeMessage = WM_APP + 99;
+constexpr UINT kQaQueryZoomSnapshotMessage = WM_APP + 100;
 constexpr UINT_PTR kTrayId = 1;
 constexpr int kPaletteDesignWidth = 290;
 constexpr int kPaletteDesignHeight = 280;
@@ -248,6 +249,143 @@ HCURSOR create_pencil_cursor(UINT dpi) {
         static_cast<long>(width - 1)));
     information.yHotspot = static_cast<DWORD>(std::clamp(
         std::lround(tip.y * static_cast<float>(height) / logical_size), 0L,
+        static_cast<long>(height - 1)));
+    information.hbmMask = mask_bitmap;
+    information.hbmColor = color_bitmap;
+    HCURSOR cursor = static_cast<HCURSOR>(CreateIconIndirect(&information));
+    DeleteObject(mask_bitmap);
+    DeleteObject(color_bitmap);
+    return cursor;
+}
+
+float cursor_distance_to_segment(CursorPoint point, CursorPoint start,
+                                 CursorPoint finish) noexcept {
+    const float dx = finish.x - start.x;
+    const float dy = finish.y - start.y;
+    const float length_squared = dx * dx + dy * dy;
+    if (length_squared <= 0.0001F) {
+        return std::hypot(point.x - start.x, point.y - start.y);
+    }
+    const float projection = std::clamp(
+        ((point.x - start.x) * dx + (point.y - start.y) * dy) / length_squared,
+        0.0F, 1.0F);
+    return std::hypot(point.x - (start.x + projection * dx),
+                      point.y - (start.y + projection * dy));
+}
+
+HCURSOR create_zoom_lens_cursor(UINT dpi) {
+    using GetSystemMetricsForDpiFunction = int(WINAPI*)(int, UINT);
+    const auto metrics_for_dpi = reinterpret_cast<GetSystemMetricsForDpiFunction>(
+        GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetSystemMetricsForDpi"));
+    const auto metric = [metrics_for_dpi, dpi](int index) {
+        if (metrics_for_dpi) return metrics_for_dpi(index, dpi);
+        return MulDiv(GetSystemMetrics(index), static_cast<int>(dpi),
+                      USER_DEFAULT_SCREEN_DPI);
+    };
+    const int width = std::clamp(metric(SM_CXCURSOR), 40, 96);
+    const int height = std::clamp(metric(SM_CYCURSOR), 40, 96);
+    constexpr int sample_grid = 4;
+    constexpr float logical_size = 40.0F;
+    constexpr CursorPoint center{16.0F, 16.0F};
+    constexpr CursorPoint handle_start{24.0F, 24.0F};
+    constexpr CursorPoint handle_finish{35.0F, 35.0F};
+    constexpr float ring_radius = 11.0F;
+    constexpr CursorColor transparent{};
+    constexpr CursorColor halo{0.98F, 0.98F, 0.99F, 0.94F};
+    constexpr CursorColor outline{0.05F, 0.07F, 0.10F, 1.0F};
+    constexpr CursorColor champagne{0.96F, 0.82F, 0.48F, 1.0F};
+    constexpr CursorColor focus_blue{0.12F, 0.62F, 0.86F, 1.0F};
+    constexpr CursorColor glass{0.18F, 0.50F, 0.68F, 0.16F};
+
+    const auto sample_color = [&](CursorPoint point) {
+        const float radial = std::hypot(point.x - center.x, point.y - center.y);
+        const float ring = std::abs(radial - ring_radius);
+        const float handle = cursor_distance_to_segment(
+            point, handle_start, handle_finish);
+        CursorColor color = radial < ring_radius - 1.8F ? glass : transparent;
+        if (ring <= 2.5F || handle <= 3.5F) color = halo;
+        if (ring <= 1.8F || handle <= 2.7F) color = outline;
+        if (ring <= 1.0F || handle <= 1.65F) color = champagne;
+        const bool focus_cross =
+            (std::abs(point.x - center.x) <= 0.8F &&
+             std::abs(point.y - center.y) <= 4.0F) ||
+            (std::abs(point.y - center.y) <= 0.8F &&
+             std::abs(point.x - center.x) <= 4.0F);
+        if (focus_cross) color = focus_blue;
+        return color;
+    };
+
+    std::vector<unsigned char> pixels(
+        static_cast<std::size_t>(width * height * 4), 0);
+    for (int y = 0; y < height; ++y) {
+        for (int x = 0; x < width; ++x) {
+            float red{};
+            float green{};
+            float blue{};
+            float alpha{};
+            for (int sample_y = 0; sample_y < sample_grid; ++sample_y) {
+                for (int sample_x = 0; sample_x < sample_grid; ++sample_x) {
+                    const CursorPoint point{
+                        (static_cast<float>(x) +
+                         (static_cast<float>(sample_x) + 0.5F) / sample_grid) *
+                            logical_size / static_cast<float>(width),
+                        (static_cast<float>(y) +
+                         (static_cast<float>(sample_y) + 0.5F) / sample_grid) *
+                            logical_size / static_cast<float>(height)};
+                    const CursorColor color = sample_color(point);
+                    red += color.r * color.a;
+                    green += color.g * color.a;
+                    blue += color.b * color.a;
+                    alpha += color.a;
+                }
+            }
+            constexpr float samples = static_cast<float>(sample_grid * sample_grid);
+            const std::size_t offset = static_cast<std::size_t>((y * width + x) * 4);
+            pixels[offset] = static_cast<unsigned char>(
+                std::clamp(std::lround(blue / samples * 255.0F), 0L, 255L));
+            pixels[offset + 1] = static_cast<unsigned char>(
+                std::clamp(std::lround(green / samples * 255.0F), 0L, 255L));
+            pixels[offset + 2] = static_cast<unsigned char>(
+                std::clamp(std::lround(red / samples * 255.0F), 0L, 255L));
+            pixels[offset + 3] = static_cast<unsigned char>(
+                std::clamp(std::lround(alpha / samples * 255.0F), 0L, 255L));
+        }
+    }
+
+    BITMAPV5HEADER header{};
+    header.bV5Size = sizeof(header);
+    header.bV5Width = width;
+    header.bV5Height = -height;
+    header.bV5Planes = 1;
+    header.bV5BitCount = 32;
+    header.bV5Compression = BI_BITFIELDS;
+    header.bV5RedMask = 0x00ff0000;
+    header.bV5GreenMask = 0x0000ff00;
+    header.bV5BlueMask = 0x000000ff;
+    header.bV5AlphaMask = 0xff000000;
+    void* bitmap_bits{};
+    HDC screen = GetDC(nullptr);
+    HBITMAP color_bitmap = CreateDIBSection(
+        screen, reinterpret_cast<const BITMAPINFO*>(&header), DIB_RGB_COLORS,
+        &bitmap_bits, nullptr, 0);
+    ReleaseDC(nullptr, screen);
+    if (!color_bitmap || !bitmap_bits) {
+        if (color_bitmap) DeleteObject(color_bitmap);
+        return nullptr;
+    }
+    std::memcpy(bitmap_bits, pixels.data(), pixels.size());
+    HBITMAP mask_bitmap = CreateBitmap(width, height, 1, 1, nullptr);
+    if (!mask_bitmap) {
+        DeleteObject(color_bitmap);
+        return nullptr;
+    }
+    ICONINFO information{};
+    information.fIcon = FALSE;
+    information.xHotspot = static_cast<DWORD>(std::clamp(
+        std::lround(center.x * static_cast<float>(width) / logical_size), 0L,
+        static_cast<long>(width - 1)));
+    information.yHotspot = static_cast<DWORD>(std::clamp(
+        std::lround(center.y * static_cast<float>(height) / logical_size), 0L,
         static_cast<long>(height - 1)));
     information.hbmMask = mask_bitmap;
     information.hbmColor = color_bitmap;
@@ -613,6 +751,7 @@ private:
     bool drawing_{};
     bool erasing_{};
     bool pointer_active_{};
+    bool snapshot_has_content_{};
     UINT32 pointer_id_{};
     HCURSOR pencil_cursor_{};
 };
@@ -649,7 +788,11 @@ protected:
     LRESULT handle_message(UINT message, WPARAM wparam, LPARAM lparam) override;
 
 private:
+    static LRESULT CALLBACK magnifier_subclass(
+        HWND window, UINT message, WPARAM wparam, LPARAM lparam,
+        UINT_PTR subclass_id, DWORD_PTR reference_data);
     void refresh_source();
+    void update_lens_cursor(bool active);
     void apply_color_effect();
     void cycle_view();
     bool load_magnification();
@@ -676,6 +819,9 @@ private:
     bool initialized_{};
     bool active_{};
     bool overview_{};
+    HCURSOR lens_cursor_{};
+    UINT lens_cursor_dpi_{};
+    bool lens_cursor_active_{};
     Tool tool_before_zoom_{Tool::Pen};
 };
 
@@ -3077,7 +3223,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.1.0",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.1.1",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
@@ -3900,6 +4046,7 @@ void ZoomInkWindow::set_bounds(RECT bounds) {
 void ZoomInkWindow::show_live(RECT bounds) {
     set_bounds(bounds);
     set_frozen(false);
+    snapshot_has_content_ = false;
     render();
     ShowWindow(window_, SW_SHOWNOACTIVATE);
 }
@@ -3908,6 +4055,7 @@ void ZoomInkWindow::hide() {
     cancel_gesture();
     frozen_ = false;
     snapshot_.Reset();
+    snapshot_has_content_ = false;
     preview_.reset();
     document_ = Document{};
     ShowWindow(window_, SW_HIDE);
@@ -3958,44 +4106,55 @@ bool ZoomInkWindow::capture_snapshot(HWND magnifier, RECT bounds) {
         return false;
     }
     const HGDIOBJ previous = SelectObject(memory, bitmap);
-    bool captured = PrintWindow(magnifier, memory, PW_CLIENTONLY | 0x00000002U) != FALSE;
-    if (!captured) {
-        const bool ink_visible = IsWindowVisible(window_) != FALSE;
-        const bool palette_visible = controller_.palette() &&
-                                     IsWindowVisible(controller_.palette()->hwnd()) != FALSE;
-        HWND parent = GetParent(magnifier);
-        DWORD previous_affinity = WDA_NONE;
-        const bool had_affinity = parent &&
-            GetWindowDisplayAffinity(parent, &previous_affinity) != FALSE;
-        if (ink_visible) ShowWindow(window_, SW_HIDE);
-        if (palette_visible) ShowWindow(controller_.palette()->hwnd(), SW_HIDE);
-        if (parent) SetWindowDisplayAffinity(parent, WDA_NONE);
-        DwmFlush();
-        captured = BitBlt(memory, 0, 0, width, height, screen,
-                          bounds.left, bounds.top, SRCCOPY | CAPTUREBLT) != FALSE;
-        if (parent && had_affinity) SetWindowDisplayAffinity(parent, previous_affinity);
-        if (ink_visible) ShowWindow(window_, frozen_ ? SW_SHOW : SW_SHOWNOACTIVATE);
-        if (palette_visible) ShowWindow(controller_.palette()->hwnd(), SW_SHOWNOACTIVATE);
-    }
+    const bool ink_visible = IsWindowVisible(window_) != FALSE;
+    const bool palette_visible = controller_.palette() &&
+                                 IsWindowVisible(controller_.palette()->hwnd()) != FALSE;
+    HWND parent = GetParent(magnifier);
+    DWORD previous_affinity = WDA_NONE;
+    const bool had_affinity = parent &&
+        GetWindowDisplayAffinity(parent, &previous_affinity) != FALSE;
+    if (ink_visible) ShowWindow(window_, SW_HIDE);
+    if (palette_visible) ShowWindow(controller_.palette()->hwnd(), SW_HIDE);
+    if (parent) SetWindowDisplayAffinity(parent, WDA_NONE);
+    RedrawWindow(parent, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+    DwmFlush();
+    bool captured = BitBlt(memory, 0, 0, width, height, screen,
+                           bounds.left, bounds.top, SRCCOPY | CAPTUREBLT) != FALSE;
+    if (parent && had_affinity) SetWindowDisplayAffinity(parent, previous_affinity);
+    if (ink_visible) ShowWindow(window_, frozen_ ? SW_SHOW : SW_SHOWNOACTIVATE);
+    if (palette_visible) ShowWindow(controller_.palette()->hwnd(), SW_SHOWNOACTIVATE);
+    DwmFlush();
     if (captured) {
         auto* values = static_cast<std::uint32_t*>(pixels);
         const std::size_t count = static_cast<std::size_t>(width) *
                                   static_cast<std::size_t>(height);
+        const std::size_t stride = std::max<std::size_t>(1, count / 8192U);
+        snapshot_has_content_ = false;
+        for (std::size_t index = 0; index < count; index += stride) {
+            if ((values[index] & 0x00FFFFFFU) != 0) {
+                snapshot_has_content_ = true;
+                break;
+            }
+        }
+        if (!snapshot_has_content_) captured = false;
         for (std::size_t index = 0; index < count; ++index) values[index] |= 0xFF000000U;
         const D2D1_BITMAP_PROPERTIES1 properties = D2D1::BitmapProperties1(
             D2D1_BITMAP_OPTIONS_NONE,
             D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM, D2D1_ALPHA_MODE_IGNORE),
             96.0F, 96.0F);
         snapshot_.Reset();
-        captured = SUCCEEDED(surface_.context()->CreateBitmap(
-            D2D1::SizeU(static_cast<UINT>(width), static_cast<UINT>(height)), pixels,
-            static_cast<UINT32>(width * 4), properties, snapshot_.GetAddressOf()));
+        if (captured) {
+            captured = SUCCEEDED(surface_.context()->CreateBitmap(
+                D2D1::SizeU(static_cast<UINT>(width), static_cast<UINT>(height)), pixels,
+                static_cast<UINT32>(width * 4), properties, snapshot_.GetAddressOf()));
+        }
     }
     SelectObject(memory, previous);
     DeleteObject(bitmap);
     DeleteDC(memory);
     ReleaseDC(nullptr, screen);
-    return captured;
+    snapshot_has_content_ = captured && snapshot_has_content_;
+    return snapshot_has_content_;
 }
 
 bool ZoomInkWindow::freeze(RECT bounds, HWND magnifier) {
@@ -4173,6 +4332,8 @@ LRESULT ZoomInkWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
     switch (message) {
         case kQaQueryZoomDocumentCountMessage:
             return static_cast<LRESULT>(document_.items().size());
+        case kQaQueryZoomSnapshotMessage:
+            return snapshot_ && snapshot_has_content_ ? 1 : 0;
         case WM_NCHITTEST:
             return frozen_ ? HTCLIENT : HTTRANSPARENT;
         case WM_SETCURSOR:
@@ -4325,7 +4486,25 @@ bool ZoomWindow::load_magnification() {
     return mag_initialize_ && mag_uninitialize_ && mag_set_source_ && mag_set_transform_;
 }
 
+LRESULT CALLBACK ZoomWindow::magnifier_subclass(
+        HWND window, UINT message, WPARAM wparam, LPARAM lparam,
+        UINT_PTR subclass_id, DWORD_PTR reference_data) {
+    auto* zoom = reinterpret_cast<ZoomWindow*>(reference_data);
+    if (zoom && (message == WM_LBUTTONDOWN || message == WM_LBUTTONDBLCLK) &&
+        zoom->active_ && !zoom->frozen()) {
+        SetFocus(zoom->window_);
+        zoom->toggle_freeze();
+        return 0;
+    }
+    if (message == WM_NCDESTROY)
+        RemoveWindowSubclass(window, magnifier_subclass, subclass_id);
+    return DefSubclassProc(window, message, wparam, lparam);
+}
+
 ZoomWindow::~ZoomWindow() {
+    if (magnifier_)
+        RemoveWindowSubclass(magnifier_, magnifier_subclass, 1);
+    if (lens_cursor_) DestroyCursor(lens_cursor_);
     if (initialized_ && mag_uninitialize_) mag_uninitialize_();
     if (magnification_module_) FreeLibrary(magnification_module_);
 }
@@ -4340,6 +4519,10 @@ bool ZoomWindow::initialize(GraphicsDevice& graphics) {
                                WS_CHILD | WS_VISIBLE, 0, 0, 1, 1, window_, nullptr,
                                GetModuleHandleW(nullptr), nullptr);
     if (!magnifier_) return false;
+    if (!SetWindowSubclass(magnifier_, magnifier_subclass, 1,
+                           reinterpret_cast<DWORD_PTR>(this))) return false;
+    lens_cursor_dpi_ = GetDpiForWindow(window_);
+    lens_cursor_ = create_zoom_lens_cursor(lens_cursor_dpi_);
     ink_ = std::make_unique<ZoomInkWindow>(controller_);
     if (!ink_->initialize(graphics)) return false;
 #ifndef ELITE_PEN_DEBUG
@@ -4380,6 +4563,7 @@ void ZoomWindow::hide_zoom() {
     if (!active_) return;
     active_ = false;
     KillTimer(window_, 1);
+    update_lens_cursor(false);
     if (ink_) ink_->hide();
     ShowWindow(window_, SW_HIDE);
     controller_.state().tool = tool_before_zoom_;
@@ -4400,6 +4584,7 @@ bool ZoomWindow::toggle_freeze() {
     }
     refresh_source();
     KillTimer(window_, 1);
+    update_lens_cursor(false);
     UpdateWindow(magnifier_);
     DwmFlush();
     if (!ink_->freeze(zoom_rect_, magnifier_)) {
@@ -4516,6 +4701,28 @@ void ZoomWindow::cycle_view() {
     refresh_source();
 }
 
+void ZoomWindow::update_lens_cursor(bool active) {
+    if (!active) {
+        if (lens_cursor_active_ && GetCursor() == lens_cursor_)
+            SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+        lens_cursor_active_ = false;
+        return;
+    }
+    const UINT dpi = GetDpiForWindow(window_);
+    if (!lens_cursor_ || dpi != lens_cursor_dpi_) {
+        HCURSOR replacement = create_zoom_lens_cursor(dpi);
+        if (replacement) {
+            if (lens_cursor_) DestroyCursor(lens_cursor_);
+            lens_cursor_ = replacement;
+            lens_cursor_dpi_ = dpi;
+        }
+    }
+    if (lens_cursor_) {
+        SetCursor(lens_cursor_);
+        lens_cursor_active_ = true;
+    }
+}
+
 void ZoomWindow::refresh_source() {
     if (!active_ || (ink_ && ink_->frozen())) return;
     POINT cursor{};
@@ -4526,6 +4733,7 @@ void ZoomWindow::refresh_source() {
     GetMonitorInfoW(monitor, &info);
     monitor_rect_ = info.rcMonitor;
     const auto view = static_cast<ZoomView>(controller_.preferences().zoom_view);
+    update_lens_cursor(view == ZoomView::Lens);
     const int monitor_width = monitor_rect_.right - monitor_rect_.left;
     const int monitor_height = monitor_rect_.bottom - monitor_rect_.top;
     RECT zoom_rect = monitor_rect_;

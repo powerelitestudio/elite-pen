@@ -31,6 +31,8 @@ public static class ElitePenUiNative {
     public delegate bool WindowCallback(IntPtr window, IntPtr data);
     [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr context);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindow(string className, string title);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern IntPtr FindWindowEx(
+        IntPtr parent, IntPtr childAfter, string className, string title);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr window, StringBuilder value, int count);
     [DllImport("user32.dll")] public static extern bool EnumWindows(WindowCallback callback, IntPtr data);
     [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr window);
@@ -44,6 +46,7 @@ public static class ElitePenUiNative {
     [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT point);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern bool SetWindowText(IntPtr window, string value);
     [DllImport("user32.dll")] public static extern IntPtr LoadCursor(IntPtr instance, IntPtr name);
+    [DllImport("user32.dll")] public static extern IntPtr GetCursor();
     [DllImport("user32.dll")] public static extern bool GetIconInfo(IntPtr cursor, out ICONINFO information);
     [DllImport("gdi32.dll", EntryPoint="GetObjectW")] public static extern int GetBitmapObject(
         IntPtr bitmap, int size, out BITMAP information);
@@ -534,17 +537,31 @@ try {
         $lens = New-Object ElitePenUiNative+RECT
         $null = [ElitePenUiNative]::GetWindowRect($zoom, [ref]$lens)
         Assert-Ui (($lens.Right - $lens.Left) -lt ($full.Right - $full.Left)) 'Lens zoom did not use a compact window.'
+        $lensCursor = [ElitePenUiNative]::GetCursor()
+        $arrowCursor = [ElitePenUiNative]::LoadCursor([IntPtr]::Zero, [IntPtr]32512)
+        Assert-Ui ($lensCursor -ne [IntPtr]::Zero -and $lensCursor -ne $arrowCursor) `
+            'Lens mode did not activate its dedicated magnifying target cursor.'
         $null = [ElitePenUiNative]::SendMessage($zoom, 0x0100, [IntPtr][char]'D', [IntPtr]::Zero)
         $null = [ElitePenUiNative]::SendMessage($zoom, 0x0100, [IntPtr][char]'I', [IntPtr]::Zero)
         $null = [ElitePenUiNative]::SendMessage($zoom, 0x0100, [IntPtr][char]'0', [IntPtr]::Zero)
         $null = [ElitePenUiNative]::SendMessage($zoom, 0x0100, [IntPtr][char]'0', [IntPtr]::Zero)
         $null = [ElitePenUiNative]::SendMessage($zoom, 0x0100, [IntPtr][char]'F', [IntPtr]::Zero)
-        $null = [ElitePenUiNative]::SendMessage($zoom, 0x0210, [IntPtr]0x0201, [IntPtr]::Zero)
+        $magnifier = [ElitePenUiNative]::FindWindowEx(
+            $zoom, [IntPtr]::Zero, 'Magnifier', 'Elite Pen Magnifier')
+        Assert-Ui ($magnifier -ne [IntPtr]::Zero) 'Native Magnifier child is missing.'
+        if ($magnifier -ne [IntPtr]::Zero) {
+            $null = [ElitePenUiNative]::SendMessage(
+                $magnifier, 0x0201, [IntPtr]1, [IntPtr]::Zero)
+        }
         Start-Sleep -Milliseconds 180
         $frozen = [ElitePenUiNative]::SendMessage($zoom, 0x8061, [IntPtr]::Zero, [IntPtr]::Zero)
+        $snapshotReady = [ElitePenUiNative]::SendMessage(
+            $zoomInk, 0x8064, [IntPtr]::Zero, [IntPtr]::Zero)
         $freezeTool = [ElitePenUiNative]::SendMessage($palette, 0x805A, [IntPtr]::Zero, [IntPtr]::Zero)
         Assert-Ui ($zoomInk -ne [IntPtr]::Zero -and [ElitePenUiNative]::IsWindowVisible($zoomInk) -and
                    $frozen.ToInt64() -eq 1) 'Click did not freeze the zoom into its annotation surface.'
+        Assert-Ui ($snapshotReady.ToInt64() -eq 1) `
+            'Frozen zoom accepted an empty or black snapshot.'
         Assert-Ui ($freezeTool.ToInt64() -eq 1) 'Freezing zoom did not activate the pen automatically.'
         Assert-Ui ([ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.ZoomInk') -and
                    [ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.Zoom')) `
