@@ -1,5 +1,18 @@
 # Historial de cambios
 
+## 2.2.0 — 2026-08-10
+
+- Elite Pen adopta el sistema visual de la familia de software definido por Elite
+  Slides: grafito/marfil, superficies frías, violeta principal y menta semántica.
+- Configuración incorpora opciones directas `Oscuro` y `Claro`, con cambio inmediato
+  sobre paleta, paneles, chrome, controles, zoom, lupa e indicadores.
+- El tema se conserva en `settings.ini` tanto en instalaciones como en portables y
+  se valida mediante round trip atómico y una consulta automatizada de interfaz.
+- El mango pasa del azul aislado a un gradiente violeta de familia; selección,
+  foco, cursor de lupa y halo del puntero comparten el mismo lenguaje.
+- La arquitectura sigue siendo C++20/Win32/DirectComposition; no se incorporan
+  runtimes web ni trabajo adicional por cuadro.
+
 ## 2.1.4 — 2026-08-10
 
 - El editor directo de Texto abandona el respaldo heredado de ventana por capas y

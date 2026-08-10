@@ -1,6 +1,6 @@
-# Elite Pen 2.1 — contrato de producto
+# Elite Pen 2.2 — contrato de producto
 
-Estado: version 2.1.4 implementada.
+Estado: version 2.2.0 implementada.
 
 ## 1. Identidad e interaccion principal
 
@@ -10,8 +10,10 @@ la aplicacion sobre la que se presenta.
 
 ### Lenguaje visual
 
-- `Obsidian Atelier` combina grafito y obsidiana para las superficies, champaña
-  satinado para selección y jerarquía, y azul eléctrico para el mango funcional.
+- El sistema visual compartido con Elite Slides usa fondos grafito o marfil,
+  superficies frías, violeta para selección y jerarquía, y menta para estados.
+- Configuración ofrece temas `Oscuro` y `Claro`; el cambio es inmediato, abarca
+  paleta, paneles, configuración, lupa e indicadores y se conserva entre sesiones.
 - El volumen se comunica con gradientes breves, brillos controlados y sombras
   contenidas; no se emplean biseles, marcos blancos ni cromados clásicos.
 - Las selecciones siempre disponen de forma, contorno o luminancia además del color.
@@ -50,7 +52,7 @@ la aplicacion sobre la que se presenta.
 ### Pincel
 
 - Punta del pincel: alterna entre Lapiz e Interactuar (cursor normal).
-- Mango azul limpio, unido y alineado con la ferula blanca, y un 10 % adicional mas
+- Mango violeta limpio, unido y alineado con la ferula blanca, y un 10 % adicional mas
   corto que en la version 1.9.
 - Cualquier punto del mango abre un unico panel con todas las herramientas y
   Configuracion; no contiene iconos ni comandos diminutos sobre su superficie.

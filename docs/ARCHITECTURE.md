@@ -73,3 +73,10 @@ Las ocho acciones globales se almacenan como modificadores y tecla virtual. Al c
 una combinación se desregistran y registran todas como una transacción; si Windows
 rechaza alguna, se restaura el conjunto anterior. El formato INI es idéntico en las
 ediciones instalada y portable.
+
+### ADR-008: temas mediante tokens compartidos
+
+La interfaz nativa conserva C++/Win32 y DirectComposition. Un contrato único de
+tokens traduce el sistema visual de Elite Slides a colores Direct2D y GDI para los
+temas Oscuro y Claro. La preferencia `Theme` vive en el mismo INI portable o local;
+el cambio invalida todas las superficies y renueva el chrome nativo sin reiniciar.

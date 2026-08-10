@@ -10,6 +10,11 @@
 
 namespace elite_pen::win {
 
+enum class AppTheme : std::uint8_t {
+    Dark = 0,
+    Light = 1,
+};
+
 enum class HotkeyAction : std::uint8_t {
     Interact,
     Visibility,
@@ -84,6 +89,7 @@ inline constexpr std::array<HotkeyBinding, kHotkeyActionCount> kDefaultHotkeys{{
 }};
 
 struct Preferences {
+    AppTheme theme{AppTheme::Dark};
     bool confirm_clear{false};
     bool exclude_palette_from_capture{true};
     bool start_in_interact_mode{false};

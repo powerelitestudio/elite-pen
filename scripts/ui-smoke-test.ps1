@@ -365,6 +365,17 @@ try {
         $null = [ElitePenUiNative]::SendMessage($generalTab, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
         Assert-Ui (-not [ElitePenUiNative]::IsWindowVisible($shortcutGuide)) 'General tab did not hide the shortcut guide.'
 
+        $darkTheme = [ElitePenUiNative]::GetDlgItem($settings, 4012)
+        $lightTheme = [ElitePenUiNative]::GetDlgItem($settings, 4013)
+        Assert-Ui ($darkTheme -ne [IntPtr]::Zero -and $lightTheme -ne [IntPtr]::Zero) `
+            'Dark and light appearance choices are missing.'
+        $null = [ElitePenUiNative]::SendMessage($lightTheme, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
+        $activeTheme = [ElitePenUiNative]::SendMessage($palette, 0x8068, [IntPtr]::Zero, [IntPtr]::Zero)
+        Assert-Ui ($activeTheme.ToInt64() -eq 1) 'Light appearance was not applied to the product surfaces.'
+        $null = [ElitePenUiNative]::SendMessage($darkTheme, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
+        $activeTheme = [ElitePenUiNative]::SendMessage($palette, 0x8068, [IntPtr]::Zero, [IntPtr]::Zero)
+        Assert-Ui ($activeTheme.ToInt64() -eq 0) 'Dark appearance was not restored after theme switching.'
+
         $paletteSize = [ElitePenUiNative]::GetDlgItem($settings, 4011)
         Assert-Ui ($paletteSize -ne [IntPtr]::Zero) 'Whole-unit size selector is missing.'
         $null = [ElitePenUiNative]::SendMessage($paletteSize, 0x014E, [IntPtr]0, [IntPtr]::Zero)
@@ -586,6 +597,10 @@ try {
                 $full.Bottom - 320
             } else { $full.Top + 320 }
             $cursorMoved = [ElitePenUiNative]::SetCursorPos($moveX, $moveY)
+            # Exercise the same 16 ms refresh deterministically. Windows can
+            # coalesce WM_TIMER while an elevated desktop QA process is polling.
+            $null = [ElitePenUiNative]::SendMessage(
+                $zoom, 0x0113, [IntPtr]1, [IntPtr]::Zero)
             Start-Sleep -Milliseconds 120
             $actualCursor = New-Object ElitePenUiNative+POINT
             $null = [ElitePenUiNative]::GetCursorPos([ref]$actualCursor)

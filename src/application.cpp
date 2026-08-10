@@ -48,10 +48,60 @@ constexpr UINT kQaQueryZoomSnapshotMessage = WM_APP + 100;
 constexpr UINT kZoomClickFreezeMessage = WM_APP + 101;
 constexpr UINT kQaQueryZoomSourceFocusXMessage = WM_APP + 102;
 constexpr UINT kQaQueryZoomSourceFocusYMessage = WM_APP + 103;
+constexpr UINT kQaQueryThemeMessage = WM_APP + 104;
 constexpr UINT_PTR kTrayId = 1;
 constexpr int kPaletteDesignWidth = 290;
 constexpr int kPaletteDesignHeight = 280;
 constexpr std::array<float, 4> kPaletteScales{0.48F, 0.60F, 0.75F, 0.90F};
+
+struct UiTheme {
+    bool light{};
+    std::uint32_t background{};
+    std::uint32_t surface_1{};
+    std::uint32_t surface_2{};
+    std::uint32_t surface_3{};
+    std::uint32_t surface_4{};
+    std::uint32_t text{};
+    std::uint32_t text_soft{};
+    std::uint32_t text_muted{};
+    std::uint32_t violet{};
+    std::uint32_t violet_strong{};
+    std::uint32_t mint{};
+    std::uint32_t danger{};
+    std::uint32_t warning{};
+    std::uint32_t line{};
+    std::uint32_t shadow{};
+};
+
+constexpr UiTheme kDarkTheme{
+    false, 0x080A10, 0x0C0F17, 0x11151F, 0x171C28, 0x202636,
+    0xF4F5F8, 0xA9B0BF, 0x6E7688, 0x917CFF, 0x7B64F7, 0x55DEC0,
+    0xFF6F87, 0xF1B86A, 0x363D4D, 0x000000};
+constexpr UiTheme kLightTheme{
+    true, 0xEDF0F6, 0xF8F9FC, 0xFFFFFF, 0xE9EDF5, 0xDFE4EE,
+    0x171B28, 0x4F586B, 0x7A8498, 0x6E55DF, 0x5E46CE, 0x0D9F85,
+    0xD94B65, 0xB77719, 0xC7CDD9, 0x212A3E};
+
+AppTheme g_ui_theme = AppTheme::Dark;
+
+const UiTheme& ui_theme(AppTheme theme) noexcept {
+    return theme == AppTheme::Light ? kLightTheme : kDarkTheme;
+}
+
+const UiTheme& current_ui_theme() noexcept {
+    return ui_theme(g_ui_theme);
+}
+
+D2D1_COLOR_F theme_color(std::uint32_t rgb, float alpha = 1.0F) noexcept {
+    return D2D1::ColorF(
+        static_cast<float>((rgb >> 16U) & 0xFFU) / 255.0F,
+        static_cast<float>((rgb >> 8U) & 0xFFU) / 255.0F,
+        static_cast<float>(rgb & 0xFFU) / 255.0F, alpha);
+}
+
+COLORREF theme_colorref(std::uint32_t rgb) noexcept {
+    return RGB((rgb >> 16U) & 0xFFU, (rgb >> 8U) & 0xFFU, rgb & 0xFFU);
+}
 
 float palette_scale_for_size(int size) noexcept {
     return kPaletteScales[static_cast<std::size_t>(
@@ -77,6 +127,12 @@ struct CursorColor {
     float b{};
     float a{};
 };
+
+CursorColor cursor_theme_color(std::uint32_t rgb, float alpha = 1.0F) noexcept {
+    return {static_cast<float>((rgb >> 16U) & 0xFFU) / 255.0F,
+            static_cast<float>((rgb >> 8U) & 0xFFU) / 255.0F,
+            static_cast<float>(rgb & 0xFFU) / 255.0F, alpha};
+}
 
 bool cursor_point_in_polygon(CursorPoint point, const std::vector<CursorPoint>& polygon) {
     bool inside = false;
@@ -277,6 +333,7 @@ float cursor_distance_to_segment(CursorPoint point, CursorPoint start,
 }
 
 HCURSOR create_zoom_lens_cursor(UINT dpi) {
+    const auto& theme = current_ui_theme();
     using GetSystemMetricsForDpiFunction = int(WINAPI*)(int, UINT);
     const auto metrics_for_dpi = reinterpret_cast<GetSystemMetricsForDpiFunction>(
         GetProcAddress(GetModuleHandleW(L"user32.dll"), "GetSystemMetricsForDpi"));
@@ -296,9 +353,9 @@ HCURSOR create_zoom_lens_cursor(UINT dpi) {
     constexpr CursorColor transparent{};
     constexpr CursorColor halo{0.98F, 0.98F, 0.99F, 0.94F};
     constexpr CursorColor outline{0.05F, 0.07F, 0.10F, 1.0F};
-    constexpr CursorColor champagne{0.96F, 0.82F, 0.48F, 1.0F};
-    constexpr CursorColor focus_blue{0.12F, 0.62F, 0.86F, 1.0F};
-    constexpr CursorColor glass{0.18F, 0.50F, 0.68F, 0.16F};
+    const CursorColor accent = cursor_theme_color(theme.violet);
+    const CursorColor focus = cursor_theme_color(theme.mint);
+    const CursorColor glass = cursor_theme_color(theme.violet, 0.16F);
 
     const auto sample_color = [&](CursorPoint point) {
         const float radial = std::hypot(point.x - center.x, point.y - center.y);
@@ -308,13 +365,13 @@ HCURSOR create_zoom_lens_cursor(UINT dpi) {
         CursorColor color = radial < ring_radius - 1.8F ? glass : transparent;
         if (ring <= 2.5F || handle <= 3.5F) color = halo;
         if (ring <= 1.8F || handle <= 2.7F) color = outline;
-        if (ring <= 1.0F || handle <= 1.65F) color = champagne;
+        if (ring <= 1.0F || handle <= 1.65F) color = accent;
         const bool focus_cross =
             (std::abs(point.x - center.x) <= 0.8F &&
              std::abs(point.y - center.y) <= 4.0F) ||
             (std::abs(point.y - center.y) <= 0.8F &&
              std::abs(point.x - center.x) <= 4.0F);
-        if (focus_cross) color = focus_blue;
+        if (focus_cross) color = focus;
         return color;
     };
 
@@ -658,6 +715,7 @@ public:
     ~SettingsWindow() override;
     bool initialize();
     void show_settings();
+    void apply_theme();
 
 protected:
     LRESULT handle_message(UINT message, WPARAM wparam, LPARAM lparam) override;
@@ -691,6 +749,9 @@ private:
     HWND palette_size_label_{};
     HWND palette_size_{};
     HWND palette_size_hint_{};
+    HWND theme_label_{};
+    HWND theme_dark_{};
+    HWND theme_light_{};
     HWND reset_position_{};
     HWND shortcuts_{};
     std::array<HWND, kVisibleShortcutRows> hotkey_buttons_{};
@@ -783,6 +844,7 @@ public:
     bool initialize(GraphicsDevice& graphics);
     bool show_zoom();
     void hide_zoom();
+    void apply_theme();
     bool toggle_freeze();
     void execute_action(HotkeyAction action);
     void bring_to_front();
@@ -907,6 +969,7 @@ public:
     void show_settings_window();
     void apply_capture_preference();
     void set_palette_size(int size);
+    void set_theme(AppTheme theme);
     void execute_hotkey(HotkeyAction action);
     [[nodiscard]] bool matches_hotkey(HotkeyAction action, WPARAM virtual_key) const;
     bool set_hotkey_binding(HotkeyAction action, HotkeyBinding binding);
@@ -959,23 +1022,25 @@ ComPtr<ID2D1LinearGradientBrush> linear_gradient(
 }
 
 void apply_premium_window_chrome(HWND window) {
-    const BOOL dark = TRUE;
+    const auto& theme = current_ui_theme();
+    const BOOL dark = theme.light ? FALSE : TRUE;
     DwmSetWindowAttribute(window, 20, &dark, sizeof(dark));
     DwmSetWindowAttribute(window, 19, &dark, sizeof(dark));
     const DWORD rounded = 2;
     DwmSetWindowAttribute(window, 33, &rounded, sizeof(rounded));
-    const COLORREF border = RGB(76, 68, 50);
-    const COLORREF caption = RGB(16, 18, 23);
-    const COLORREF caption_text = RGB(245, 246, 248);
+    const COLORREF border = theme_colorref(theme.violet_strong);
+    const COLORREF caption = theme_colorref(theme.surface_1);
+    const COLORREF caption_text = theme_colorref(theme.text);
     DwmSetWindowAttribute(window, 34, &border, sizeof(border));
     DwmSetWindowAttribute(window, 35, &caption, sizeof(caption));
     DwmSetWindowAttribute(window, 36, &caption_text, sizeof(caption_text));
 }
 
 void paint_premium_combo(HWND window, HDC dc) {
+    const auto& theme = current_ui_theme();
     RECT bounds{};
     GetClientRect(window, &bounds);
-    HBRUSH background = CreateSolidBrush(RGB(24, 28, 35));
+    HBRUSH background = CreateSolidBrush(theme_colorref(theme.surface_2));
     FillRect(dc, &bounds, background);
     DeleteObject(background);
 
@@ -983,9 +1048,9 @@ void paint_premium_combo(HWND window, HDC dc) {
     face_rect.right -= 1;
     face_rect.bottom -= 1;
     const bool focused = GetFocus() == window;
-    HBRUSH face = CreateSolidBrush(RGB(27, 31, 39));
+    HBRUSH face = CreateSolidBrush(theme_colorref(theme.surface_3));
     HPEN outline = CreatePen(PS_SOLID, focused ? 2 : 1,
-                             focused ? RGB(216, 182, 109) : RGB(74, 84, 100));
+                             theme_colorref(focused ? theme.violet : theme.line));
     HGDIOBJ previous_brush = SelectObject(dc, face);
     HGDIOBJ previous_pen = SelectObject(dc, outline);
     RoundRect(dc, face_rect.left, face_rect.top, face_rect.right, face_rect.bottom, 8, 8);
@@ -995,7 +1060,7 @@ void paint_premium_combo(HWND window, HDC dc) {
     DeleteObject(face);
 
     constexpr int arrow_width = 27;
-    HPEN divider = CreatePen(PS_SOLID, 1, RGB(58, 66, 80));
+    HPEN divider = CreatePen(PS_SOLID, 1, theme_colorref(theme.line));
     previous_pen = SelectObject(dc, divider);
     MoveToEx(dc, bounds.right - arrow_width, 4, nullptr);
     LineTo(dc, bounds.right - arrow_width, bounds.bottom - 4);
@@ -1013,14 +1078,14 @@ void paint_premium_combo(HWND window, HDC dc) {
         previous_font = SelectObject(dc, font);
     }
     SetBkMode(dc, TRANSPARENT);
-    SetTextColor(dc, IsWindowEnabled(window) ? RGB(245, 246, 248) : RGB(126, 135, 149));
+    SetTextColor(dc, theme_colorref(IsWindowEnabled(window) ? theme.text : theme.text_muted));
     RECT text_rect{10, 0, bounds.right - arrow_width - 7, bounds.bottom};
     DrawTextW(dc, value, -1, &text_rect,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
     if (previous_font) SelectObject(dc, previous_font);
 
     HPEN chevron = CreatePen(PS_SOLID, 2,
-                             focused ? RGB(244, 219, 154) : RGB(216, 182, 109));
+                             theme_colorref(focused ? theme.violet_strong : theme.violet));
     previous_pen = SelectObject(dc, chevron);
     const int center_x = bounds.right - arrow_width / 2;
     const int center_y = bounds.bottom / 2;
@@ -1749,6 +1814,7 @@ void OverlayWindow::render() {
         }
     }
     if (controller_.state().cursor_highlight) {
+        const auto& theme = current_ui_theme();
         POINT cursor{};
         GetCursorPos(&cursor);
         if (cursor.x >= monitor_rect_.left && cursor.x < monitor_rect_.right &&
@@ -1758,8 +1824,8 @@ void OverlayWindow::render() {
                 static_cast<float>(cursor.y - monitor_rect_.top));
             ComPtr<ID2D1SolidColorBrush> halo;
             ComPtr<ID2D1SolidColorBrush> ring;
-            context->CreateSolidColorBrush(D2D1::ColorF(0xFFD329, 0.22F), halo.GetAddressOf());
-            context->CreateSolidColorBrush(D2D1::ColorF(0xFFB000, 0.88F), ring.GetAddressOf());
+            context->CreateSolidColorBrush(theme_color(theme.mint, 0.20F), halo.GetAddressOf());
+            context->CreateSolidColorBrush(theme_color(theme.mint, 0.90F), ring.GetAddressOf());
             context->FillEllipse(D2D1::Ellipse(center, 25, 25), halo.Get());
             context->DrawEllipse(D2D1::Ellipse(center, 25, 25), ring.Get(), 3.0F);
         }
@@ -2157,6 +2223,8 @@ LRESULT PaletteWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
             return static_cast<LRESULT>(controller_.state().document.items().size());
         case kQaQueryPaletteCollapsedMessage:
             return collapsed_ ? 1 : 0;
+        case kQaQueryThemeMessage:
+            return static_cast<LRESULT>(controller_.preferences().theme);
         case kQaQueryBoardModeMessage:
             return controller_.state().whiteboard ? 1 :
                    (controller_.state().blackboard ? 2 : 0);
@@ -2249,15 +2317,17 @@ LRESULT PaletteWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
 void PaletteWindow::render() {
     auto* context = surface_.begin_draw(D2D1::ColorF(0, 0.0F));
     if (!context) return;
+    const auto& theme = current_ui_theme();
     if (collapsed_) {
         const float width = static_cast<float>(surface_.width());
         const float height = static_cast<float>(surface_.height());
         ComPtr<ID2D1SolidColorBrush> shadow;
         ComPtr<ID2D1SolidColorBrush> border;
         ComPtr<ID2D1SolidColorBrush> icon;
-        context->CreateSolidColorBrush(D2D1::ColorF(0x000000, 0.42F), shadow.GetAddressOf());
-        context->CreateSolidColorBrush(D2D1::ColorF(0x8D7A52, 0.90F), border.GetAddressOf());
-        context->CreateSolidColorBrush(D2D1::ColorF(0xF4DB9A), icon.GetAddressOf());
+        context->CreateSolidColorBrush(theme_color(theme.shadow, theme.light ? 0.18F : 0.42F),
+                                       shadow.GetAddressOf());
+        context->CreateSolidColorBrush(theme_color(theme.violet, 0.92F), border.GetAddressOf());
+        context->CreateSolidColorBrush(theme_color(theme.violet_strong), icon.GetAddressOf());
         ComPtr<ID2D1PathGeometry> shape;
         controller_.graphics().d2d_factory()->CreatePathGeometry(shape.GetAddressOf());
         ComPtr<ID2D1GeometrySink> mini;
@@ -2282,8 +2352,8 @@ void PaletteWindow::render() {
             D2D1::Point2F(width * 0.22F, height * 0.18F)));
         mini->EndFigure(D2D1_FIGURE_END_CLOSED);
         mini->Close();
-        const D2D1_GRADIENT_STOP stops[]{{0.0F, D2D1::ColorF(0x343B47)},
-                                         {1.0F, D2D1::ColorF(0x0C0E13)}};
+        const D2D1_GRADIENT_STOP stops[]{{0.0F, theme_color(theme.surface_4)},
+                                         {1.0F, theme_color(theme.surface_1)}};
         const auto fill = linear_gradient(context, D2D1::Point2F(0, 0),
                                            D2D1::Point2F(width, height), stops, 2);
         context->SetTransform(D2D1::Matrix3x2F::Translation(0, 1.5F));
@@ -2322,15 +2392,18 @@ void PaletteWindow::render() {
     ComPtr<ID2D1SolidColorBrush> rail;
     ComPtr<ID2D1SolidColorBrush> muted;
     ComPtr<ID2D1SolidColorBrush> glass;
-    context->CreateSolidColorBrush(D2D1::ColorF(0xF7F2E8), cream.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0x000000, 0.38F), shadow.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0xF4F6FA), ink.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0xD8B66D), gold.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0xF4DB9A), gold_bright.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0x8D7A52, 0.82F), panel_border.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0x171A20, 0.97F), rail.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0xAAB1BE), muted.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0xFFFFFF, 0.20F), glass.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.text), cream.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.shadow, theme.light ? 0.18F : 0.38F),
+                                   shadow.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.text), ink.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.violet), gold.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.violet_strong), gold_bright.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.line, 0.94F), panel_border.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.surface_1, 0.98F), rail.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.text_soft), muted.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.light ? 0xFFFFFF : 0xFFFFFF,
+                                               theme.light ? 0.48F : 0.18F),
+                                   glass.GetAddressOf());
 
     context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(129, 87), 88, 78), shadow.Get());
     ComPtr<ID2D1PathGeometry> palette_geometry;
@@ -2353,9 +2426,9 @@ void PaletteWindow::render() {
     sink->EndFigure(D2D1_FIGURE_END_CLOSED);
     sink->Close();
     const D2D1_GRADIENT_STOP palette_stops[]{
-        {0.0F, D2D1::ColorF(0x303641)},
-        {0.46F, D2D1::ColorF(0x1C2028)},
-        {1.0F, D2D1::ColorF(0x0D0F14)}
+        {0.0F, theme_color(theme.light ? theme.surface_2 : theme.surface_4)},
+        {0.46F, theme_color(theme.light ? theme.surface_1 : theme.surface_3)},
+        {1.0F, theme_color(theme.light ? theme.surface_3 : theme.surface_1)}
     };
     const auto palette_fill = linear_gradient(
         context, D2D1::Point2F(48, 15), D2D1::Point2F(191, 171),
@@ -2469,24 +2542,26 @@ void PaletteWindow::render() {
     ComPtr<ID2D1SolidColorBrush> handle;
     ComPtr<ID2D1SolidColorBrush> active_paint;
     ComPtr<ID2D1SolidColorBrush> danger;
-    context->CreateSolidColorBrush(D2D1::ColorF(0x54263E), bristle.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0xD8C9AA), ferrule.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0x2C8AE8), handle.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.light ? 0x5A4674 : 0x3B2D55),
+                                   bristle.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.light ? 0xF4F5F8 : 0xDDE1EA),
+                                   ferrule.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.violet), handle.GetAddressOf());
     context->CreateSolidColorBrush(d2d_color(controller_.state().color),
                                    active_paint.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0xFF7380), danger.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.danger), danger.GetAddressOf());
     const D2D1_GRADIENT_STOP handle_stops[]{
-        {0.0F, D2D1::ColorF(0x255FE8)},
-        {0.52F, D2D1::ColorF(0x268FEC)},
-        {1.0F, D2D1::ColorF(0x5DD8F5)}
+        {0.0F, theme_color(theme.violet_strong)},
+        {0.52F, theme_color(theme.violet)},
+        {1.0F, theme_color(theme.light ? 0x9A89F2 : 0xB2A6FF)}
     };
     const auto handle_gradient = linear_gradient(
         context, D2D1::Point2F(106, 173), D2D1::Point2F(205, 220),
         handle_stops, static_cast<UINT>(std::size(handle_stops)));
     const D2D1_GRADIENT_STOP ferrule_stops[]{
-        {0.0F, D2D1::ColorF(0xFFF5D9)},
-        {0.44F, D2D1::ColorF(0xD8C9A7)},
-        {1.0F, D2D1::ColorF(0x7D6B4D)}
+        {0.0F, theme_color(0xFFFFFF)},
+        {0.44F, theme_color(theme.light ? 0xE7EAF1 : 0xD8DCE6)},
+        {1.0F, theme_color(theme.light ? 0xAEB6C6 : 0x737C8E)}
     };
     const auto ferrule_gradient = linear_gradient(
         context, D2D1::Point2F(78, 151), D2D1::Point2F(108, 182),
@@ -2671,6 +2746,7 @@ LRESULT ColorWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
 void ColorWindow::render() {
     auto* context = surface_.begin_draw(D2D1::ColorF(0, 0.0F));
     if (!context) return;
+    const auto& theme = current_ui_theme();
     ComPtr<ID2D1SolidColorBrush> panel;
     ComPtr<ID2D1SolidColorBrush> raised;
     ComPtr<ID2D1SolidColorBrush> hover_surface;
@@ -2681,16 +2757,18 @@ void ColorWindow::render() {
     ComPtr<ID2D1SolidColorBrush> shadow;
     ComPtr<ID2D1SolidColorBrush> glass;
     ComPtr<ID2D1SolidColorBrush> selected;
-    context->CreateSolidColorBrush(D2D1::ColorF(0x101217, 0.985F), panel.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0x1B1F27), raised.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0x252B35), hover_surface.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0x353C48), border.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0xF5F6F8), text.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0x98A1B0), muted.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0xD8B66D), gold.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0x000000, 0.45F), shadow.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0xFFFFFF, 0.16F), glass.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0xF2D899), selected.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.surface_1, 0.985F), panel.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.surface_3), raised.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.surface_4), hover_surface.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.line), border.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.text), text.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.text_muted), muted.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.violet), gold.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.shadow, theme.light ? 0.18F : 0.45F),
+                                   shadow.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(0xFFFFFF, theme.light ? 0.48F : 0.16F),
+                                   glass.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.violet_strong), selected.GetAddressOf());
     context->FillRoundedRectangle(
         D2D1::RoundedRect(D2D1::RectF(4, 5, 344, 330), 20, 20), shadow.Get());
     const auto panel_rect = D2D1::RoundedRect(D2D1::RectF(2, 2, 342, 328), 18, 18);
@@ -2877,6 +2955,7 @@ LRESULT ToolWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
 void ToolWindow::render() {
     auto* context = surface_.begin_draw(D2D1::ColorF(0, 0.0F));
     if (!context) return;
+    const auto& theme = current_ui_theme();
     ComPtr<ID2D1SolidColorBrush> panel;
     ComPtr<ID2D1SolidColorBrush> border;
     ComPtr<ID2D1SolidColorBrush> text;
@@ -2886,15 +2965,16 @@ void ToolWindow::render() {
     ComPtr<ID2D1SolidColorBrush> hover_surface;
     ComPtr<ID2D1SolidColorBrush> muted;
     ComPtr<ID2D1SolidColorBrush> shadow;
-    context->CreateSolidColorBrush(D2D1::ColorF(0x101217, 0.985F), panel.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0x353C48), border.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0xF5F6F8), text.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0xD8B66D), accent.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0x252B35), hover.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0x181C23), raised.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0x20252E), hover_surface.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0x98A1B0), muted.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0x000000, 0.45F), shadow.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.surface_1, 0.985F), panel.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.line), border.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.text), text.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.violet), accent.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.light ? 0xE5E0FA : 0x29233F), hover.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.surface_2), raised.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.surface_4), hover_surface.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.text_muted), muted.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.shadow, theme.light ? 0.18F : 0.45F),
+                                   shadow.GetAddressOf());
     const float panel_bottom = static_cast<float>(surface_.height()) - 2.0F;
     context->FillRoundedRectangle(D2D1::RoundedRect(
         D2D1::RectF(4, 5, 366, static_cast<float>(surface_.height())), 20, 20), shadow.Get());
@@ -3243,8 +3323,9 @@ bool SettingsWindow::initialize() {
                 WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
                 WS_POPUP, bounds)) return false;
     apply_premium_window_chrome(window_);
-    background_brush_ = CreateSolidBrush(RGB(16, 18, 23));
-    card_brush_ = CreateSolidBrush(RGB(24, 28, 35));
+    const auto& theme = current_ui_theme();
+    background_brush_ = CreateSolidBrush(theme_colorref(theme.background));
+    card_brush_ = CreateSolidBrush(theme_colorref(theme.surface_2));
     title_font_ = CreateFontW(-25, 0, 0, 0, 600, FALSE, FALSE, FALSE,
                               DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                               CLEARTYPE_QUALITY, DEFAULT_PITCH, L"Segoe UI Variable Display");
@@ -3257,7 +3338,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.1.4",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.2.0",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
@@ -3343,9 +3424,18 @@ bool SettingsWindow::initialize() {
         L"Escala paleta, colores, puntos, pincel y zonas de clic como una sola unidad.",
         WS_CHILD | WS_VISIBLE, 24, 384, 534, 20, window_, nullptr,
         GetModuleHandleW(nullptr), nullptr);
+    theme_label_ = CreateWindowW(L"STATIC", L"Apariencia:",
+                                 WS_CHILD | WS_VISIBLE, 24, 432, 88, 27, window_, nullptr,
+                                 GetModuleHandleW(nullptr), nullptr);
+    theme_dark_ = CreateWindowW(L"BUTTON", L"Oscuro", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
+                                BS_OWNERDRAW, 116, 425, 104, 34, window_,
+                                reinterpret_cast<HMENU>(4012), GetModuleHandleW(nullptr), nullptr);
+    theme_light_ = CreateWindowW(L"BUTTON", L"Claro", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
+                                 BS_OWNERDRAW, 228, 425, 104, 34, window_,
+                                 reinterpret_cast<HMENU>(4013), GetModuleHandleW(nullptr), nullptr);
     reset_position_ = CreateWindowW(L"BUTTON", L"Restablecer posición de la paleta",
                                     WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
-                                    24, 432, 260, 31, window_, reinterpret_cast<HMENU>(4005),
+                                    24, 478, 260, 31, window_, reinterpret_cast<HMENU>(4005),
                                     GetModuleHandleW(nullptr), nullptr);
     shortcuts_ = CreateWindowW(L"STATIC", L"Atajos de Elite Pen",
         WS_CHILD | SS_OWNERDRAW, 24, 119, 540, 400, window_,
@@ -3376,18 +3466,19 @@ bool SettingsWindow::initialize() {
                        start_interact_, highlight_cursor_,
                        fade_label_, fade_, thickness_label_, thickness_, zoom_label_,
                        zoom_, zoom_view_label_, zoom_view_, zoom_invert_, palette_size_label_,
-                       palette_size_, palette_size_hint_, reset_position_,
+                       palette_size_, palette_size_hint_, theme_label_, theme_dark_, theme_light_,
+                       reset_position_,
                        shortcuts_, shortcut_scrollbar_, reset_hotkeys_, close_, chrome_close_}) {
         SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(body_font_), TRUE);
-        SetWindowTheme(child, L"DarkMode_Explorer", nullptr);
+        SetWindowTheme(child, theme.light ? L"Explorer" : L"DarkMode_Explorer", nullptr);
     }
     for (HWND button : hotkey_buttons_) {
         SendMessageW(button, WM_SETFONT, reinterpret_cast<WPARAM>(small_font_), TRUE);
-        SetWindowTheme(button, L"DarkMode_Explorer", nullptr);
+        SetWindowTheme(button, theme.light ? L"Explorer" : L"DarkMode_Explorer", nullptr);
     }
     for (HWND button : hotkey_edit_buttons_) {
         SendMessageW(button, WM_SETFONT, reinterpret_cast<WPARAM>(small_font_), TRUE);
-        SetWindowTheme(button, L"DarkMode_Explorer", nullptr);
+        SetWindowTheme(button, theme.light ? L"Explorer" : L"DarkMode_Explorer", nullptr);
     }
     SendMessageW(title_, WM_SETFONT, reinterpret_cast<WPARAM>(title_font_), TRUE);
     SendMessageW(subtitle_, WM_SETFONT, reinterpret_cast<WPARAM>(small_font_), TRUE);
@@ -3398,16 +3489,40 @@ bool SettingsWindow::initialize() {
     SetWindowSubclass(zoom_, premium_combo_subclass, 4004, 0);
     SetWindowSubclass(zoom_view_, premium_combo_subclass, 4006, 0);
     SetWindowSubclass(palette_size_, premium_combo_subclass, 4011, 0);
+    apply_theme();
     show_tab(0);
     return true;
 }
 
+void SettingsWindow::apply_theme() {
+    const auto& theme = current_ui_theme();
+    if (background_brush_) DeleteObject(background_brush_);
+    if (card_brush_) DeleteObject(card_brush_);
+    background_brush_ = CreateSolidBrush(theme_colorref(theme.background));
+    card_brush_ = CreateSolidBrush(theme_colorref(theme.surface_2));
+    apply_premium_window_chrome(window_);
+    const wchar_t* native_theme = theme.light ? L"Explorer" : L"DarkMode_Explorer";
+    for (HWND child : {title_, subtitle_, tab_general_, tab_shortcuts_, capture_, confirm_clear_,
+                       start_interact_, highlight_cursor_, fade_label_, fade_, thickness_label_,
+                       thickness_, zoom_label_, zoom_, zoom_view_label_, zoom_view_, zoom_invert_,
+                       palette_size_label_, palette_size_, palette_size_hint_, theme_label_,
+                       theme_dark_, theme_light_, reset_position_, shortcuts_, shortcut_scrollbar_,
+                       reset_hotkeys_, close_, chrome_close_}) {
+        if (child) SetWindowTheme(child, native_theme, nullptr);
+    }
+    for (HWND child : hotkey_buttons_) if (child) SetWindowTheme(child, native_theme, nullptr);
+    for (HWND child : hotkey_edit_buttons_) if (child) SetWindowTheme(child, native_theme, nullptr);
+    RedrawWindow(window_, nullptr, nullptr,
+                 RDW_INVALIDATE | RDW_ERASE | RDW_ALLCHILDREN | RDW_FRAME);
+}
+
 void SettingsWindow::paint_background(HDC dc) {
+    const auto& theme = current_ui_theme();
     RECT client{};
     GetClientRect(window_, &client);
     FillRect(dc, &client, background_brush_);
 
-    HPEN frame_pen = CreatePen(PS_SOLID, 1, RGB(58, 66, 80));
+    HPEN frame_pen = CreatePen(PS_SOLID, 1, theme_colorref(theme.line));
     HGDIOBJ old_brush = SelectObject(dc, GetStockObject(NULL_BRUSH));
     HGDIOBJ old_pen = SelectObject(dc, frame_pen);
     RoundRect(dc, 0, 0, client.right, client.bottom, 22, 22);
@@ -3415,7 +3530,7 @@ void SettingsWindow::paint_background(HDC dc) {
     SelectObject(dc, old_brush);
     DeleteObject(frame_pen);
 
-    HBRUSH brand_brush = CreateSolidBrush(RGB(216, 182, 109));
+    HBRUSH brand_brush = CreateSolidBrush(theme_colorref(theme.violet));
     old_brush = SelectObject(dc, brand_brush);
     old_pen = SelectObject(dc, GetStockObject(NULL_PEN));
     RoundRect(dc, 18, 17, 22, 31, 4, 4);
@@ -3423,7 +3538,7 @@ void SettingsWindow::paint_background(HDC dc) {
     SelectObject(dc, old_brush);
     DeleteObject(brand_brush);
 
-    HPEN border = CreatePen(PS_SOLID, 1, RGB(50, 57, 69));
+    HPEN border = CreatePen(PS_SOLID, 1, theme_colorref(theme.line));
     old_brush = SelectObject(dc, card_brush_);
     old_pen = SelectObject(dc, border);
     if (active_tab_ == 0) {
@@ -3437,7 +3552,7 @@ void SettingsWindow::paint_background(HDC dc) {
     SelectObject(dc, old_brush);
     DeleteObject(border);
 
-    HPEN gold_pen = CreatePen(PS_SOLID, 3, RGB(216, 182, 109));
+    HPEN gold_pen = CreatePen(PS_SOLID, 3, theme_colorref(theme.violet));
     old_pen = SelectObject(dc, gold_pen);
     MoveToEx(dc, 25, 110, nullptr);
     LineTo(dc, 92, 110);
@@ -3446,10 +3561,11 @@ void SettingsWindow::paint_background(HDC dc) {
 }
 
 void SettingsWindow::paint_shortcuts(HDC dc, RECT bounds) {
+    const auto& theme = current_ui_theme();
     FillRect(dc, &bounds, card_brush_);
     SetBkMode(dc, TRANSPARENT);
     HGDIOBJ previous_font = SelectObject(dc, body_font_);
-    SetTextColor(dc, RGB(226, 193, 120));
+    SetTextColor(dc, theme_colorref(theme.violet));
     RECT heading{bounds.left, bounds.top + 2, bounds.right, bounds.top + 23};
     DrawTextW(dc, L"ATAJOS CONFIGURABLES · USA EL LAPIZ PARA EDITAR", -1, &heading,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
@@ -3458,17 +3574,17 @@ void SettingsWindow::paint_shortcuts(HDC dc, RECT bounds) {
         if (index >= kHotkeyInfo.size()) break;
         const int y = bounds.top + 28 + static_cast<int>(slot) * 35;
         SelectObject(dc, small_font_);
-        SetTextColor(dc, RGB(240, 242, 246));
+        SetTextColor(dc, theme_colorref(theme.text));
         RECT title{bounds.left, y, bounds.left + 122, y + 16};
         DrawTextW(dc, kHotkeyInfo[index].title, -1, &title,
                   DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
-        SetTextColor(dc, RGB(142, 151, 166));
+        SetTextColor(dc, theme_colorref(theme.text_muted));
         RECT description{bounds.left + 126, y, bounds.left + 318, y + 16};
         DrawTextW(dc, kHotkeyInfo[index].description, -1, &description,
                   DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
     }
     SelectObject(dc, body_font_);
-    SetTextColor(dc, RGB(226, 193, 120));
+    SetTextColor(dc, theme_colorref(theme.violet));
     RECT context_heading{bounds.left, bounds.top + 262, bounds.right, bounds.top + 281};
     DrawTextW(dc, L"GUIA RAPIDA DEL ZOOM", -1, &context_heading,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
@@ -3485,11 +3601,11 @@ void SettingsWindow::paint_shortcuts(HDC dc, RECT bounds) {
     }};
     for (std::size_t index = 0; index < contextual.size(); ++index) {
         const int y = bounds.top + 282 + static_cast<int>(index) * 14;
-        SetTextColor(dc, RGB(240, 242, 246));
+        SetTextColor(dc, theme_colorref(theme.text));
         RECT key{bounds.left, y, bounds.left + 118, y + 16};
         DrawTextW(dc, contextual[index].title, -1, &key,
                   DT_LEFT | DT_SINGLELINE | DT_VCENTER);
-        SetTextColor(dc, RGB(152, 161, 176));
+        SetTextColor(dc, theme_colorref(theme.text_soft));
         RECT description{bounds.left + 122, y, bounds.right, y + 16};
         DrawTextW(dc, contextual[index].description, -1, &description,
                   DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
@@ -3503,7 +3619,8 @@ void SettingsWindow::show_tab(int tab) {
     for (HWND control : {capture_, confirm_clear_, start_interact_, highlight_cursor_,
                          fade_label_, fade_, palette_size_label_, palette_size_,
                          palette_size_hint_, thickness_label_, thickness_, zoom_label_, zoom_,
-                         zoom_view_label_, zoom_view_, zoom_invert_, reset_position_}) {
+                         zoom_view_label_, zoom_view_, zoom_invert_, theme_label_, theme_dark_,
+                         theme_light_, reset_position_}) {
         ShowWindow(control, general_visibility);
     }
     ShowWindow(shortcuts_, active_tab_ == 1 ? SW_SHOW : SW_HIDE);
@@ -3555,6 +3672,8 @@ void SettingsWindow::refresh_controls() {
                  static_cast<WPARAM>(std::clamp(preferences.zoom_view, 0, 2)), 0);
     SendMessageW(zoom_invert_, BM_SETCHECK,
                  preferences.zoom_invert ? BST_CHECKED : BST_UNCHECKED, 0);
+    InvalidateRect(theme_dark_, nullptr, TRUE);
+    InvalidateRect(theme_light_, nullptr, TRUE);
     cancel_hotkey_capture();
     refresh_shortcut_rows();
 }
@@ -3773,6 +3892,11 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
                 }
                 return 0;
             }
+            if ((id == 4012 || id == 4013) && HIWORD(wparam) == BN_CLICKED) {
+                controller_.set_theme(id == 4013 ? AppTheme::Light : AppTheme::Dark);
+                refresh_controls();
+                return 0;
+            }
             if (id == 4004 && HIWORD(wparam) == CBN_SELCHANGE) {
                 constexpr std::array<float, 6> factors{1.5F, 2.0F, 3.0F, 4.0F, 6.0F, 8.0F};
                 const LRESULT selection = SendMessageW(zoom_, CB_GETCURSEL, 0, 0);
@@ -3863,6 +3987,7 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
         case WM_DRAWITEM: {
             const auto* item = reinterpret_cast<const DRAWITEMSTRUCT*>(lparam);
             if (!item) break;
+            const auto& theme = current_ui_theme();
             if (item->CtlType == ODT_STATIC && item->hwndItem == shortcuts_) {
                 RECT bounds = item->rcItem;
                 paint_shortcuts(item->hDC, bounds);
@@ -3877,9 +4002,10 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
             SetBkMode(item->hDC, TRANSPARENT);
             if (id >= 4400 && id < 4400 + static_cast<int>(kVisibleShortcutRows)) {
                 FillRect(item->hDC, &item->rcItem, card_brush_);
-                HBRUSH face = CreateSolidBrush(pressed ? RGB(54, 61, 73) : RGB(30, 35, 44));
+                HBRUSH face = CreateSolidBrush(theme_colorref(
+                    pressed ? theme.surface_4 : theme.surface_3));
                 HPEN outline = CreatePen(PS_SOLID, focused ? 2 : 1,
-                    focused ? RGB(226, 193, 120) : RGB(74, 84, 100));
+                    theme_colorref(focused ? theme.violet : theme.line));
                 HGDIOBJ previous_brush = SelectObject(item->hDC, face);
                 HGDIOBJ previous_pen = SelectObject(item->hDC, outline);
                 RoundRect(item->hDC, item->rcItem.left, item->rcItem.top,
@@ -3890,7 +4016,7 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
                 DeleteObject(face);
                 const int cx = (item->rcItem.left + item->rcItem.right) / 2;
                 const int cy = (item->rcItem.top + item->rcItem.bottom) / 2;
-                HPEN pencil = CreatePen(PS_SOLID, 2, RGB(244, 219, 154));
+                HPEN pencil = CreatePen(PS_SOLID, 2, theme_colorref(theme.violet));
                 previous_pen = SelectObject(item->hDC, pencil);
                 MoveToEx(item->hDC, cx - 5, cy + 5, nullptr);
                 LineTo(item->hDC, cx + 5, cy - 5);
@@ -3906,9 +4032,10 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
                 const bool active = (id == 4101 && active_tab_ == 0) ||
                                     (id == 4102 && active_tab_ == 1);
                 FillRect(item->hDC, &item->rcItem, background_brush_);
-                HBRUSH face = CreateSolidBrush(active ? RGB(31, 36, 45) : RGB(20, 23, 29));
+                HBRUSH face = CreateSolidBrush(theme_colorref(
+                    active ? (theme.light ? 0xE5E0FA : 0x29233F) : theme.surface_2));
                 HPEN outline = CreatePen(PS_SOLID, active || focused ? 2 : 1,
-                    active || focused ? RGB(216, 182, 109) : RGB(58, 66, 80));
+                    theme_colorref(active || focused ? theme.violet : theme.line));
                 HGDIOBJ previous_brush = SelectObject(item->hDC, face);
                 HGDIOBJ previous_pen = SelectObject(item->hDC, outline);
                 RoundRect(item->hDC, item->rcItem.left, item->rcItem.top,
@@ -3919,10 +4046,59 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
                 DeleteObject(face);
                 wchar_t value[64]{};
                 GetWindowTextW(item->hwndItem, value, 64);
-                SetTextColor(item->hDC, active ? RGB(244, 219, 154) : RGB(184, 191, 202));
+                SetTextColor(item->hDC, theme_colorref(
+                    active ? theme.violet_strong : theme.text_soft));
                 RECT text_rect = item->rcItem;
                 DrawTextW(item->hDC, value, -1, &text_rect,
                           DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+                return TRUE;
+            }
+            if (id == 4012 || id == 4013) {
+                const bool active = (id == 4012 && controller_.preferences().theme == AppTheme::Dark) ||
+                                    (id == 4013 && controller_.preferences().theme == AppTheme::Light);
+                FillRect(item->hDC, &item->rcItem, card_brush_);
+                HBRUSH face = CreateSolidBrush(theme_colorref(
+                    active ? (theme.light ? 0xE5E0FA : 0x29233F) : theme.surface_3));
+                HPEN outline = CreatePen(PS_SOLID, active || focused ? 2 : 1,
+                    theme_colorref(active || focused ? theme.violet : theme.line));
+                HGDIOBJ previous_brush = SelectObject(item->hDC, face);
+                HGDIOBJ previous_pen = SelectObject(item->hDC, outline);
+                RoundRect(item->hDC, item->rcItem.left, item->rcItem.top,
+                          item->rcItem.right, item->rcItem.bottom, 11, 11);
+                SelectObject(item->hDC, previous_pen);
+                SelectObject(item->hDC, previous_brush);
+                DeleteObject(outline);
+                DeleteObject(face);
+                const int cx = item->rcItem.left + 18;
+                const int cy = (item->rcItem.top + item->rcItem.bottom) / 2;
+                HPEN glyph = CreatePen(PS_SOLID, 2, theme_colorref(
+                    active ? theme.violet : theme.text_soft));
+                previous_pen = SelectObject(item->hDC, glyph);
+                previous_brush = SelectObject(item->hDC, GetStockObject(NULL_BRUSH));
+                if (id == 4012) {
+                    Arc(item->hDC, cx - 6, cy - 7, cx + 7, cy + 7,
+                        cx + 5, cy - 5, cx + 5, cy + 5);
+                } else {
+                    Ellipse(item->hDC, cx - 5, cy - 5, cx + 5, cy + 5);
+                    for (int ray = 0; ray < 8; ++ray) {
+                        const double angle = static_cast<double>(ray) * 0.78539816339;
+                        MoveToEx(item->hDC, cx + static_cast<int>(std::cos(angle) * 7.0),
+                                 cy + static_cast<int>(std::sin(angle) * 7.0), nullptr);
+                        LineTo(item->hDC, cx + static_cast<int>(std::cos(angle) * 9.0),
+                               cy + static_cast<int>(std::sin(angle) * 9.0));
+                    }
+                }
+                SelectObject(item->hDC, previous_brush);
+                SelectObject(item->hDC, previous_pen);
+                DeleteObject(glyph);
+                wchar_t value[32]{};
+                GetWindowTextW(item->hwndItem, value, 32);
+                SetTextColor(item->hDC, theme_colorref(
+                    active ? theme.violet_strong : theme.text_soft));
+                RECT text_rect{item->rcItem.left + 34, item->rcItem.top,
+                               item->rcItem.right - 8, item->rcItem.bottom};
+                DrawTextW(item->hDC, value, -1, &text_rect,
+                          DT_LEFT | DT_SINGLELINE | DT_VCENTER);
                 return TRUE;
             }
             if (checkbox) {
@@ -3930,9 +4106,10 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
                 const int top = (item->rcItem.bottom - 18) / 2;
                 RECT box{1, top, 19, top + 18};
                 const bool checked = SendMessageW(item->hwndItem, BM_GETCHECK, 0, 0) == BST_CHECKED;
-                HBRUSH fill = CreateSolidBrush(checked ? RGB(216, 182, 109) : RGB(17, 20, 26));
+                HBRUSH fill = CreateSolidBrush(theme_colorref(
+                    checked ? theme.violet : theme.surface_1));
                 HPEN outline = CreatePen(PS_SOLID, focused ? 2 : 1,
-                    focused || checked ? RGB(216, 182, 109) : RGB(91, 101, 117));
+                    theme_colorref(focused || checked ? theme.violet : theme.line));
                 HGDIOBJ previous_brush = SelectObject(item->hDC, fill);
                 HGDIOBJ previous_pen = SelectObject(item->hDC, outline);
                 RoundRect(item->hDC, box.left, box.top, box.right, box.bottom, 6, 6);
@@ -3941,7 +4118,7 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
                 DeleteObject(outline);
                 DeleteObject(fill);
                 if (checked) {
-                    HPEN check_pen = CreatePen(PS_SOLID, 2, RGB(17, 20, 26));
+                    HPEN check_pen = CreatePen(PS_SOLID, 2, theme_colorref(0xFFFFFF));
                     previous_pen = SelectObject(item->hDC, check_pen);
                     MoveToEx(item->hDC, 5, top + 9, nullptr);
                     LineTo(item->hDC, 9, top + 13);
@@ -3952,7 +4129,7 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
                 wchar_t value[256]{};
                 GetWindowTextW(item->hwndItem, value, 256);
                 RECT text_rect{29, 0, item->rcItem.right, item->rcItem.bottom};
-                SetTextColor(item->hDC, RGB(240, 242, 246));
+                SetTextColor(item->hDC, theme_colorref(theme.text));
                 DrawTextW(item->hDC, value, -1, &text_rect,
                           DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
                 return TRUE;
@@ -3963,11 +4140,11 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
             RECT button_rect = item->rcItem;
             if (chrome) InflateRect(&button_rect, -4, -4);
             const COLORREF face_color = primary
-                ? RGB(216, 182, 109)
-                : (pressed ? RGB(48, 55, 67) : RGB(31, 36, 45));
+                ? theme_colorref(theme.violet)
+                : theme_colorref(pressed ? theme.surface_4 : theme.surface_3);
             HBRUSH face = CreateSolidBrush(face_color);
             HPEN outline = CreatePen(PS_SOLID, focused ? 2 : 1,
-                primary || focused ? RGB(226, 193, 120) : RGB(74, 84, 100));
+                theme_colorref(primary || focused ? theme.violet_strong : theme.line));
             HGDIOBJ previous_brush = SelectObject(item->hDC, face);
             HGDIOBJ previous_pen = SelectObject(item->hDC, outline);
             RoundRect(item->hDC, button_rect.left, button_rect.top,
@@ -3977,7 +4154,7 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
             DeleteObject(outline);
             DeleteObject(face);
             if (chrome) {
-                HPEN close_pen = CreatePen(PS_SOLID, 2, RGB(184, 191, 202));
+                HPEN close_pen = CreatePen(PS_SOLID, 2, theme_colorref(theme.text_soft));
                 previous_pen = SelectObject(item->hDC, close_pen);
                 const int middle_x = (button_rect.left + button_rect.right) / 2;
                 const int middle_y = (button_rect.top + button_rect.bottom) / 2;
@@ -3990,7 +4167,7 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
             } else {
                 wchar_t value[256]{};
                 GetWindowTextW(item->hwndItem, value, 256);
-                SetTextColor(item->hDC, primary ? RGB(20, 22, 27) : RGB(240, 242, 246));
+                SetTextColor(item->hDC, theme_colorref(primary ? 0xFFFFFF : theme.text));
                 RECT text_rect = item->rcItem;
                 DrawTextW(item->hDC, value, -1, &text_rect,
                           DT_CENTER | DT_SINGLELINE | DT_VCENTER);
@@ -4008,29 +4185,32 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
             ShowWindow(window_, SW_HIDE);
             return 0;
         case WM_CTLCOLORSTATIC: {
+            const auto& theme = current_ui_theme();
             const HDC dc = reinterpret_cast<HDC>(wparam);
             const HWND control = reinterpret_cast<HWND>(lparam);
             SetBkMode(dc, TRANSPARENT);
-            if (control == title_) SetTextColor(dc, RGB(226, 193, 120));
+            if (control == title_) SetTextColor(dc, theme_colorref(theme.violet));
             else if (control == subtitle_ || control == shortcuts_ ||
                      control == palette_size_hint_)
-                SetTextColor(dc, RGB(152, 161, 176));
-            else SetTextColor(dc, RGB(240, 242, 246));
+                SetTextColor(dc, theme_colorref(theme.text_muted));
+            else SetTextColor(dc, theme_colorref(theme.text));
             return reinterpret_cast<LRESULT>(
                 control == title_ || control == subtitle_ ? background_brush_ : card_brush_);
         }
         case WM_CTLCOLORBTN: {
+            const auto& theme = current_ui_theme();
             const HDC dc = reinterpret_cast<HDC>(wparam);
             SetBkMode(dc, TRANSPARENT);
-            SetTextColor(dc, RGB(240, 242, 246));
+            SetTextColor(dc, theme_colorref(theme.text));
             return reinterpret_cast<LRESULT>(
                 reinterpret_cast<HWND>(lparam) == close_ ? background_brush_ : card_brush_);
         }
         case WM_CTLCOLORLISTBOX:
         case WM_CTLCOLOREDIT: {
+            const auto& theme = current_ui_theme();
             const HDC dc = reinterpret_cast<HDC>(wparam);
-            SetBkColor(dc, RGB(24, 28, 35));
-            SetTextColor(dc, RGB(245, 246, 248));
+            SetBkColor(dc, theme_colorref(theme.surface_2));
+            SetTextColor(dc, theme_colorref(theme.text));
             return reinterpret_cast<LRESULT>(card_brush_);
         }
         case WM_ERASEBKGND: {
@@ -4478,12 +4658,13 @@ void ZoomInkWindow::render() {
             draw_drawable(controller_.graphics(), context, *preview_, 0, 0, 0.82F);
     }
     if (frozen_) {
+        const auto& theme = current_ui_theme();
         ComPtr<ID2D1SolidColorBrush> pill;
         ComPtr<ID2D1SolidColorBrush> gold;
         ComPtr<ID2D1SolidColorBrush> text;
-        context->CreateSolidColorBrush(D2D1::ColorF(0x0B0D11, 0.82F), pill.GetAddressOf());
-        context->CreateSolidColorBrush(D2D1::ColorF(0xF4DB9A), gold.GetAddressOf());
-        context->CreateSolidColorBrush(D2D1::ColorF(0xF4F6FA), text.GetAddressOf());
+        context->CreateSolidColorBrush(theme_color(theme.surface_1, 0.88F), pill.GetAddressOf());
+        context->CreateSolidColorBrush(theme_color(theme.violet), gold.GetAddressOf());
+        context->CreateSolidColorBrush(theme_color(theme.text), text.GetAddressOf());
         context->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(12, 12, 144, 42), 15, 15),
                                       pill.Get());
         context->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(25, 21, 28, 33), 1, 1),
@@ -4550,16 +4731,19 @@ void ZoomTargetWindow::render() {
     const float cx = width * 0.43F;
     const float cy = height * 0.43F;
     const float radius = std::min(width, height) * 0.29F;
+    const auto& theme = current_ui_theme();
     ComPtr<ID2D1SolidColorBrush> shadow;
     ComPtr<ID2D1SolidColorBrush> halo;
     ComPtr<ID2D1SolidColorBrush> gold;
     ComPtr<ID2D1SolidColorBrush> blue;
     ComPtr<ID2D1SolidColorBrush> glass;
-    context->CreateSolidColorBrush(D2D1::ColorF(0x05070A, 0.72F), shadow.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0xFFFFFF, 0.92F), halo.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0xF4D384, 1.0F), gold.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0x1FA8E0, 1.0F), blue.GetAddressOf());
-    context->CreateSolidColorBrush(D2D1::ColorF(0x2998C2, 0.13F), glass.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.shadow, theme.light ? 0.28F : 0.72F),
+                                   shadow.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.light ? 0xFFFFFF : theme.text, 0.94F),
+                                   halo.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.violet), gold.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.mint), blue.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.violet, 0.14F), glass.GetAddressOf());
     const auto lens = D2D1::Ellipse(D2D1::Point2F(cx, cy), radius, radius);
     context->FillEllipse(lens, glass.Get());
     context->DrawEllipse(lens, shadow.Get(), 5.2F);
@@ -4900,6 +5084,17 @@ void ZoomWindow::update_lens_cursor(bool active) {
     }
 }
 
+void ZoomWindow::apply_theme() {
+    const bool restore_cursor = lens_cursor_active_;
+    update_lens_cursor(false);
+    if (lens_cursor_) DestroyCursor(lens_cursor_);
+    lens_cursor_ = nullptr;
+    lens_cursor_dpi_ = 0;
+    if (restore_cursor) update_lens_cursor(true);
+    if (ink_) ink_->invalidate();
+    if (target_) target_->invalidate();
+}
+
 void ZoomWindow::refresh_source() {
     if (!active_ || (ink_ && ink_->frozen())) return;
     POINT cursor{};
@@ -5054,6 +5249,7 @@ void Controller::create_overlays(std::wstring& error) {
 
 bool Controller::initialize(std::wstring& error) {
     preferences_ = preferences_store_.load();
+    g_ui_theme = preferences_.theme;
     state_.color = preferences_.color;
     state_.thickness = preferences_.thickness;
     state_.zoom_factor = preferences_.zoom_factor;
@@ -5642,6 +5838,21 @@ void Controller::set_palette_size(int size) {
     if (palette_) palette_->apply_size(clamped);
     save_palette_position();
     save_preferences();
+}
+
+void Controller::set_theme(AppTheme theme) {
+    if (preferences_.theme == theme && g_ui_theme == theme) return;
+    preferences_.theme = theme;
+    g_ui_theme = theme;
+    save_preferences();
+    if (settings_) settings_->apply_theme();
+    if (palette_) palette_->invalidate();
+    if (colors_) colors_->invalidate();
+    if (tools_) tools_->invalidate();
+    if (text_input_) text_input_->invalidate();
+    if (zoom_) zoom_->apply_theme();
+    invalidate_document();
+    restack_zoom();
 }
 
 bool Controller::set_hotkey_binding(HotkeyAction action, HotkeyBinding binding) {

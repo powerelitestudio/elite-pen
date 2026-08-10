@@ -85,6 +85,8 @@ PreferencesStore::PreferencesStore() {
 Preferences PreferencesStore::load() const {
     Preferences result;
     if (!std::filesystem::exists(path_)) return result;
+    result.theme = static_cast<AppTheme>(
+        std::clamp(read_int(path_, L"Theme", 0), 0, 1));
     result.confirm_clear = read_int(path_, L"ConfirmClear", 0) != 0;
     result.exclude_palette_from_capture = read_int(path_, L"ExcludePaletteFromCapture", 1) != 0;
     result.start_in_interact_mode = read_int(path_, L"StartInInteractMode", 0) != 0;
@@ -126,6 +128,7 @@ bool PreferencesStore::save(const Preferences& preferences) const {
 
     std::ostringstream content;
     content << "[ElitePen]\r\n";
+    content << "Theme=" << static_cast<int>(preferences.theme) << "\r\n";
     content << "ConfirmClear=" << (preferences.confirm_clear ? 1 : 0) << "\r\n";
     content << "ExcludePaletteFromCapture="
             << (preferences.exclude_palette_from_capture ? 1 : 0) << "\r\n";
