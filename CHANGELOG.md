@@ -1,5 +1,19 @@
 # Historial de cambios
 
+## 2.1.2 — 2026-08-10
+
+- La paleta y sus paneles conservan una capa superior estable durante el zoom
+  congelado, incluso después de dibujar, cambiar color, grosor o geometría.
+- La superficie de tinta ya no se reactiva ni asciende sobre la paleta al recibir el
+  primer clic; los comandos siguen disponibles y la paleta se puede mover normalmente.
+- El clic para congelar usa un hook de ratón de bajo nivel limitado al zoom vivo,
+  ignora el área de la paleta y consume el gesto completo antes de congelar. Así no
+  depende del hijo interno al que Windows enrute Magnifier.
+- La vista `L` reemplaza el indicador efímero por una lupa transparente, persistente,
+  no interactiva y excluida de la ampliación; sigue al puntero con retícula central.
+- QA realiza clic físico, repite la congelación, dibuja, cambia a rojo, selecciona
+  Rectángulo y comprueba por orden Z que la paleta permanezca sobre `ZoomInk`.
+
 ## 2.1.1 — 2026-08-10
 
 - Corregida la instantánea negra al congelar: Elite Pen captura ahora la salida de

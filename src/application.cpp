@@ -45,6 +45,7 @@ constexpr UINT kQaQueryZoomFrozenMessage = WM_APP + 97;
 constexpr UINT kQaQueryZoomDocumentCountMessage = WM_APP + 98;
 constexpr UINT kQaQueryBoardModeMessage = WM_APP + 99;
 constexpr UINT kQaQueryZoomSnapshotMessage = WM_APP + 100;
+constexpr UINT kZoomClickFreezeMessage = WM_APP + 101;
 constexpr UINT_PTR kTrayId = 1;
 constexpr int kPaletteDesignWidth = 290;
 constexpr int kPaletteDesignHeight = 280;
@@ -756,6 +757,22 @@ private:
     HCURSOR pencil_cursor_{};
 };
 
+class ZoomTargetWindow final : public WindowBase {
+public:
+    explicit ZoomTargetWindow(Controller& controller) : WindowBase(controller) {}
+    bool initialize(GraphicsDevice& graphics);
+    void show_at(POINT cursor);
+    void hide() { ShowWindow(window_, SW_HIDE); }
+    void bring_to_front();
+    [[nodiscard]] bool visible() const noexcept {
+        return IsWindowVisible(window_) != FALSE;
+    }
+
+protected:
+    LRESULT handle_message(UINT message, WPARAM wparam, LPARAM lparam) override;
+    void render() override;
+};
+
 class ZoomWindow final : public WindowBase {
 public:
     explicit ZoomWindow(Controller& controller) : WindowBase(controller) {}
@@ -788,11 +805,15 @@ protected:
     LRESULT handle_message(UINT message, WPARAM wparam, LPARAM lparam) override;
 
 private:
+    static ZoomWindow* click_hook_owner_;
+    static LRESULT CALLBACK click_hook_proc(int code, WPARAM wparam, LPARAM lparam);
     static LRESULT CALLBACK magnifier_subclass(
         HWND window, UINT message, WPARAM wparam, LPARAM lparam,
         UINT_PTR subclass_id, DWORD_PTR reference_data);
     void refresh_source();
     void update_lens_cursor(bool active);
+    bool install_click_hook();
+    void uninstall_click_hook();
     void apply_color_effect();
     void cycle_view();
     bool load_magnification();
@@ -813,12 +834,15 @@ private:
     MagSetColorEffectPointer mag_set_color_effect_{};
     HWND magnifier_{};
     std::unique_ptr<ZoomInkWindow> ink_;
+    std::unique_ptr<ZoomTargetWindow> target_;
     RECT monitor_rect_{};
     RECT zoom_rect_{};
     RECT source_rect_{};
     bool initialized_{};
     bool active_{};
     bool overview_{};
+    HHOOK click_hook_{};
+    bool click_freeze_pending_{};
     HCURSOR lens_cursor_{};
     UINT lens_cursor_dpi_{};
     bool lens_cursor_active_{};
@@ -1610,7 +1634,8 @@ LRESULT OverlayWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
                     {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)})) {
                 return HTTRANSPARENT;
             }
-            if (controller_.state().tool == Tool::Interact) return HTTRANSPARENT;
+            if (controller_.state().tool == Tool::Interact || controller_.zoom_active())
+                return HTTRANSPARENT;
             return HTCLIENT;
         case WM_LBUTTONDOWN:
             if (pointer_active_) return 0;
@@ -3223,7 +3248,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.1.1",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.1.2",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
@@ -4080,7 +4105,10 @@ void ZoomInkWindow::set_frozen(bool frozen) {
 
 void ZoomInkWindow::bring_to_front() {
     if (!IsWindowVisible(window_)) return;
-    SetWindowPos(window_, HWND_TOPMOST, 0, 0, 0, 0,
+    const HWND insert_after = controller_.palette() &&
+        IsWindowVisible(controller_.palette()->hwnd())
+        ? controller_.palette()->hwnd() : HWND_TOPMOST;
+    SetWindowPos(window_, insert_after, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | (frozen_ ? 0U : SWP_NOACTIVATE));
 }
 
@@ -4300,6 +4328,7 @@ void ZoomInkWindow::finish_gesture(PointF point, WPARAM keys) {
     if (erasing_) {
         erasing_ = false;
         document_.end_compound();
+        controller_.update_overlay_interaction();
         invalidate();
         return;
     }
@@ -4314,6 +4343,7 @@ void ZoomInkWindow::finish_gesture(PointF point, WPARAM keys) {
         distance(completed.points.front(), completed.points.back()) < 2.0F)
         completed.points.resize(1);
     document_.add(std::move(completed));
+    controller_.update_overlay_interaction();
     invalidate();
 }
 
@@ -4334,6 +4364,8 @@ LRESULT ZoomInkWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
             return static_cast<LRESULT>(document_.items().size());
         case kQaQueryZoomSnapshotMessage:
             return snapshot_ && snapshot_has_content_ ? 1 : 0;
+        case WM_MOUSEACTIVATE:
+            return MA_NOACTIVATE;
         case WM_NCHITTEST:
             return frozen_ ? HTCLIENT : HTTRANSPARENT;
         case WM_SETCURSOR:
@@ -4467,6 +4499,90 @@ void ZoomInkWindow::render() {
     if (!surface_.end_draw(error)) controller_.report_runtime_error(error);
 }
 
+bool ZoomTargetWindow::initialize(GraphicsDevice& graphics) {
+    constexpr DWORD ex_style = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE |
+                               WS_EX_LAYERED | WS_EX_TRANSPARENT;
+    const RECT initial{0, 0, 64, 64};
+    if (!create(L"ElitePen.ZoomTarget", L"Objetivo de lupa — Elite Pen",
+                ex_style, WS_POPUP, initial)) return false;
+    SetLayeredWindowAttributes(window_, 0, 255, LWA_ALPHA);
+    if (!initialize_surface(graphics)) return false;
+    SetWindowDisplayAffinity(window_, WDA_EXCLUDEFROMCAPTURE);
+    return true;
+}
+
+void ZoomTargetWindow::show_at(POINT cursor) {
+    RECT client{};
+    GetClientRect(window_, &client);
+    const int width = std::max(1L, client.right - client.left);
+    const int height = std::max(1L, client.bottom - client.top);
+    const int focus_x = static_cast<int>(std::lround(static_cast<float>(width) * 0.43F));
+    const int focus_y = static_cast<int>(std::lround(static_cast<float>(height) * 0.43F));
+    const HWND insert_after = controller_.palette() &&
+        IsWindowVisible(controller_.palette()->hwnd())
+        ? controller_.palette()->hwnd() : HWND_TOPMOST;
+    const bool was_visible = visible();
+    SetWindowPos(window_, insert_after, cursor.x - focus_x, cursor.y - focus_y,
+                 0, 0, SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    if (!was_visible) invalidate();
+}
+
+void ZoomTargetWindow::bring_to_front() {
+    if (!visible()) return;
+    const HWND insert_after = controller_.palette() &&
+        IsWindowVisible(controller_.palette()->hwnd())
+        ? controller_.palette()->hwnd() : HWND_TOPMOST;
+    SetWindowPos(window_, insert_after, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+}
+
+LRESULT ZoomTargetWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
+    switch (message) {
+        case WM_NCHITTEST: return HTTRANSPARENT;
+        case WM_MOUSEACTIVATE: return MA_NOACTIVATE;
+        default: break;
+    }
+    return WindowBase::handle_message(message, wparam, lparam);
+}
+
+void ZoomTargetWindow::render() {
+    auto* context = surface_.begin_draw(D2D1::ColorF(0, 0.0F));
+    if (!context) return;
+    const float width = static_cast<float>(surface_.width());
+    const float height = static_cast<float>(surface_.height());
+    const float cx = width * 0.43F;
+    const float cy = height * 0.43F;
+    const float radius = std::min(width, height) * 0.29F;
+    ComPtr<ID2D1SolidColorBrush> shadow;
+    ComPtr<ID2D1SolidColorBrush> halo;
+    ComPtr<ID2D1SolidColorBrush> gold;
+    ComPtr<ID2D1SolidColorBrush> blue;
+    ComPtr<ID2D1SolidColorBrush> glass;
+    context->CreateSolidColorBrush(D2D1::ColorF(0x05070A, 0.72F), shadow.GetAddressOf());
+    context->CreateSolidColorBrush(D2D1::ColorF(0xFFFFFF, 0.92F), halo.GetAddressOf());
+    context->CreateSolidColorBrush(D2D1::ColorF(0xF4D384, 1.0F), gold.GetAddressOf());
+    context->CreateSolidColorBrush(D2D1::ColorF(0x1FA8E0, 1.0F), blue.GetAddressOf());
+    context->CreateSolidColorBrush(D2D1::ColorF(0x2998C2, 0.13F), glass.GetAddressOf());
+    const auto lens = D2D1::Ellipse(D2D1::Point2F(cx, cy), radius, radius);
+    context->FillEllipse(lens, glass.Get());
+    context->DrawEllipse(lens, shadow.Get(), 5.2F);
+    context->DrawEllipse(lens, halo.Get(), 3.3F);
+    context->DrawEllipse(lens, gold.Get(), 1.8F);
+    const float diagonal = radius * 0.68F;
+    const D2D1_POINT_2F handle_start{cx + diagonal, cy + diagonal};
+    const D2D1_POINT_2F handle_finish{cx + radius * 1.42F, cy + radius * 1.42F};
+    context->DrawLine(handle_start, handle_finish, shadow.Get(), 7.0F);
+    context->DrawLine(handle_start, handle_finish, halo.Get(), 4.5F);
+    context->DrawLine(handle_start, handle_finish, gold.Get(), 2.4F);
+    context->DrawLine(D2D1::Point2F(cx - 5.0F, cy),
+                      D2D1::Point2F(cx + 5.0F, cy), blue.Get(), 1.6F);
+    context->DrawLine(D2D1::Point2F(cx, cy - 5.0F),
+                      D2D1::Point2F(cx, cy + 5.0F), blue.Get(), 1.6F);
+    context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), 1.8F, 1.8F), blue.Get());
+    std::wstring error;
+    if (!surface_.end_draw(error)) controller_.report_runtime_error(error);
+}
+
 bool ZoomWindow::load_magnification() {
     if (magnification_module_) return true;
     magnification_module_ = LoadLibraryW(L"Magnification.dll");
@@ -4486,6 +4602,47 @@ bool ZoomWindow::load_magnification() {
     return mag_initialize_ && mag_uninitialize_ && mag_set_source_ && mag_set_transform_;
 }
 
+ZoomWindow* ZoomWindow::click_hook_owner_ = nullptr;
+
+LRESULT CALLBACK ZoomWindow::click_hook_proc(int code, WPARAM wparam, LPARAM lparam) {
+    ZoomWindow* zoom = click_hook_owner_;
+    if (code == HC_ACTION && zoom && zoom->active_ && !zoom->frozen() &&
+        (wparam == WM_LBUTTONDOWN || wparam == WM_LBUTTONUP)) {
+        const auto* information = reinterpret_cast<const MSLLHOOKSTRUCT*>(lparam);
+        if (information && wparam == WM_LBUTTONDOWN) {
+            PaletteWindow* palette = zoom->controller_.palette();
+            if ((!palette || !palette->contains_screen_point(information->pt)) &&
+                !zoom->click_freeze_pending_) {
+                zoom->click_freeze_pending_ = true;
+                return 1;
+            }
+        }
+        if (wparam == WM_LBUTTONUP && zoom->click_freeze_pending_) {
+            PostMessageW(zoom->window_, kZoomClickFreezeMessage, 0, 0);
+            return 1;
+        }
+    }
+    return CallNextHookEx(zoom ? zoom->click_hook_ : nullptr, code, wparam, lparam);
+}
+
+bool ZoomWindow::install_click_hook() {
+    if (click_hook_) return true;
+    click_hook_owner_ = this;
+    click_hook_ = SetWindowsHookExW(WH_MOUSE_LL, click_hook_proc,
+                                    GetModuleHandleW(nullptr), 0);
+    if (!click_hook_ && click_hook_owner_ == this) click_hook_owner_ = nullptr;
+    return click_hook_ != nullptr;
+}
+
+void ZoomWindow::uninstall_click_hook() {
+    if (click_hook_) {
+        UnhookWindowsHookEx(click_hook_);
+        click_hook_ = nullptr;
+    }
+    click_freeze_pending_ = false;
+    if (click_hook_owner_ == this) click_hook_owner_ = nullptr;
+}
+
 LRESULT CALLBACK ZoomWindow::magnifier_subclass(
         HWND window, UINT message, WPARAM wparam, LPARAM lparam,
         UINT_PTR subclass_id, DWORD_PTR reference_data) {
@@ -4502,6 +4659,7 @@ LRESULT CALLBACK ZoomWindow::magnifier_subclass(
 }
 
 ZoomWindow::~ZoomWindow() {
+    uninstall_click_hook();
     if (magnifier_)
         RemoveWindowSubclass(magnifier_, magnifier_subclass, 1);
     if (lens_cursor_) DestroyCursor(lens_cursor_);
@@ -4525,6 +4683,8 @@ bool ZoomWindow::initialize(GraphicsDevice& graphics) {
     lens_cursor_ = create_zoom_lens_cursor(lens_cursor_dpi_);
     ink_ = std::make_unique<ZoomInkWindow>(controller_);
     if (!ink_->initialize(graphics)) return false;
+    target_ = std::make_unique<ZoomTargetWindow>(controller_);
+    if (!target_->initialize(graphics)) return false;
 #ifndef ELITE_PEN_DEBUG
     SetWindowDisplayAffinity(window_, WDA_EXCLUDEFROMCAPTURE);
 #endif
@@ -4543,12 +4703,14 @@ bool ZoomWindow::show_zoom() {
     tool_before_zoom_ = controller_.state().tool;
     if (mag_set_filter_) {
         std::vector<HWND> excluded{window_};
+        if (target_) excluded.push_back(target_->hwnd());
         if (controller_.palette()) excluded.push_back(controller_.palette()->hwnd());
         mag_set_filter_(magnifier_, MW_FILTERMODE_EXCLUDE,
                         static_cast<int>(excluded.size()), excluded.data());
     }
     active_ = true;
     overview_ = false;
+    install_click_hook();
     SetTimer(window_, 1, 16, nullptr);
     refresh_source();
     apply_color_effect();
@@ -4562,8 +4724,10 @@ bool ZoomWindow::show_zoom() {
 void ZoomWindow::hide_zoom() {
     if (!active_) return;
     active_ = false;
+    uninstall_click_hook();
     KillTimer(window_, 1);
     update_lens_cursor(false);
+    if (target_) target_->hide();
     if (ink_) ink_->hide();
     ShowWindow(window_, SW_HIDE);
     controller_.state().tool = tool_before_zoom_;
@@ -4575,6 +4739,7 @@ bool ZoomWindow::toggle_freeze() {
     if (!active_ || !ink_) return false;
     if (ink_->frozen()) {
         ink_->show_live(zoom_rect_);
+        install_click_hook();
         SetTimer(window_, 1, 16, nullptr);
         refresh_source();
         controller_.update_overlay_interaction();
@@ -4583,11 +4748,14 @@ bool ZoomWindow::toggle_freeze() {
         return true;
     }
     refresh_source();
+    uninstall_click_hook();
     KillTimer(window_, 1);
     update_lens_cursor(false);
+    if (target_) target_->hide();
     UpdateWindow(magnifier_);
     DwmFlush();
     if (!ink_->freeze(zoom_rect_, magnifier_)) {
+        install_click_hook();
         SetTimer(window_, 1, 16, nullptr);
         if (controller_.palette()) controller_.palette()->show_notification(
             L"No se pudo congelar el zoom",
@@ -4651,6 +4819,7 @@ void ZoomWindow::bring_to_front() {
     SetWindowPos(window_, HWND_TOPMOST, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     if (ink_) ink_->bring_to_front();
+    if (target_) target_->bring_to_front();
 }
 
 void ZoomWindow::invalidate_ink() {
@@ -4782,12 +4951,20 @@ void ZoomWindow::refresh_source() {
     mag_set_source_(magnifier_, source_rect_);
     InvalidateRect(magnifier_, nullptr, TRUE);
     if (ink_ && IsWindowVisible(ink_->hwnd())) ink_->set_bounds(zoom_rect_);
+    if (target_) {
+        if (view == ZoomView::Lens) target_->show_at(cursor);
+        else target_->hide();
+    }
 }
 
 LRESULT ZoomWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
     switch (message) {
         case kQaQueryZoomFrozenMessage:
             return frozen() ? 1 : 0;
+        case kZoomClickFreezeMessage:
+            click_freeze_pending_ = false;
+            if (active_ && !frozen()) toggle_freeze();
+            return 0;
         case WM_TIMER: refresh_source(); return 0;
         case WM_MOUSEWHEEL: {
             const float direction = GET_WHEEL_DELTA_WPARAM(wparam) > 0 ? 0.25F : -0.25F;
@@ -4968,7 +5145,9 @@ bool Controller::route_palette_command(PointF screen_point) {
                 static_cast<LONG>(std::lround(screen_point.y))};
     if (!palette_->contains_screen_point(point)) return false;
     ScreenToClient(palette_->hwnd(), &point);
-    return palette_->activate_command_at(point);
+    const bool activated = palette_->activate_command_at(point);
+    if (activated) update_overlay_interaction();
+    return activated;
 }
 
 void Controller::set_tool(Tool tool) {
@@ -4988,6 +5167,7 @@ void Controller::set_color(Color color) {
     preferences_.color = color;
     if (state_.tool == Tool::Interact || state_.tool == Tool::Eraser) set_tool(Tool::Pen);
     if (text_input_) text_input_->update_style(state_.color, state_.thickness);
+    update_overlay_interaction();
     invalidate_all();
 }
 
@@ -4995,6 +5175,7 @@ void Controller::set_thickness(float thickness) {
     state_.thickness = thickness;
     preferences_.thickness = thickness;
     if (text_input_) text_input_->update_style(state_.color, state_.thickness);
+    update_overlay_interaction();
     invalidate_all();
 }
 

@@ -1,6 +1,6 @@
 # Elite Pen 2.1 — contrato de producto
 
-Estado: version 2.1.1 implementada.
+Estado: version 2.1.2 implementada.
 
 ## 1. Identidad e interaccion principal
 
@@ -116,7 +116,14 @@ añade una fila independiente para Configuracion.
 - Factores admitidos: 1.25x a 8x; valor inicial 2x. Las vistas son pantalla completa,
   lente y acoplada; admiten inversion de color y vista general 1x.
 - La vista Lente usa un cursor propio con aro de lupa y retícula central para mostrar
-  con precisión qué punto del escritorio alimenta el centro de la ampliación.
+  con precisión qué punto del escritorio alimenta el centro de la ampliación. La guía
+  es una superficie transparente persistente que sigue al puntero, no recibe entrada
+  y se excluye del contenido magnificado para evitar recursión.
+- Mientras el zoom está vivo, un capturador de clic temporal y limitado a esa sesión
+  congela al completar el clic izquierdo en cualquier monitor. Los clics dentro de la
+  paleta se excluyen para permitir preparar color o herramienta sin congelar.
+- En estado congelado, el orden Z contractual es Paleta/paneles sobre ZoomInk y
+  ZoomInk sobre la salida nativa. Dibujar o activar la tinta no puede invertirlo.
 - Con varios monitores, el zoom se limita al monitor que contiene el puntero y migra
   al cruzar de monitor.
 - `Esc` sale del zoom y también abandona las pizarras blanca o negra, conservando las

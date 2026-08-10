@@ -43,7 +43,7 @@ asignar. Se guardan en data\settings.ini junto con las demas preferencias portab
 ZOOM
 ----
 F  Pantalla completa
-L  Lente con cursor de lupa y reticula central de enfoque
+L  Lente con lupa persistente y reticula central de enfoque
 D  Vista acoplada
 I  Invertir colores
 0  Vista general 1x
@@ -55,6 +55,8 @@ Esc, F4 o clic derecho  Salir del zoom
 
 Las anotaciones del zoom permanecen al reanudar. Papelera, Deshacer y Rehacer actuan
 solo sobre ellas mientras el zoom esta abierto.
+Al congelar, la paleta permanece por encima de la imagen para cambiar colores,
+grosores, texto y figuras o moverla sin abandonar el zoom.
 
 Las capturas de region se guardan en "Imagenes\Elite Pen Captures" y tambien se
 copian al portapapeles. La tinta temporal y el halo de cursor se activan en
@@ -62,4 +64,4 @@ Configuracion.
 
 SOPORTE
 -------
-Producto de Power Elite Studio. Version 2.1.1.
+Producto de Power Elite Studio. Version 2.1.2.
