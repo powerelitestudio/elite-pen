@@ -1,4 +1,6 @@
 param(
+    [ValidateSet('Debug', 'Release')]
+    [string]$Configuration = 'Debug',
     [string]$ExecutablePath
 )
 
@@ -7,7 +9,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $executable = if ($ExecutablePath) {
     [IO.Path]::GetFullPath($ExecutablePath)
 } else {
-    Join-Path $repoRoot 'build\debug\Elite Pen.exe'
+    Join-Path $repoRoot "build\$($Configuration.ToLowerInvariant())\Elite Pen.exe"
 }
 if (-not (Test-Path -LiteralPath $executable)) {
     throw "Missing debug executable: $executable"

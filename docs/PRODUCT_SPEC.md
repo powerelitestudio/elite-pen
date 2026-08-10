@@ -1,6 +1,6 @@
-# Elite Pen 2.0 — contrato de producto
+# Elite Pen 2.1 — contrato de producto
 
-Estado: version 2.0.0 implementada.
+Estado: version 2.1.0 implementada.
 
 ## 1. Identidad e interaccion principal
 
@@ -29,7 +29,9 @@ la aplicacion sobre la que se presenta.
   parpado cerrado con pestanas sutiles, sin alterar el historial.
 - Un control menor bajo el ojo contrae la unidad completa. Desaparecen colores,
   grosores, ojo, pincel y papelera; queda únicamente una paleta oscura al 30 % del
-  tamaño seleccionado con un icono de expansión. Su estado se conserva entre sesiones.
+  tamaño seleccionado con un icono de expansión. Solo ese icono expande la unidad;
+  la superficie restante muestra el cursor de movimiento y permite reubicarla sin
+  salir del modo compacto. Su estado se conserva entre sesiones.
 - Los puntos de grosor seleccionan 2, 4, 7, 12 y 20 pixeles logicos; 4, el segundo
   punto de arriba hacia abajo, es el valor inicial y se configura desde Ajustes.
 - La paleta se arrastra desde cualquier zona vacia y recuerda su posicion por monitor.
@@ -99,7 +101,10 @@ añade una fila independiente para Configuracion.
   Elite Pen cambia a amarillo para conservar contraste.
 - Zoom usa la capacidad nativa de Windows en proceso x64. La ventana de control se
   excluye de la captura cuando el sistema lo permite para evitar recursion visual.
-- `P` congela la salida ampliada en una superficie GPU independiente y activa Lapiz.
+- El zoom vivo presenta directamente la salida de Magnifier, sin interponer la capa
+  de tinta transparente antes de congelar. Esto evita superficies negras o sin
+  inicializar al entrar con `Ctrl+Shift+M`.
+- `P` o clic congela la salida ampliada en una superficie GPU independiente y activa Lapiz.
   Sobre ella funcionan Lapiz, Resaltador, Borrador, Texto, Linea, Rectangulo, Elipse,
   Flecha y Flecha curva. `P` reanuda el zoom vivo sin perder esas anotaciones.
 - El zoom mantiene documento e historial propios durante su sesión. Papelera,
@@ -133,8 +138,10 @@ añade una fila independiente para Configuracion.
 - Atajo de emergencia `Esc` devuelve interaccion al escritorio.
 - Icono de bandeja con acciones equivalentes y salida explicita.
 - Configuración separa `General` y `Atajos`; la segunda pestaña permite capturar una
-  combinación nueva para cada acción global, detecta duplicados o reservas de Windows,
-  restablece los valores de fábrica y explica los atajos contextuales.
+  combinación nueva para cada acción global o contextual mediante un lápiz explícito,
+  detecta duplicados dentro de su ámbito o reservas de Windows, admite dejar acciones
+  sin asignar con `Supr`/`Retroceso`, restablece los valores de fábrica y explica
+  `P`/clic, rueda, `+`/`-`, `F`/`L`/`D`, `I`, `0`, `Espacio`/`M`, `Esc`, `F4` y clic derecho.
 - Los atajos, la escala y el estado contraído se guardan atómicamente en LocalAppData
   para la instalación o en `data/settings.ini` junto al ejecutable portable.
 

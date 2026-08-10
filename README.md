@@ -4,7 +4,7 @@ Elite Pen es la herramienta nativa de anotacion, pizarra y ampliacion de pantall
 Power Elite Studio. Su interfaz principal toma la forma de una paleta de pintor y un
 pincel funcional; no replica la barra vertical de otras aplicaciones.
 
-La edición 2.0 consolida el lenguaje visual **Obsidian Atelier**: obsidiana profunda,
+La edición 2.1 consolida el lenguaje visual **Obsidian Atelier**: obsidiana profunda,
 metal champaña, azul eléctrico controlado, superficies elevadas y tipografía moderna.
 La estética es propia de Power Elite Studio y mantiene la interfaz compacta, legible
 y rápida tanto en Windows 10 como en Windows 11.
@@ -63,16 +63,20 @@ con `scripts/publish-portable.ps1`.
 | Salir de modo/zoom | — | `Esc` |
 
 En zoom: `F` pantalla completa, `L` lente, `D` acoplado, `I` invertir,
-rueda/`+`/`-` para ampliar, `0` para vista general y `P` para congelar o reanudar.
+rueda/`+`/`-` para ampliar, `0` para vista general, `Espacio` o `M` para recorrer
+vistas, y `P` o clic para congelar o reanudar. `Esc`, `F4` o clic derecho salen.
 Al congelar se activa el lápiz y se admiten colores, texto y geometrías. La tinta del
 zoom usa historial propio: permanece al reanudar y la papelera la limpia sin tocar
 las anotaciones normales.
 
 Configuración permite escalar toda la unidad al 80 %, 100 %, 125 % o 150 %; el
 100 % corresponde al tamaño Estándar original. El icono bajo el ojo contrae la unidad
-un 70 % y deja una paleta mínima con un único control de expansión. La pestaña
-`Atajos` permite editar o restablecer cada combinación global y explica también los
-controles contextuales de zoom y texto. Todo se conserva tanto instalado como portable.
+un 70 % y deja una paleta mínima. Solo el icono central la expande; el resto de la
+superficie conserva el cursor de cuatro flechas y permite moverla. La pestaña
+`Atajos` presenta todas las acciones globales y contextuales en una lista desplazable.
+Cada fila tiene su propio lápiz de edición; `Supr` o `Retroceso` deja la acción sin
+asignar y `Restablecer` recupera los valores de fábrica. Todo se conserva tanto
+instalado como portable.
 
 La especificacion funcional completa esta en
 [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md).

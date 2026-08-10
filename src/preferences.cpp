@@ -66,8 +66,9 @@ HotkeyBinding read_hotkey(const std::wstring& path, const wchar_t* key,
     unsigned int virtual_key = 0;
     if (swscanf_s(buffer, L"%u,%u", &modifiers, &virtual_key) != 2) return fallback;
     constexpr UINT allowed_modifiers = MOD_ALT | MOD_CONTROL | MOD_SHIFT | MOD_WIN;
-    if ((modifiers & ~allowed_modifiers) != 0 || virtual_key == 0 || virtual_key > 0xFEU)
+    if ((modifiers & ~allowed_modifiers) != 0 || virtual_key > 0xFEU)
         return fallback;
+    if (virtual_key == 0) return modifiers == 0 ? HotkeyBinding{} : fallback;
     return {modifiers, virtual_key};
 }
 
@@ -101,7 +102,14 @@ Preferences PreferencesStore::load() const {
     result.color = read_color(path_, kBlack);
     constexpr std::array<const wchar_t*, kHotkeyActionCount> hotkey_keys{{
         L"HotkeyInteract", L"HotkeyVisibility", L"HotkeyWhiteboard", L"HotkeyUndo",
-        L"HotkeyRedo", L"HotkeyClear", L"HotkeyZoom", L"HotkeyBlackboard"
+        L"HotkeyRedo", L"HotkeyClear", L"HotkeyZoom", L"HotkeyBlackboard",
+        L"HotkeyPen", L"HotkeyHighlighter", L"HotkeyEraser", L"HotkeyLine",
+        L"HotkeyRectangle", L"HotkeyEllipse", L"HotkeyArrow", L"HotkeyCurvedArrow",
+        L"HotkeyText", L"HotkeyScreenshot", L"HotkeyColorPanel", L"HotkeyGeometryPanel",
+        L"HotkeyToolPanel", L"HotkeySettings", L"HotkeyPaletteCollapse",
+        L"HotkeyZoomFreeze", L"HotkeyZoomFullscreen", L"HotkeyZoomLens",
+        L"HotkeyZoomDocked", L"HotkeyZoomCycleView", L"HotkeyZoomInvert",
+        L"HotkeyZoomOverview", L"HotkeyZoomIn", L"HotkeyZoomOut"
     }};
     for (std::size_t index = 0; index < hotkey_keys.size(); ++index) {
         result.hotkeys[index] = read_hotkey(path_, hotkey_keys[index],
@@ -138,7 +146,14 @@ bool PreferencesStore::save(const Preferences& preferences) const {
             << static_cast<int>(preferences.color.b) << "\r\n";
     constexpr std::array<const char*, kHotkeyActionCount> hotkey_keys{{
         "HotkeyInteract", "HotkeyVisibility", "HotkeyWhiteboard", "HotkeyUndo",
-        "HotkeyRedo", "HotkeyClear", "HotkeyZoom", "HotkeyBlackboard"
+        "HotkeyRedo", "HotkeyClear", "HotkeyZoom", "HotkeyBlackboard",
+        "HotkeyPen", "HotkeyHighlighter", "HotkeyEraser", "HotkeyLine",
+        "HotkeyRectangle", "HotkeyEllipse", "HotkeyArrow", "HotkeyCurvedArrow",
+        "HotkeyText", "HotkeyScreenshot", "HotkeyColorPanel", "HotkeyGeometryPanel",
+        "HotkeyToolPanel", "HotkeySettings", "HotkeyPaletteCollapse",
+        "HotkeyZoomFreeze", "HotkeyZoomFullscreen", "HotkeyZoomLens",
+        "HotkeyZoomDocked", "HotkeyZoomCycleView", "HotkeyZoomInvert",
+        "HotkeyZoomOverview", "HotkeyZoomIn", "HotkeyZoomOut"
     }};
     for (std::size_t index = 0; index < hotkey_keys.size(); ++index) {
         content << hotkey_keys[index] << '=' << preferences.hotkeys[index].modifiers

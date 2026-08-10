@@ -64,6 +64,13 @@ int main() {
         {MOD_CONTROL | MOD_ALT, 'D'};
     expected.hotkeys[static_cast<std::size_t>(HotkeyAction::Zoom)] =
         {MOD_WIN | MOD_SHIFT, VK_F8};
+    expected.hotkeys[static_cast<std::size_t>(HotkeyAction::Pen)] =
+        {MOD_CONTROL | MOD_ALT, 'K'};
+    expected.hotkeys[static_cast<std::size_t>(HotkeyAction::Settings)] =
+        {MOD_CONTROL | MOD_SHIFT, 'S'};
+    expected.hotkeys[static_cast<std::size_t>(HotkeyAction::ZoomFreeze)] =
+        {MOD_ALT, 'P'};
+    expected.hotkeys[static_cast<std::size_t>(HotkeyAction::ZoomIn)] = {};
 
     check(store.save(expected), "preferences save atomically");
     const Preferences actual = store.load();

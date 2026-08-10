@@ -56,19 +56,29 @@ $checksumLines | Set-Content -LiteralPath (Join-Path $staging 'SHA256SUMS.txt') 
 
 if ($Destination) {
     $destinationFull = [IO.Path]::GetFullPath($Destination)
+    $backup = $null
     if (Test-Path -LiteralPath $destinationFull) {
-        $backup = "$destinationFull.previous"
+        $installedExecutable = Join-Path $destinationFull 'Elite Pen.exe'
+        $installedVersion = if (Test-Path -LiteralPath $installedExecutable) {
+            (Get-Item -LiteralPath $installedExecutable).VersionInfo.FileVersion
+        } else {
+            'unknown'
+        }
+        $safeVersion = $installedVersion -replace '[^0-9A-Za-z._-]', '-'
+        $backup = "$destinationFull.previous-$safeVersion"
         if (Test-Path -LiteralPath $backup) {
-            throw "Backup already exists; refusing to overwrite it: $backup"
+            $stamp = [DateTime]::Now.ToString('yyyyMMdd-HHmmss')
+            $backup = "$backup-$stamp"
         }
         Move-Item -LiteralPath $destinationFull -Destination $backup
     }
     New-Item -ItemType Directory -Force -Path $destinationFull | Out-Null
     Copy-Item -Path (Join-Path $staging '*') -Destination $destinationFull -Recurse -Force
-    $preservedData = Join-Path "$destinationFull.previous" 'data'
-    if (Test-Path -LiteralPath $preservedData) {
+    $preservedData = if ($backup) { Join-Path $backup 'data' } else { $null }
+    if ($preservedData -and (Test-Path -LiteralPath $preservedData)) {
         Copy-Item -LiteralPath $preservedData -Destination $destinationFull -Recurse -Force
     }
+    if ($backup) { Write-Output "Previous portable preserved at: $backup" }
     Write-Output "Portable distribution: $destinationFull"
 }
 Write-Output "Staging distribution: $staging"

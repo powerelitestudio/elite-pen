@@ -19,6 +19,30 @@ enum class HotkeyAction : std::uint8_t {
     Clear,
     Zoom,
     Blackboard,
+    Pen,
+    Highlighter,
+    Eraser,
+    Line,
+    Rectangle,
+    Ellipse,
+    Arrow,
+    CurvedArrow,
+    Text,
+    Screenshot,
+    ColorPanel,
+    GeometryPanel,
+    ToolPanel,
+    Settings,
+    PaletteCollapse,
+    ZoomFreeze,
+    ZoomFullscreen,
+    ZoomLens,
+    ZoomDocked,
+    ZoomCycleView,
+    ZoomInvert,
+    ZoomOverview,
+    ZoomIn,
+    ZoomOut,
     Count
 };
 
@@ -31,6 +55,8 @@ struct HotkeyBinding {
 
 inline constexpr std::size_t kHotkeyActionCount =
     static_cast<std::size_t>(HotkeyAction::Count);
+inline constexpr std::size_t kGlobalHotkeyActionCount =
+    static_cast<std::size_t>(HotkeyAction::ZoomFreeze);
 
 inline constexpr std::array<HotkeyBinding, kHotkeyActionCount> kDefaultHotkeys{{
     {MOD_CONTROL | MOD_SHIFT, 'P'},
@@ -40,7 +66,21 @@ inline constexpr std::array<HotkeyBinding, kHotkeyActionCount> kDefaultHotkeys{{
     {MOD_CONTROL | MOD_SHIFT, 'Y'},
     {MOD_CONTROL | MOD_SHIFT, 'C'},
     {MOD_CONTROL | MOD_SHIFT, 'M'},
-    {MOD_CONTROL | MOD_SHIFT, 'B'}
+    {MOD_CONTROL | MOD_SHIFT, 'B'},
+    {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},
+    {MOD_CONTROL | MOD_SHIFT, 'T'},
+    {0, 0}, {0, 0},
+    {MOD_CONTROL | MOD_SHIFT, 'G'},
+    {0, 0}, {0, 0}, {0, 0},
+    {0, 'P'},
+    {0, 'F'},
+    {0, 'L'},
+    {0, 'D'},
+    {0, VK_SPACE},
+    {0, 'I'},
+    {0, '0'},
+    {0, VK_OEM_PLUS},
+    {0, VK_OEM_MINUS}
 }};
 
 struct Preferences {

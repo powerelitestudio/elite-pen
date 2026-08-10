@@ -336,13 +336,24 @@ try {
         $null = [ElitePenUiNative]::SendMessage($shortcutsTab, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
         Assert-Ui ([ElitePenUiNative]::IsWindowVisible($shortcutGuide)) 'Shortcuts tab did not reveal the complete guide.'
         $firstHotkey = [ElitePenUiNative]::GetDlgItem($settings, 4200)
-        $lastHotkey = [ElitePenUiNative]::GetDlgItem($settings, 4207)
+        $lastHotkey = [ElitePenUiNative]::GetDlgItem($settings, 4206)
+        $firstHotkeyEditor = [ElitePenUiNative]::GetDlgItem($settings, 4400)
+        $lastHotkeyEditor = [ElitePenUiNative]::GetDlgItem($settings, 4406)
+        $shortcutScrollbar = [ElitePenUiNative]::GetDlgItem($settings, 4408)
         $resetHotkeys = [ElitePenUiNative]::GetDlgItem($settings, 4300)
         Assert-Ui ($firstHotkey -ne [IntPtr]::Zero -and $lastHotkey -ne [IntPtr]::Zero -and
+                   $firstHotkeyEditor -ne [IntPtr]::Zero -and
+                   $lastHotkeyEditor -ne [IntPtr]::Zero -and
+                   $shortcutScrollbar -ne [IntPtr]::Zero -and
                    $resetHotkeys -ne [IntPtr]::Zero -and
                    [ElitePenUiNative]::IsWindowVisible($firstHotkey) -and
-                   [ElitePenUiNative]::IsWindowVisible($lastHotkey)) `
-            'Configurable shortcut controls are missing from Settings.'
+                   [ElitePenUiNative]::IsWindowVisible($lastHotkey) -and
+                   [ElitePenUiNative]::IsWindowVisible($firstHotkeyEditor) -and
+                   [ElitePenUiNative]::IsWindowVisible($shortcutScrollbar)) `
+            'Scrollable shortcut rows or their pencil editors are missing from Settings.'
+        $null = [ElitePenUiNative]::SendMessage($settings, 0x0115, [IntPtr]7, $shortcutScrollbar)
+        Assert-Ui ([ElitePenUiNative]::IsWindowVisible($firstHotkeyEditor)) `
+            'Shortcut list did not remain usable after scrolling to zoom controls.'
         $null = [ElitePenUiNative]::SendMessage($generalTab, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
         Assert-Ui (-not [ElitePenUiNative]::IsWindowVisible($shortcutGuide)) 'General tab did not hide the shortcut guide.'
 
@@ -402,8 +413,8 @@ try {
         $null = [ElitePenUiNative]::SendMessage($settings, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)
     }
 
-    # Hibernation collapses the complete unit to 30 percent and leaves one
-    # obvious expansion target. Expanding restores the standard geometry.
+    # Hibernation leaves a small expansion target while the rest of the mini
+    # palette remains a draggable surface.
     Click-PaletteWindow $palette 126 113
     $collapsed = [ElitePenUiNative]::SendMessage($palette, 0x8060, [IntPtr]::Zero, [IntPtr]::Zero)
     $collapsedBounds = New-Object ElitePenUiNative+RECT
@@ -412,7 +423,21 @@ try {
     Assert-Ui (($collapsedBounds.Right - $collapsedBounds.Left) -eq 52 -and
                ($collapsedBounds.Bottom - $collapsedBounds.Top) -eq 50) `
         'Hibernated palette is not 70 percent smaller than the standard unit.'
-    Click-Window $palette 24 23
+    Click-Window $palette 4 4
+    $stillCollapsed = [ElitePenUiNative]::SendMessage($palette, 0x8060, [IntPtr]::Zero, [IntPtr]::Zero)
+    Assert-Ui ($stillCollapsed.ToInt64() -eq 1) `
+        'Clicking outside the compact expand icon expanded the palette unexpectedly.'
+    $dragStart = [IntPtr]((4 -shl 16) -bor 4)
+    $dragMove = [IntPtr]((16 -shl 16) -bor 24)
+    $null = [ElitePenUiNative]::SendMessage($palette, 0x0201, [IntPtr]1, $dragStart)
+    $null = [ElitePenUiNative]::SendMessage($palette, 0x0200, [IntPtr]1, $dragMove)
+    $null = [ElitePenUiNative]::SendMessage($palette, 0x0202, [IntPtr]0, $dragMove)
+    $movedBounds = New-Object ElitePenUiNative+RECT
+    $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$movedBounds)
+    Assert-Ui ($movedBounds.Left -ne $collapsedBounds.Left -or
+               $movedBounds.Top -ne $collapsedBounds.Top) `
+        'The compact palette could not be repositioned from its non-icon area.'
+    Click-Window $palette 27 23
     $expanded = [ElitePenUiNative]::SendMessage($palette, 0x8060, [IntPtr]::Zero, [IntPtr]::Zero)
     $expandedBounds = New-Object ElitePenUiNative+RECT
     $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$expandedBounds)
@@ -491,10 +516,15 @@ try {
 
     # Native zoom freezes with P, draws on an independent document, preserves
     # that document on resume and scopes clear/undo/redo to the zoom session.
-    Select-Tool $palette 11
+    # Exercise the exact global action behind Ctrl+Shift+M.
+    $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]7, [IntPtr]::Zero)
     $zoom = Wait-Window 'ElitePen.Zoom' 1000
     Assert-Ui ($zoom -ne [IntPtr]::Zero -and [ElitePenUiNative]::IsWindowVisible($zoom)) 'Zoom window did not activate.'
     if ($zoom -ne [IntPtr]::Zero) {
+        $zoomInk = Wait-Window 'ElitePen.ZoomInk' 1000
+        Assert-Ui ($zoomInk -ne [IntPtr]::Zero -and
+                   -not [ElitePenUiNative]::IsWindowVisible($zoomInk)) `
+            'Live zoom exposed the annotation layer before freezing.'
         $null = [ElitePenUiNative]::SendMessage($zoom, 0x0100, [IntPtr][char]'F', [IntPtr]::Zero)
         Start-Sleep -Milliseconds 100
         $full = New-Object ElitePenUiNative+RECT
@@ -509,13 +539,12 @@ try {
         $null = [ElitePenUiNative]::SendMessage($zoom, 0x0100, [IntPtr][char]'0', [IntPtr]::Zero)
         $null = [ElitePenUiNative]::SendMessage($zoom, 0x0100, [IntPtr][char]'0', [IntPtr]::Zero)
         $null = [ElitePenUiNative]::SendMessage($zoom, 0x0100, [IntPtr][char]'F', [IntPtr]::Zero)
-        $null = [ElitePenUiNative]::SendMessage($zoom, 0x0100, [IntPtr][char]'P', [IntPtr]::Zero)
+        $null = [ElitePenUiNative]::SendMessage($zoom, 0x0210, [IntPtr]0x0201, [IntPtr]::Zero)
         Start-Sleep -Milliseconds 180
-        $zoomInk = Wait-Window 'ElitePen.ZoomInk' 1000
         $frozen = [ElitePenUiNative]::SendMessage($zoom, 0x8061, [IntPtr]::Zero, [IntPtr]::Zero)
         $freezeTool = [ElitePenUiNative]::SendMessage($palette, 0x805A, [IntPtr]::Zero, [IntPtr]::Zero)
         Assert-Ui ($zoomInk -ne [IntPtr]::Zero -and [ElitePenUiNative]::IsWindowVisible($zoomInk) -and
-                   $frozen.ToInt64() -eq 1) 'P did not freeze the zoom into its annotation surface.'
+                   $frozen.ToInt64() -eq 1) 'Click did not freeze the zoom into its annotation surface.'
         Assert-Ui ($freezeTool.ToInt64() -eq 1) 'Freezing zoom did not activate the pen automatically.'
         Assert-Ui ([ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.ZoomInk') -and
                    [ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.Zoom')) `

@@ -1,5 +1,27 @@
 # Historial de cambios
 
+## 2.1.0 — 2026-08-10
+
+- Corregida la regresión que podía cubrir de negro el zoom al abrirlo con
+  `Ctrl+Shift+M`: la capa GPU de anotación permanece oculta durante la ampliación
+  viva y se inicializa antes de mostrarse únicamente al congelar.
+- El zoom vuelve a seguir el puntero y admite rueda, `+`/`-`, `F`, `L`, `D`, `I`,
+  `0`, `Espacio`/`M`; clic o `P` congelan/reanudan y `Esc`, `F4` o clic derecho salen.
+- Configuración > Atajos incorpora 32 acciones configurables: controles generales,
+  herramientas directas, texto, captura, paneles, contracción y comandos del zoom.
+- Cada atajo se edita exclusivamente desde un lápiz a la derecha; la lista es
+  desplazable, admite combinaciones contextuales de una tecla y permite desasignar
+  con `Supr` o `Retroceso` sin perder la restauración de fábrica.
+- El selector `+` es más pequeño y sigue mejor el arco de colores al desplazarse
+  ligeramente hacia abajo y a la derecha.
+- En modo contraído solo el icono central expande; el resto de la mini paleta muestra
+  el cursor de cuatro flechas y permite moverla directamente. El icono también reduce
+  su presencia visual.
+- La publicación portable conserva `data/settings.ini` y archiva cada versión previa
+  en una carpeta versionada, sin sobrescribir respaldos anteriores.
+- QA de interfaz comprueba que la capa `ZoomInk` esté oculta en vivo, congelación por
+  clic, lista de atajos con lápices y scroll, y movimiento compacto sin expansión.
+
 ## 2.0.0 — 2026-08-10
 
 - `P` congela o reanuda el zoom nativo; al congelar se activa automáticamente el

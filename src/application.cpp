@@ -257,18 +257,10 @@ HCURSOR create_pencil_cursor(UINT dpi) {
     return cursor;
 }
 
-constexpr int kHotkeyInteract = 1;
-constexpr int kHotkeyVisibility = 2;
-constexpr int kHotkeyWhiteboard = 3;
-constexpr int kHotkeyUndo = 4;
-constexpr int kHotkeyRedo = 5;
-constexpr int kHotkeyClear = 6;
-constexpr int kHotkeyZoom = 7;
-constexpr int kHotkeyBlackboard = 8;
-
 enum class ZoomView : int { Fullscreen = 0, Lens = 1, Docked = 2 };
 
 std::wstring hotkey_text(HotkeyBinding binding) {
+    if (binding.virtual_key == 0) return L"Sin asignar";
     std::wstring result;
     const auto append = [&result](const wchar_t* value) {
         if (!result.empty()) result += L" + ";
@@ -303,6 +295,48 @@ std::wstring hotkey_text(HotkeyBinding binding) {
     append(key_name[0] ? key_name : L"Tecla");
     return result;
 }
+
+struct HotkeyInfo {
+    const wchar_t* title;
+    const wchar_t* description;
+};
+
+constexpr std::array<HotkeyInfo, kHotkeyActionCount> kHotkeyInfo{{
+    {L"Cursor / lapiz", L"Alterna interaccion y dibujo"},
+    {L"Visibilidad", L"Oculta o muestra anotaciones"},
+    {L"Pizarra blanca", L"Abre o cierra el lienzo blanco"},
+    {L"Deshacer", L"Revierte en el contexto actual"},
+    {L"Rehacer", L"Recupera en el contexto actual"},
+    {L"Limpiar", L"Limpia el contexto actual"},
+    {L"Zoom", L"Abre o cierra la ampliacion"},
+    {L"Pizarra negra", L"Abre o cierra el lienzo negro"},
+    {L"Lapiz", L"Activa dibujo libre"},
+    {L"Resaltador", L"Activa tinta translucida"},
+    {L"Borrador", L"Activa borrado selectivo"},
+    {L"Linea", L"Activa linea recta"},
+    {L"Rectangulo", L"Activa rectangulo"},
+    {L"Elipse", L"Activa circulo o elipse"},
+    {L"Flecha", L"Activa flecha recta"},
+    {L"Flecha curva", L"Activa flecha Bezier"},
+    {L"Texto", L"Escribe directamente en pantalla"},
+    {L"Captura", L"Activa seleccion de captura"},
+    {L"Colores", L"Abre el selector completo"},
+    {L"Figuras", L"Abre geometria directamente"},
+    {L"Herramientas", L"Abre todas las herramientas"},
+    {L"Configuracion", L"Abre preferencias y atajos"},
+    {L"Contraer paleta", L"Contrae o expande Elite Pen"},
+    {L"Zoom: pausar", L"Congela o reanuda para anotar"},
+    {L"Zoom: completa", L"Cambia a pantalla completa"},
+    {L"Zoom: lente", L"Cambia a lente movil"},
+    {L"Zoom: acoplada", L"Acopla la ampliacion arriba"},
+    {L"Zoom: vista", L"Recorre los tres modos"},
+    {L"Zoom: invertir", L"Invierte o restaura colores"},
+    {L"Zoom: vision general", L"Alterna ampliacion 1x"},
+    {L"Zoom: acercar", L"Aumenta el nivel de zoom"},
+    {L"Zoom: alejar", L"Reduce el nivel de zoom"}
+}};
+
+constexpr std::size_t kVisibleShortcutRows = 7;
 
 class Controller;
 
@@ -397,6 +431,8 @@ protected:
 private:
     void install_tooltips();
     [[nodiscard]] bool command_at(POINT point) const;
+    [[nodiscard]] bool collapsed_expand_at(POINT point) const;
+    void begin_drag(POINT point);
     void activate_at(POINT point);
     void show_tool_menu();
     void show_tray_menu();
@@ -489,6 +525,7 @@ private:
     void paint_background(HDC dc);
     void paint_shortcuts(HDC dc, RECT bounds);
     void refresh_controls();
+    void refresh_shortcut_rows();
     void show_tab(int tab);
     void begin_hotkey_capture(std::size_t index);
     void finish_hotkey_capture(UINT virtual_key);
@@ -515,7 +552,9 @@ private:
     HWND palette_size_hint_{};
     HWND reset_position_{};
     HWND shortcuts_{};
-    std::array<HWND, kHotkeyActionCount> hotkey_buttons_{};
+    std::array<HWND, kVisibleShortcutRows> hotkey_buttons_{};
+    std::array<HWND, kVisibleShortcutRows> hotkey_edit_buttons_{};
+    HWND shortcut_scrollbar_{};
     HWND reset_hotkeys_{};
     HWND close_{};
     HWND chrome_close_{};
@@ -526,6 +565,7 @@ private:
     HBRUSH card_brush_{};
     int active_tab_{};
     int capturing_hotkey_{-1};
+    std::size_t shortcut_scroll_offset_{};
 };
 
 class ZoomInkWindow final : public WindowBase {
@@ -586,6 +626,7 @@ public:
     bool show_zoom();
     void hide_zoom();
     bool toggle_freeze();
+    void execute_action(HotkeyAction action);
     void bring_to_front();
     void invalidate_ink();
     void clear_annotations();
@@ -694,6 +735,8 @@ public:
     void show_settings_window();
     void apply_capture_preference();
     void set_palette_size(int size);
+    void execute_hotkey(HotkeyAction action);
+    [[nodiscard]] bool matches_hotkey(HotkeyAction action, WPARAM virtual_key) const;
     bool set_hotkey_binding(HotkeyAction action, HotkeyBinding binding);
     bool reset_hotkeys();
     void reset_palette_position();
@@ -1658,7 +1701,16 @@ void PaletteWindow::install_tooltips() {
         information.uFlags = TTF_SUBCLASS | TTF_TRANSPARENT;
         information.hwnd = window_;
         information.uId = 50;
-        information.rect = {0, 0, pixel_width(), pixel_height()};
+        const int width = pixel_width();
+        const int height = pixel_height();
+        const int center_x = static_cast<int>(std::lround(
+            static_cast<float>(width) * 0.52F));
+        const int center_y = static_cast<int>(std::lround(
+            static_cast<float>(height) * 0.46F));
+        const int radius = std::max(7, static_cast<int>(std::lround(
+            static_cast<float>(std::min(width, height)) * 0.17F)));
+        information.rect = {center_x - radius, center_y - radius,
+                            center_x + radius, center_y + radius};
         information.lpszText = const_cast<wchar_t*>(L"Expandir Elite Pen");
         SendMessageW(tooltip_, TTM_ADDTOOLW, 0,
                      reinterpret_cast<LPARAM>(&information));
@@ -1673,7 +1725,7 @@ void PaletteWindow::install_tooltips() {
         Tip{5, {152, 36, 186, 70}, L"Rojo"},
         Tip{6, {167, 79, 201, 113}, L"Verde"},
         Tip{7, {143, 113, 177, 147}, L"Morado"},
-        Tip{8, {96, 122, 130, 156}, L"Mas colores"},
+        Tip{8, {105, 132, 135, 162}, L"Mas colores"},
         Tip{9, {104, 61, 148, 105}, L"Ocultar o mostrar anotaciones"},
         Tip{17, {114, 101, 138, 125}, L"Contraer Elite Pen"},
         Tip{10, {42, 120, 86, 174}, L"Alternar entre lapiz y cursor normal"},
@@ -1707,16 +1759,19 @@ bool PaletteWindow::apply_hotkeys(
     const auto previous = registered_hotkeys_;
     const bool had_previous = hotkeys_registered_;
     remove_hotkeys();
-    for (std::size_t index = 0; index < bindings.size(); ++index) {
+    for (std::size_t index = 0; index < kGlobalHotkeyActionCount; ++index) {
+        if (bindings[index].virtual_key == 0) continue;
         const int id = static_cast<int>(index) + 1;
         if (!RegisterHotKey(window_, id, bindings[index].modifiers | MOD_NOREPEAT,
                             bindings[index].virtual_key)) {
-            for (int registered = 1; registered < id; ++registered)
+            for (int registered = 1;
+                 registered <= static_cast<int>(kGlobalHotkeyActionCount); ++registered)
                 UnregisterHotKey(window_, registered);
             hotkeys_registered_ = false;
             if (had_previous) {
                 bool restored = true;
-                for (std::size_t restore = 0; restore < previous.size(); ++restore) {
+                for (std::size_t restore = 0; restore < kGlobalHotkeyActionCount; ++restore) {
+                    if (previous[restore].virtual_key == 0) continue;
                     restored = RegisterHotKey(window_, static_cast<int>(restore) + 1,
                         previous[restore].modifiers | MOD_NOREPEAT,
                         previous[restore].virtual_key) != FALSE && restored;
@@ -1725,7 +1780,8 @@ bool PaletteWindow::apply_hotkeys(
                     registered_hotkeys_ = previous;
                     hotkeys_registered_ = true;
                 } else {
-                    for (int restore = kHotkeyInteract; restore <= kHotkeyBlackboard; ++restore)
+                    for (int restore = 1;
+                         restore <= static_cast<int>(kGlobalHotkeyActionCount); ++restore)
                         UnregisterHotKey(window_, restore);
                 }
             }
@@ -1739,7 +1795,8 @@ bool PaletteWindow::apply_hotkeys(
 
 void PaletteWindow::remove_hotkeys() {
     if (!hotkeys_registered_) return;
-    for (int id = kHotkeyInteract; id <= kHotkeyBlackboard; ++id) UnregisterHotKey(window_, id);
+    for (int id = 1; id <= static_cast<int>(kGlobalHotkeyActionCount); ++id)
+        UnregisterHotKey(window_, id);
     hotkeys_registered_ = false;
 }
 
@@ -1809,14 +1866,14 @@ void PaletteWindow::show_tray_menu() {
 }
 
 bool PaletteWindow::command_at(POINT point) const {
-    if (collapsed_) return true;
+    if (collapsed_) return collapsed_expand_at(point);
     point = palette_logical_point(point, scale_);
     constexpr std::array<float, 5> thickness_y{32.0F, 49.0F, 69.0F, 93.0F, 122.0F};
     for (const float y : thickness_y) {
         if (point_in_circle(point, 23.0F, y, 11.0F)) return true;
     }
     constexpr std::array<POINT, 7> color_points{{
-        {67, 107}, {69, 60}, {119, 29}, {169, 53}, {184, 96}, {160, 130}, {113, 139}
+        {67, 107}, {69, 60}, {119, 29}, {169, 53}, {184, 96}, {160, 130}, {120, 147}
     }};
     for (const auto& color_point : color_points) {
         if (point_in_circle(point, static_cast<float>(color_point.x),
@@ -1828,6 +1885,26 @@ bool PaletteWindow::command_at(POINT point) const {
            (point.x >= 42 && point.x <= 86 && point.y >= 120 && point.y <= 174) ||
            (point.x >= 88 && point.x <= 116 && point.y >= 151 && point.y <= 184) ||
            (point.x < 210 && point_near_segment(point, 106, 173, 205, 220, 14));
+}
+
+bool PaletteWindow::collapsed_expand_at(POINT point) const {
+    const int width = pixel_width();
+    const int height = pixel_height();
+    const float center_x = static_cast<float>(width) * 0.52F;
+    const float center_y = static_cast<float>(height) * 0.46F;
+    const float radius = std::max(7.0F,
+        static_cast<float>(std::min(width, height)) * 0.17F);
+    return point_in_circle(point, center_x, center_y, radius);
+}
+
+void PaletteWindow::begin_drag(POINT point) {
+    dragging_ = true;
+    drag_origin_ = point;
+    ClientToScreen(window_, &drag_origin_);
+    RECT bounds{};
+    GetWindowRect(window_, &bounds);
+    window_origin_ = {bounds.left, bounds.top};
+    SetCapture(window_);
 }
 
 bool PaletteWindow::contains_screen_point(POINT point) const {
@@ -1844,7 +1921,8 @@ bool PaletteWindow::activate_command_at(POINT point) {
 
 void PaletteWindow::activate_at(POINT point) {
     if (collapsed_) {
-        set_collapsed(false);
+        if (collapsed_expand_at(point)) set_collapsed(false);
+        else begin_drag(point);
         return;
     }
     const POINT physical_point = point;
@@ -1868,7 +1946,7 @@ void PaletteWindow::activate_at(POINT point) {
             return;
         }
     }
-    if (point_in_circle(point, 113, 139, 16)) { choose_custom_color(); return; }
+    if (point_in_circle(point, 120, 147, 14)) { choose_custom_color(); return; }
     if (point_in_circle(point, 126, 83, 22)) { controller_.toggle_visibility(); return; }
     if (point_in_circle(point, 126, 113, 10)) { set_collapsed(true); return; }
     if (point.x >= 205 && point_in_circle(point, 221, 233, 21)) {
@@ -1887,13 +1965,7 @@ void PaletteWindow::activate_at(POINT point) {
         show_tool_menu(); return;
     }
 
-    dragging_ = true;
-    drag_origin_ = physical_point;
-    ClientToScreen(window_, &drag_origin_);
-    RECT bounds{};
-    GetWindowRect(window_, &bounds);
-    window_origin_ = {bounds.left, bounds.top};
-    SetCapture(window_);
+    begin_drag(physical_point);
 }
 
 LRESULT PaletteWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
@@ -1953,18 +2025,10 @@ LRESULT PaletteWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
             }
             return 0;
         case WM_HOTKEY:
-            switch (static_cast<int>(wparam)) {
-                case kHotkeyInteract:
-                    controller_.set_tool(controller_.state().tool == Tool::Interact
-                        ? Tool::Pen : Tool::Interact); break;
-                case kHotkeyVisibility: controller_.toggle_visibility(); break;
-                case kHotkeyWhiteboard: controller_.toggle_whiteboard(); break;
-                case kHotkeyUndo: controller_.undo(); break;
-                case kHotkeyRedo: controller_.redo(); break;
-                case kHotkeyClear: controller_.clear_document(); break;
-                case kHotkeyZoom: controller_.toggle_zoom(); break;
-                case kHotkeyBlackboard: controller_.toggle_blackboard(); break;
-                default: break;
+            if (wparam >= 1 &&
+                wparam <= static_cast<WPARAM>(kGlobalHotkeyActionCount)) {
+                controller_.execute_hotkey(static_cast<HotkeyAction>(
+                    static_cast<std::size_t>(wparam) - 1));
             }
             return 0;
         case WM_TIMER:
@@ -2053,7 +2117,7 @@ void PaletteWindow::render() {
         context->DrawGeometry(shape.Get(), border.Get(), 1.1F);
         const float cx = width * 0.52F;
         const float cy = height * 0.46F;
-        const float span = std::clamp(std::min(width, height) * 0.16F, 5.0F, 10.0F);
+        const float span = std::clamp(std::min(width, height) * 0.11F, 4.0F, 7.0F);
         context->DrawLine(D2D1::Point2F(cx - 2, cy - 2),
                           D2D1::Point2F(cx - span, cy - span), icon.Get(), 1.7F);
         context->DrawLine(D2D1::Point2F(cx - span, cy - span),
@@ -2148,8 +2212,10 @@ void PaletteWindow::render() {
                                            3.2F, 2.1F), glass.Get());
     }
     // The advanced selector is intentionally just a clean plus sign after purple.
-    context->DrawLine(D2D1::Point2F(106, 139), D2D1::Point2F(120, 139), gold_bright.Get(), 2.1F);
-    context->DrawLine(D2D1::Point2F(113, 132), D2D1::Point2F(113, 146), gold_bright.Get(), 2.1F);
+    context->DrawLine(D2D1::Point2F(114.5F, 147), D2D1::Point2F(125.5F, 147),
+                      gold_bright.Get(), 1.8F);
+    context->DrawLine(D2D1::Point2F(120, 141.5F), D2D1::Point2F(120, 152.5F),
+                      gold_bright.Get(), 1.8F);
 
     const auto thickness_shadow = D2D1::RoundedRect(D2D1::RectF(5, 13, 41, 144), 17, 17);
     context->FillRoundedRectangle(thickness_shadow, shadow.Get());
@@ -3011,7 +3077,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.0.0",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.1.0",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
@@ -3106,10 +3172,18 @@ bool SettingsWindow::initialize() {
         reinterpret_cast<HMENU>(4103), GetModuleHandleW(nullptr), nullptr);
     for (std::size_t index = 0; index < hotkey_buttons_.size(); ++index) {
         hotkey_buttons_[index] = CreateWindowW(
-            L"BUTTON", L"", WS_CHILD | WS_TABSTOP | BS_OWNERDRAW,
-            366, 147 + static_cast<int>(index) * 35, 185, 28, window_,
+            L"BUTTON", L"", WS_CHILD | BS_OWNERDRAW,
+            350, 147 + static_cast<int>(index) * 35, 158, 28, window_,
             reinterpret_cast<HMENU>(4200 + index), GetModuleHandleW(nullptr), nullptr);
+        hotkey_edit_buttons_[index] = CreateWindowW(
+            L"BUTTON", L"Editar", WS_CHILD | WS_TABSTOP | BS_OWNERDRAW,
+            514, 147 + static_cast<int>(index) * 35, 32, 28, window_,
+            reinterpret_cast<HMENU>(4400 + index), GetModuleHandleW(nullptr), nullptr);
     }
+    shortcut_scrollbar_ = CreateWindowW(
+        L"SCROLLBAR", L"", WS_CHILD | SBS_VERT,
+        550, 147, 14, 238, window_, reinterpret_cast<HMENU>(4408),
+        GetModuleHandleW(nullptr), nullptr);
     reset_hotkeys_ = CreateWindowW(L"BUTTON", L"Restablecer atajos",
                                     WS_CHILD | WS_TABSTOP | BS_OWNERDRAW,
                                     405, 112, 146, 29, window_,
@@ -3123,11 +3197,15 @@ bool SettingsWindow::initialize() {
                        fade_label_, fade_, thickness_label_, thickness_, zoom_label_,
                        zoom_, zoom_view_label_, zoom_view_, zoom_invert_, palette_size_label_,
                        palette_size_, palette_size_hint_, reset_position_,
-                       shortcuts_, reset_hotkeys_, close_, chrome_close_}) {
+                       shortcuts_, shortcut_scrollbar_, reset_hotkeys_, close_, chrome_close_}) {
         SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(body_font_), TRUE);
         SetWindowTheme(child, L"DarkMode_Explorer", nullptr);
     }
     for (HWND button : hotkey_buttons_) {
+        SendMessageW(button, WM_SETFONT, reinterpret_cast<WPARAM>(small_font_), TRUE);
+        SetWindowTheme(button, L"DarkMode_Explorer", nullptr);
+    }
+    for (HWND button : hotkey_edit_buttons_) {
         SendMessageW(button, WM_SETFONT, reinterpret_cast<WPARAM>(small_font_), TRUE);
         SetWindowTheme(button, L"DarkMode_Explorer", nullptr);
     }
@@ -3193,45 +3271,40 @@ void SettingsWindow::paint_shortcuts(HDC dc, RECT bounds) {
     HGDIOBJ previous_font = SelectObject(dc, body_font_);
     SetTextColor(dc, RGB(226, 193, 120));
     RECT heading{bounds.left, bounds.top + 2, bounds.right, bounds.top + 23};
-    DrawTextW(dc, L"ATAJOS GLOBALES · CLIC PARA CAMBIAR", -1, &heading,
+    DrawTextW(dc, L"ATAJOS CONFIGURABLES · USA EL LAPIZ PARA EDITAR", -1, &heading,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
-    struct Row { const wchar_t* title; const wchar_t* description; };
-    constexpr std::array<Row, kHotkeyActionCount> rows{{
-        {L"Cursor / lápiz", L"Alterna el modo de interacción"},
-        {L"Visibilidad", L"Oculta o muestra anotaciones"},
-        {L"Pizarra blanca", L"Abre o cierra el lienzo blanco"},
-        {L"Deshacer", L"Revierte en el contexto actual"},
-        {L"Rehacer", L"Recupera en el contexto actual"},
-        {L"Limpiar", L"Limpia el contexto actual"},
-        {L"Zoom", L"Abre o cierra la ampliación"},
-        {L"Pizarra negra", L"Abre o cierra el lienzo negro"}
-    }};
-    for (std::size_t index = 0; index < rows.size(); ++index) {
-        const int y = bounds.top + 28 + static_cast<int>(index) * 35;
+    for (std::size_t slot = 0; slot < kVisibleShortcutRows; ++slot) {
+        const std::size_t index = shortcut_scroll_offset_ + slot;
+        if (index >= kHotkeyInfo.size()) break;
+        const int y = bounds.top + 28 + static_cast<int>(slot) * 35;
         SelectObject(dc, small_font_);
         SetTextColor(dc, RGB(240, 242, 246));
-        RECT title{bounds.left, y, bounds.left + 130, y + 16};
-        DrawTextW(dc, rows[index].title, -1, &title,
+        RECT title{bounds.left, y, bounds.left + 122, y + 16};
+        DrawTextW(dc, kHotkeyInfo[index].title, -1, &title,
                   DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
         SetTextColor(dc, RGB(142, 151, 166));
-        RECT description{bounds.left + 133, y, bounds.left + 330, y + 16};
-        DrawTextW(dc, rows[index].description, -1, &description,
+        RECT description{bounds.left + 126, y, bounds.left + 318, y + 16};
+        DrawTextW(dc, kHotkeyInfo[index].description, -1, &description,
                   DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
     }
     SelectObject(dc, body_font_);
     SetTextColor(dc, RGB(226, 193, 120));
-    RECT context_heading{bounds.left, bounds.top + 311, bounds.right, bounds.top + 332};
-    DrawTextW(dc, L"ATAJOS CONTEXTUALES", -1, &context_heading,
+    RECT context_heading{bounds.left, bounds.top + 262, bounds.right, bounds.top + 281};
+    DrawTextW(dc, L"GUIA RAPIDA DEL ZOOM", -1, &context_heading,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
     SelectObject(dc, small_font_);
-    constexpr std::array<Row, 4> contextual{{
-        {L"P · zoom", L"Congelar/reanudar; al congelar activa el lápiz"},
-        {L"Esc", L"Salir del zoom, pizarra o acción temporal"},
-        {L"Rueda / + / −", L"Cambiar ampliación · F/L/D cambiar vista"},
-        {L"Texto", L"Ctrl+Enter insertar · Esc cancelar · Ctrl+V pegar"}
+    constexpr std::array<HotkeyInfo, 8> contextual{{
+        {L"P / clic", L"Congelar o reanudar; al pausar activa el lapiz"},
+        {L"Rueda / + / -", L"Aumentar o reducir la ampliacion"},
+        {L"F / L / D", L"Pantalla completa, lente o vista acoplada"},
+        {L"I / 0", L"Invertir colores o ver el monitor completo"},
+        {L"Espacio / M", L"Recorrer las vistas del zoom"},
+        {L"Esc / F4 / clic der.", L"Salir del zoom de forma segura"},
+        {L"Texto", L"Ctrl+Enter insertar, Ctrl+V pegar, Esc cancelar"},
+        {L"Figuras", L"Shift conserva cuadrado o circulo perfecto"}
     }};
     for (std::size_t index = 0; index < contextual.size(); ++index) {
-        const int y = bounds.top + 334 + static_cast<int>(index) * 17;
+        const int y = bounds.top + 282 + static_cast<int>(index) * 14;
         SetTextColor(dc, RGB(240, 242, 246));
         RECT key{bounds.left, y, bounds.left + 118, y + 16};
         DrawTextW(dc, contextual[index].title, -1, &key,
@@ -3255,8 +3328,7 @@ void SettingsWindow::show_tab(int tab) {
     }
     ShowWindow(shortcuts_, active_tab_ == 1 ? SW_SHOW : SW_HIDE);
     ShowWindow(reset_hotkeys_, active_tab_ == 1 ? SW_SHOW : SW_HIDE);
-    for (HWND button : hotkey_buttons_)
-        ShowWindow(button, active_tab_ == 1 ? SW_SHOW : SW_HIDE);
+    refresh_shortcut_rows();
     InvalidateRect(tab_general_, nullptr, TRUE);
     InvalidateRect(tab_shortcuts_, nullptr, TRUE);
     InvalidateRect(window_, nullptr, TRUE);
@@ -3304,28 +3376,52 @@ void SettingsWindow::refresh_controls() {
     SendMessageW(zoom_invert_, BM_SETCHECK,
                  preferences.zoom_invert ? BST_CHECKED : BST_UNCHECKED, 0);
     cancel_hotkey_capture();
-    for (std::size_t index = 0; index < hotkey_buttons_.size(); ++index) {
-        const std::wstring label = hotkey_text(preferences.hotkeys[index]);
-        SetWindowTextW(hotkey_buttons_[index], label.c_str());
+    refresh_shortcut_rows();
+}
+
+void SettingsWindow::refresh_shortcut_rows() {
+    const std::size_t maximum_offset = kHotkeyActionCount > kVisibleShortcutRows
+        ? kHotkeyActionCount - kVisibleShortcutRows : 0;
+    shortcut_scroll_offset_ = std::min(shortcut_scroll_offset_, maximum_offset);
+    const bool visible = active_tab_ == 1;
+    for (std::size_t slot = 0; slot < kVisibleShortcutRows; ++slot) {
+        const std::size_t index = shortcut_scroll_offset_ + slot;
+        const bool row_visible = visible && index < kHotkeyActionCount;
+        if (row_visible) {
+            const std::wstring label = capturing_hotkey_ == static_cast<int>(index)
+                ? L"Pulsa combinacion..."
+                : hotkey_text(controller_.preferences().hotkeys[index]);
+            SetWindowTextW(hotkey_buttons_[slot], label.c_str());
+        }
+        ShowWindow(hotkey_buttons_[slot], row_visible ? SW_SHOW : SW_HIDE);
+        ShowWindow(hotkey_edit_buttons_[slot], row_visible ? SW_SHOW : SW_HIDE);
+        InvalidateRect(hotkey_buttons_[slot], nullptr, TRUE);
+        InvalidateRect(hotkey_edit_buttons_[slot], nullptr, TRUE);
     }
+    ShowWindow(shortcut_scrollbar_, visible ? SW_SHOW : SW_HIDE);
+    SCROLLINFO information{};
+    information.cbSize = sizeof(information);
+    information.fMask = SIF_RANGE | SIF_PAGE | SIF_POS;
+    information.nMin = 0;
+    information.nMax = static_cast<int>(kHotkeyActionCount) - 1;
+    information.nPage = static_cast<UINT>(kVisibleShortcutRows);
+    information.nPos = static_cast<int>(shortcut_scroll_offset_);
+    SetScrollInfo(shortcut_scrollbar_, SB_CTL, &information, TRUE);
+    if (shortcuts_) InvalidateRect(shortcuts_, nullptr, TRUE);
 }
 
 void SettingsWindow::begin_hotkey_capture(std::size_t index) {
-    if (index >= hotkey_buttons_.size()) return;
+    if (index >= kHotkeyActionCount) return;
     cancel_hotkey_capture();
     capturing_hotkey_ = static_cast<int>(index);
-    SetWindowTextW(hotkey_buttons_[index], L"Pulsa combinación…");
-    InvalidateRect(hotkey_buttons_[index], nullptr, TRUE);
+    refresh_shortcut_rows();
     SetFocus(window_);
 }
 
 void SettingsWindow::cancel_hotkey_capture() {
     if (capturing_hotkey_ < 0) return;
-    const std::size_t index = static_cast<std::size_t>(capturing_hotkey_);
     capturing_hotkey_ = -1;
-    const std::wstring label = hotkey_text(controller_.preferences().hotkeys[index]);
-    SetWindowTextW(hotkey_buttons_[index], label.c_str());
-    InvalidateRect(hotkey_buttons_[index], nullptr, TRUE);
+    refresh_shortcut_rows();
 }
 
 void SettingsWindow::finish_hotkey_capture(UINT virtual_key) {
@@ -3344,14 +3440,28 @@ void SettingsWindow::finish_hotkey_capture(UINT virtual_key) {
     if ((GetKeyState(VK_MENU) & 0x8000) != 0) modifiers |= MOD_ALT;
     if ((GetKeyState(VK_LWIN) & 0x8000) != 0 || (GetKeyState(VK_RWIN) & 0x8000) != 0)
         modifiers |= MOD_WIN;
+    const std::size_t capture_index = static_cast<std::size_t>(capturing_hotkey_);
+    if (virtual_key == VK_DELETE || virtual_key == VK_BACK) {
+        if (!controller_.set_hotkey_binding(
+                static_cast<HotkeyAction>(capture_index), HotkeyBinding{})) {
+            MessageBoxW(window_, L"No se pudo quitar este atajo.", L"Elite Pen",
+                        MB_OK | MB_ICONWARNING);
+            return;
+        }
+        capturing_hotkey_ = -1;
+        refresh_shortcut_rows();
+        return;
+    }
     const bool function_key = virtual_key >= VK_F1 && virtual_key <= VK_F24;
-    if (modifiers == 0 && !function_key) {
+    const bool global = capture_index < kGlobalHotkeyActionCount;
+    if (global && modifiers == 0 && !function_key) {
         MessageBoxW(window_, L"Usa Ctrl, Alt, Shift o Win junto a la tecla. "
-                    L"Las teclas F1–F24 también pueden usarse solas.",
+                    L"Las teclas F1-F24 tambien pueden usarse solas. "
+                    L"Pulsa Supr o Retroceso para dejarlo sin asignar.",
                     L"Atajo seguro — Elite Pen", MB_OK | MB_ICONINFORMATION);
         return;
     }
-    const auto action = static_cast<HotkeyAction>(capturing_hotkey_);
+    const auto action = static_cast<HotkeyAction>(capture_index);
     const HotkeyBinding binding{modifiers, virtual_key};
     if (!controller_.set_hotkey_binding(action, binding)) {
         MessageBoxW(window_, L"La combinación ya está en uso por Elite Pen o por Windows. "
@@ -3359,11 +3469,8 @@ void SettingsWindow::finish_hotkey_capture(UINT virtual_key) {
                     MB_OK | MB_ICONWARNING);
         return;
     }
-    const std::size_t index = static_cast<std::size_t>(capturing_hotkey_);
     capturing_hotkey_ = -1;
-    const std::wstring label = hotkey_text(controller_.preferences().hotkeys[index]);
-    SetWindowTextW(hotkey_buttons_[index], label.c_str());
-    InvalidateRect(hotkey_buttons_[index], nullptr, TRUE);
+    refresh_shortcut_rows();
 }
 
 void SettingsWindow::show_settings() {
@@ -3403,9 +3510,10 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
                 show_tab(1);
                 return 0;
             }
-            if (id >= 4200 && id < 4200 + static_cast<int>(kHotkeyActionCount) &&
+            if (id >= 4400 && id < 4400 + static_cast<int>(kVisibleShortcutRows) &&
                 HIWORD(wparam) == BN_CLICKED) {
-                begin_hotkey_capture(static_cast<std::size_t>(id - 4200));
+                begin_hotkey_capture(shortcut_scroll_offset_ +
+                    static_cast<std::size_t>(id - 4400));
                 return 0;
             }
             if (id == 4300 && HIWORD(wparam) == BN_CLICKED) {
@@ -3526,6 +3634,41 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
             }
             break;
         }
+        case WM_VSCROLL:
+            if (reinterpret_cast<HWND>(lparam) == shortcut_scrollbar_) {
+                const std::size_t maximum_offset = kHotkeyActionCount - kVisibleShortcutRows;
+                int next = static_cast<int>(shortcut_scroll_offset_);
+                switch (LOWORD(wparam)) {
+                    case SB_LINEUP: --next; break;
+                    case SB_LINEDOWN: ++next; break;
+                    case SB_PAGEUP: next -= static_cast<int>(kVisibleShortcutRows); break;
+                    case SB_PAGEDOWN: next += static_cast<int>(kVisibleShortcutRows); break;
+                    case SB_THUMBPOSITION:
+                    case SB_THUMBTRACK: next = HIWORD(wparam); break;
+                    case SB_TOP: next = 0; break;
+                    case SB_BOTTOM: next = static_cast<int>(maximum_offset); break;
+                    default: return 0;
+                }
+                cancel_hotkey_capture();
+                shortcut_scroll_offset_ = static_cast<std::size_t>(std::clamp(
+                    next, 0, static_cast<int>(maximum_offset)));
+                refresh_shortcut_rows();
+                return 0;
+            }
+            break;
+        case WM_MOUSEWHEEL:
+            if (active_tab_ == 1) {
+                const int direction = GET_WHEEL_DELTA_WPARAM(wparam) > 0 ? -2 : 2;
+                const int maximum_offset = static_cast<int>(
+                    kHotkeyActionCount - kVisibleShortcutRows);
+                cancel_hotkey_capture();
+                shortcut_scroll_offset_ = static_cast<std::size_t>(std::clamp(
+                    static_cast<int>(shortcut_scroll_offset_) + direction,
+                    0, maximum_offset));
+                refresh_shortcut_rows();
+                return 0;
+            }
+            break;
         case WM_KEYDOWN:
         case WM_SYSKEYDOWN:
             if (capturing_hotkey_ >= 0) {
@@ -3552,6 +3695,33 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
             const bool pressed = (item->itemState & ODS_SELECTED) != 0;
             const bool focused = (item->itemState & ODS_FOCUS) != 0;
             SetBkMode(item->hDC, TRANSPARENT);
+            if (id >= 4400 && id < 4400 + static_cast<int>(kVisibleShortcutRows)) {
+                FillRect(item->hDC, &item->rcItem, card_brush_);
+                HBRUSH face = CreateSolidBrush(pressed ? RGB(54, 61, 73) : RGB(30, 35, 44));
+                HPEN outline = CreatePen(PS_SOLID, focused ? 2 : 1,
+                    focused ? RGB(226, 193, 120) : RGB(74, 84, 100));
+                HGDIOBJ previous_brush = SelectObject(item->hDC, face);
+                HGDIOBJ previous_pen = SelectObject(item->hDC, outline);
+                RoundRect(item->hDC, item->rcItem.left, item->rcItem.top,
+                          item->rcItem.right, item->rcItem.bottom, 10, 10);
+                SelectObject(item->hDC, previous_pen);
+                SelectObject(item->hDC, previous_brush);
+                DeleteObject(outline);
+                DeleteObject(face);
+                const int cx = (item->rcItem.left + item->rcItem.right) / 2;
+                const int cy = (item->rcItem.top + item->rcItem.bottom) / 2;
+                HPEN pencil = CreatePen(PS_SOLID, 2, RGB(244, 219, 154));
+                previous_pen = SelectObject(item->hDC, pencil);
+                MoveToEx(item->hDC, cx - 5, cy + 5, nullptr);
+                LineTo(item->hDC, cx + 5, cy - 5);
+                MoveToEx(item->hDC, cx - 6, cy + 6, nullptr);
+                LineTo(item->hDC, cx - 2, cy + 5);
+                MoveToEx(item->hDC, cx + 3, cy - 6, nullptr);
+                LineTo(item->hDC, cx + 6, cy - 3);
+                SelectObject(item->hDC, previous_pen);
+                DeleteObject(pencil);
+                return TRUE;
+            }
             if (id == 4101 || id == 4102) {
                 const bool active = (id == 4101 && active_tab_ == 0) ||
                                     (id == 4102 && active_tab_ == 1);
@@ -3730,8 +3900,8 @@ void ZoomInkWindow::set_bounds(RECT bounds) {
 void ZoomInkWindow::show_live(RECT bounds) {
     set_bounds(bounds);
     set_frozen(false);
+    render();
     ShowWindow(window_, SW_SHOWNOACTIVATE);
-    invalidate();
 }
 
 void ZoomInkWindow::hide() {
@@ -3757,11 +3927,6 @@ void ZoomInkWindow::set_frozen(bool frozen) {
     SetWindowPos(window_, HWND_TOPMOST, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED |
                  (frozen_ ? 0U : SWP_NOACTIVATE));
-    ShowWindow(window_, frozen_ ? SW_SHOW : SW_SHOWNOACTIVATE);
-    if (frozen_) {
-        SetForegroundWindow(window_);
-        SetFocus(window_);
-    }
     invalidate();
 }
 
@@ -3839,6 +4004,10 @@ bool ZoomInkWindow::freeze(RECT bounds, HWND magnifier) {
     DwmFlush();
     if (!capture_snapshot(magnifier, bounds)) return false;
     set_frozen(true);
+    render();
+    ShowWindow(window_, SW_SHOW);
+    SetForegroundWindow(window_);
+    SetFocus(window_);
     return true;
 }
 
@@ -4076,9 +4245,13 @@ LRESULT ZoomInkWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
             else if (erasing_) cancel_gesture();
             return 0;
         case WM_KEYDOWN:
-            if (wparam == 'P') {
-                controller_.toggle_zoom_freeze();
-                return 0;
+            for (std::size_t index = kGlobalHotkeyActionCount;
+                 index < kHotkeyActionCount; ++index) {
+                const auto action = static_cast<HotkeyAction>(index);
+                if (controller_.matches_hotkey(action, wparam)) {
+                    controller_.execute_hotkey(action);
+                    return 0;
+                }
             }
             if (wparam == VK_ESCAPE || wparam == VK_F4) {
                 controller_.toggle_zoom();
@@ -4187,7 +4360,6 @@ bool ZoomWindow::show_zoom() {
     tool_before_zoom_ = controller_.state().tool;
     if (mag_set_filter_) {
         std::vector<HWND> excluded{window_};
-        if (ink_) excluded.push_back(ink_->hwnd());
         if (controller_.palette()) excluded.push_back(controller_.palette()->hwnd());
         mag_set_filter_(magnifier_, MW_FILTERMODE_EXCLUDE,
                         static_cast<int>(excluded.size()), excluded.data());
@@ -4198,7 +4370,6 @@ bool ZoomWindow::show_zoom() {
     refresh_source();
     apply_color_effect();
     ShowWindow(window_, SW_SHOW);
-    if (ink_) ink_->show_live(zoom_rect_);
     controller_.update_overlay_interaction();
     SetForegroundWindow(window_);
     SetFocus(window_);
@@ -4240,6 +4411,54 @@ bool ZoomWindow::toggle_freeze() {
     }
     controller_.set_tool(Tool::Pen);
     return true;
+}
+
+void ZoomWindow::execute_action(HotkeyAction action) {
+    if (!active_) return;
+    switch (action) {
+        case HotkeyAction::ZoomFreeze:
+            toggle_freeze();
+            break;
+        case HotkeyAction::ZoomFullscreen:
+            controller_.preferences().zoom_view = static_cast<int>(ZoomView::Fullscreen);
+            controller_.save_preferences();
+            refresh_source();
+            break;
+        case HotkeyAction::ZoomLens:
+            controller_.preferences().zoom_view = static_cast<int>(ZoomView::Lens);
+            controller_.save_preferences();
+            refresh_source();
+            break;
+        case HotkeyAction::ZoomDocked:
+            controller_.preferences().zoom_view = static_cast<int>(ZoomView::Docked);
+            controller_.save_preferences();
+            refresh_source();
+            break;
+        case HotkeyAction::ZoomCycleView:
+            cycle_view();
+            break;
+        case HotkeyAction::ZoomInvert:
+            controller_.preferences().zoom_invert = !controller_.preferences().zoom_invert;
+            controller_.save_preferences();
+            apply_color_effect();
+            break;
+        case HotkeyAction::ZoomOverview:
+            overview_ = !overview_;
+            refresh_source();
+            break;
+        case HotkeyAction::ZoomIn:
+            controller_.state().zoom_factor = std::min(
+                8.0F, controller_.state().zoom_factor + 0.25F);
+            refresh_source();
+            break;
+        case HotkeyAction::ZoomOut:
+            controller_.state().zoom_factor = std::max(
+                1.25F, controller_.state().zoom_factor - 0.25F);
+            refresh_source();
+            break;
+        default:
+            break;
+    }
 }
 
 void ZoomWindow::bring_to_front() {
@@ -4369,48 +4588,28 @@ LRESULT ZoomWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
             refresh_source();
             return 0;
         }
+        case WM_PARENTNOTIFY:
+            if (LOWORD(wparam) == WM_LBUTTONDOWN && !frozen()) {
+                toggle_freeze();
+                return 0;
+            }
+            break;
         case WM_KEYDOWN:
             if (wparam == VK_ESCAPE || wparam == VK_F4) {
                 controller_.toggle_zoom();
                 return 0;
             }
-            if (wparam == 'F') {
-                controller_.preferences().zoom_view = static_cast<int>(ZoomView::Fullscreen);
-                controller_.save_preferences(); refresh_source(); return 0;
+            for (std::size_t index = kGlobalHotkeyActionCount;
+                 index < kHotkeyActionCount; ++index) {
+                const auto action = static_cast<HotkeyAction>(index);
+                if (controller_.matches_hotkey(action, wparam)) {
+                    execute_action(action);
+                    return 0;
+                }
             }
-            if (wparam == 'P') {
-                toggle_freeze();
-                return 0;
-            }
-            if (wparam == 'L') {
-                controller_.preferences().zoom_view = static_cast<int>(ZoomView::Lens);
-                controller_.save_preferences(); refresh_source(); return 0;
-            }
-            if (wparam == 'D') {
-                controller_.preferences().zoom_view = static_cast<int>(ZoomView::Docked);
-                controller_.save_preferences(); refresh_source(); return 0;
-            }
-            if (wparam == 'M' || wparam == VK_SPACE) { cycle_view(); return 0; }
-            if (wparam == 'I') {
-                controller_.preferences().zoom_invert =
-                    !controller_.preferences().zoom_invert;
-                controller_.save_preferences(); apply_color_effect(); return 0;
-            }
-            if (wparam == '0') {
-                overview_ = !overview_; refresh_source(); return 0;
-            }
-            if (wparam == VK_ADD || wparam == VK_OEM_PLUS) {
-                controller_.state().zoom_factor = std::min(8.0F,
-                    controller_.state().zoom_factor + 0.25F);
-                refresh_source();
-                return 0;
-            }
-            if (wparam == VK_SUBTRACT || wparam == VK_OEM_MINUS) {
-                controller_.state().zoom_factor = std::max(1.25F,
-                    controller_.state().zoom_factor - 0.25F);
-                refresh_source();
-                return 0;
-            }
+            if (wparam == 'M') { cycle_view(); return 0; }
+            if (wparam == VK_ADD) { execute_action(HotkeyAction::ZoomIn); return 0; }
+            if (wparam == VK_SUBTRACT) { execute_action(HotkeyAction::ZoomOut); return 0; }
             break;
         case WM_KILLFOCUS:
             // Keep zoom active; global shortcut or Esc returns safely.
@@ -4709,6 +4908,55 @@ void Controller::toggle_geometry_panel() {
     if (!was_visible) tools_->toggle_geometry_near(palette_->hwnd());
 }
 
+void Controller::execute_hotkey(HotkeyAction action) {
+    switch (action) {
+        case HotkeyAction::Interact:
+            set_tool(state_.tool == Tool::Interact ? Tool::Pen : Tool::Interact);
+            break;
+        case HotkeyAction::Visibility: toggle_visibility(); break;
+        case HotkeyAction::Whiteboard: toggle_whiteboard(); break;
+        case HotkeyAction::Undo: undo(); break;
+        case HotkeyAction::Redo: redo(); break;
+        case HotkeyAction::Clear: clear_document(); break;
+        case HotkeyAction::Zoom: toggle_zoom(); break;
+        case HotkeyAction::Blackboard: toggle_blackboard(); break;
+        case HotkeyAction::Pen: set_tool(Tool::Pen); break;
+        case HotkeyAction::Highlighter: set_tool(Tool::Highlighter); break;
+        case HotkeyAction::Eraser: set_tool(Tool::Eraser); break;
+        case HotkeyAction::Line: set_tool(Tool::Line); break;
+        case HotkeyAction::Rectangle: set_tool(Tool::Rectangle); break;
+        case HotkeyAction::Ellipse: set_tool(Tool::Ellipse); break;
+        case HotkeyAction::Arrow: set_tool(Tool::Arrow); break;
+        case HotkeyAction::CurvedArrow: set_tool(Tool::CurvedArrow); break;
+        case HotkeyAction::Text: set_tool(Tool::Text); break;
+        case HotkeyAction::Screenshot: set_tool(Tool::Screenshot); break;
+        case HotkeyAction::ColorPanel: toggle_color_panel(); break;
+        case HotkeyAction::GeometryPanel: toggle_geometry_panel(); break;
+        case HotkeyAction::ToolPanel: toggle_tool_panel(); break;
+        case HotkeyAction::Settings: show_settings_window(); break;
+        case HotkeyAction::PaletteCollapse:
+            if (palette_) palette_->set_collapsed(!palette_->collapsed());
+            break;
+        default:
+            if (zoom_) zoom_->execute_action(action);
+            break;
+    }
+}
+
+bool Controller::matches_hotkey(HotkeyAction action, WPARAM virtual_key) const {
+    const std::size_t index = static_cast<std::size_t>(action);
+    if (index >= preferences_.hotkeys.size()) return false;
+    const auto binding = preferences_.hotkeys[index];
+    if (binding.virtual_key == 0 || binding.virtual_key != virtual_key) return false;
+    UINT modifiers = 0;
+    if ((GetKeyState(VK_CONTROL) & 0x8000) != 0) modifiers |= MOD_CONTROL;
+    if ((GetKeyState(VK_SHIFT) & 0x8000) != 0) modifiers |= MOD_SHIFT;
+    if ((GetKeyState(VK_MENU) & 0x8000) != 0) modifiers |= MOD_ALT;
+    if ((GetKeyState(VK_LWIN) & 0x8000) != 0 ||
+        (GetKeyState(VK_RWIN) & 0x8000) != 0) modifiers |= MOD_WIN;
+    return modifiers == binding.modifiers;
+}
+
 void Controller::close_panels() {
     if (colors_) colors_->hide();
     if (tools_) tools_->hide();
@@ -4990,8 +5238,12 @@ void Controller::set_palette_size(int size) {
 bool Controller::set_hotkey_binding(HotkeyAction action, HotkeyBinding binding) {
     const std::size_t index = static_cast<std::size_t>(action);
     if (index >= preferences_.hotkeys.size() || !palette_) return false;
-    for (std::size_t current = 0; current < preferences_.hotkeys.size(); ++current) {
-        if (current != index && preferences_.hotkeys[current] == binding) return false;
+    const bool global = index < kGlobalHotkeyActionCount;
+    for (std::size_t current = 0; binding.virtual_key != 0 &&
+         current < preferences_.hotkeys.size(); ++current) {
+        const bool current_global = current < kGlobalHotkeyActionCount;
+        if (current != index && global == current_global &&
+            preferences_.hotkeys[current] == binding) return false;
     }
     auto candidate = preferences_.hotkeys;
     candidate[index] = binding;
