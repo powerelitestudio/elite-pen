@@ -1,6 +1,6 @@
-# Elite Pen 2.2 — contrato de producto
+# Elite Pen 2.3 — contrato de producto
 
-Estado: version 2.2.0 implementada.
+Estado: version 2.3.0 implementada.
 
 ## 1. Identidad e interaccion principal
 
@@ -93,9 +93,26 @@ añade una fila independiente para Configuracion.
 - Deshacer y rehacer conservan inserciones, borrados y limpiezas.
 - Limpiar nunca destruye el historial inmediatamente.
 - El cambio de visibilidad, color, grosor o herramienta no altera dibujos existentes.
-- El historial se limita por cantidad y memoria, descartando primero lo mas antiguo.
+- El historial se limita por cantidad y descarta primero lo más antiguo en tiempo
+  constante. Los trazos se mueven entre documento e historial, sin duplicar sus
+  vectores de puntos.
 - Al cerrar, las preferencias se guardan de forma atomica. Las anotaciones no se
   persisten por defecto para evitar recuperar informacion sensible inesperadamente.
+
+### Contrato de rendimiento
+
+- La tinta terminada se rasteriza en una superficie Direct2D retenida por monitor;
+  el repintado normal compone un bitmap, no vuelve a recorrer todos los trazos.
+- Añadir un trazo actualiza únicamente ese objeto. Borrar, limpiar, deshacer o
+  rehacer reconstruyen la superficie solo cuando la operación elimina o reordena
+  píxeles existentes.
+- La entrada nunca espera deliberadamente al compositor. Un cuadro ocupado se
+  reintenta mediante el ciclo de mensajes conservando la interfaz receptiva.
+- El benchmark de lanzamiento exige, con 5.000 trazos en el equipo de referencia,
+  menos de 8 ms de media por cuadro en caché, menos de 12 ms mientras se dibuja y
+  menos de 350 MiB de memoria de trabajo.
+- El zoom no repite operaciones nativas si puntero, vista, aumento y modo general no
+  han cambiado. Las vistas con geometría fija solo actualizan la región fuente.
 
 ## 4. Pizarra y zoom
 

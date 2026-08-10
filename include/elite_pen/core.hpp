@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <deque>
 #include <optional>
 #include <string>
 #include <utility>
@@ -25,6 +26,10 @@ struct RectF {
     [[nodiscard]] float height() const noexcept { return bottom - top; }
     [[nodiscard]] bool contains(PointF p) const noexcept {
         return p.x >= left && p.x <= right && p.y >= top && p.y <= bottom;
+    }
+    [[nodiscard]] bool intersects(const RectF& other) const noexcept {
+        return right >= other.left && left <= other.right &&
+               bottom >= other.top && top <= other.bottom;
     }
 };
 
@@ -93,8 +98,15 @@ struct CubicBezier {
     PointF end{};
 };
 
+struct ArrowHead {
+    PointF left{};
+    PointF right{};
+};
+
 [[nodiscard]] CubicBezier curved_arrow_bezier(PointF start, PointF end) noexcept;
 [[nodiscard]] PointF cubic_bezier_point(const CubicBezier& curve, float t) noexcept;
+[[nodiscard]] ArrowHead arrow_head_points(PointF before, PointF end,
+                                          float width) noexcept;
 [[nodiscard]] bool hit_test(const Drawable& item, PointF point, float tolerance = 3.0F) noexcept;
 [[nodiscard]] std::vector<PointF> simplify_path(const std::vector<PointF>& input,
                                                 float epsilon);
@@ -102,6 +114,15 @@ struct CubicBezier {
 struct IndexedDrawable {
     std::size_t index{};
     Drawable drawable;
+};
+
+enum class DocumentChangeKind : std::uint8_t {
+    None,
+    Append,
+    Insert,
+    Remove,
+    Clear,
+    Rebuild,
 };
 
 class Document {
@@ -113,6 +134,13 @@ public:
     [[nodiscard]] bool can_undo() const noexcept { return !undo_.empty(); }
     [[nodiscard]] bool can_redo() const noexcept { return !redo_.empty(); }
     [[nodiscard]] std::size_t history_size() const noexcept { return undo_.size(); }
+    [[nodiscard]] std::uint64_t revision() const noexcept { return revision_; }
+    [[nodiscard]] DocumentChangeKind last_change_kind() const noexcept {
+        return last_change_kind_;
+    }
+    [[nodiscard]] std::size_t last_change_index() const noexcept {
+        return last_change_index_;
+    }
 
     void add(Drawable drawable);
     bool erase_at(PointF point, float tolerance = 6.0F);
@@ -130,13 +158,21 @@ private:
     };
 
     void commit(Operation operation);
-    void apply(const Operation& operation);
-    void revert(const Operation& operation);
+    void apply(Operation& operation);
+    void revert(Operation& operation);
+    void changed(DocumentChangeKind kind, std::size_t index = 0) noexcept {
+        ++revision_;
+        last_change_kind_ = kind;
+        last_change_index_ = index;
+    }
 
     std::vector<Drawable> items_;
-    std::vector<Operation> undo_;
-    std::vector<Operation> redo_;
+    std::deque<Operation> undo_;
+    std::deque<Operation> redo_;
     std::size_t history_limit_;
+    std::uint64_t revision_{};
+    DocumentChangeKind last_change_kind_{DocumentChangeKind::None};
+    std::size_t last_change_index_{};
     bool compound_active_{};
     std::optional<Operation> compound_operation_;
 };

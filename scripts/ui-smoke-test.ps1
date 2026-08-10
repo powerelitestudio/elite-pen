@@ -8,10 +8,22 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$executable = if ($ExecutablePath) { [IO.Path]::GetFullPath($ExecutablePath) } else {
+$sourceExecutable = if ($ExecutablePath) { [IO.Path]::GetFullPath($ExecutablePath) } else {
     Join-Path $repoRoot "build\$($Configuration.ToLowerInvariant())\Elite Pen.exe"
 }
-if (-not (Test-Path -LiteralPath $executable)) { throw "Missing executable: $executable" }
+if (-not (Test-Path -LiteralPath $sourceExecutable)) {
+    throw "Missing executable: $sourceExecutable"
+}
+
+# UI QA must never read or mutate the user's installed/portable preferences.
+# Run the exact binary from a fresh portable sandbox and discard all state.
+$qaSandbox = Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) `
+    ("elite-pen-ui-qa-" + [Guid]::NewGuid().ToString('N'))
+New-Item -ItemType Directory -Path $qaSandbox | Out-Null
+$executable = Join-Path $qaSandbox 'Elite Pen.exe'
+Copy-Item -LiteralPath $sourceExecutable -Destination $executable
+Set-Content -LiteralPath (Join-Path $qaSandbox 'portable.flag') `
+    -Value 'Elite Pen isolated UI QA' -Encoding ascii -NoNewline
 
 Add-Type @'
 using System;
@@ -191,7 +203,7 @@ function Click-ThroughOverlay([IntPtr]$Palette, [int]$X, [int]$Y) {
 
 $process = $null
 try {
-    $process = Start-Process -FilePath $executable -PassThru
+    $process = Start-Process -FilePath $executable -WindowStyle Hidden -PassThru
     $palette = Wait-Window 'ElitePen.Palette'
     Assert-Ui ($palette -ne [IntPtr]::Zero) 'Palette window did not start.'
     if ($palette -eq [IntPtr]::Zero) { throw 'Palette unavailable; remaining UI checks cannot run.' }
@@ -696,15 +708,17 @@ try {
             $paletteBoundsDuringZoom = New-Object ElitePenUiNative+RECT
             $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$paletteBoundsDuringZoom)
             $paletteProbe = New-Object ElitePenUiNative+POINT
-            $paletteProbe.X = [Math]::Floor(
-                ($paletteBoundsDuringZoom.Left + $paletteBoundsDuringZoom.Right) / 2)
-            $paletteProbe.Y = [Math]::Floor(
-                ($paletteBoundsDuringZoom.Top + $paletteBoundsDuringZoom.Bottom) / 2)
+            # Probe a visibly painted command, not the transparent negative
+            # space inside the irregular painter-palette silhouette.
+            $paletteProbe.X = $paletteBoundsDuringZoom.Left +
+                (Convert-PaletteCoordinate 169)
+            $paletteProbe.Y = $paletteBoundsDuringZoom.Top +
+                (Convert-PaletteCoordinate 53)
             $paletteAtPoint = [ElitePenUiNative]::WindowFromPoint($paletteProbe)
             $paletteClass = New-Object System.Text.StringBuilder 128
             $null = [ElitePenUiNative]::GetClassName($paletteAtPoint, $paletteClass, 128)
             Assert-Ui ($paletteClass.ToString() -eq 'ElitePen.Palette') `
-                'Frozen zoom still intercepted physical input over the palette.'
+                "Frozen zoom still intercepted physical input over the palette; hit $($paletteClass.ToString()) at $($paletteProbe.X),$($paletteProbe.Y)."
             Click-PaletteWindow $palette 169 53
             $zoomColor = [ElitePenUiNative]::SendMessage(
                 $palette, 0x805B, [IntPtr]::Zero, [IntPtr]::Zero)
@@ -771,8 +785,25 @@ try {
     }
     if ($process) {
         $process.WaitForExit(3000) | Out-Null
-        if (-not $process.HasExited) { $process.Kill() }
+        if (-not $process.HasExited) {
+            $process.Kill()
+            $process.WaitForExit(3000) | Out-Null
+        }
         $process.Dispose()
+    }
+    if (Test-Path -LiteralPath $qaSandbox) {
+        for ($attempt = 0; $attempt -lt 40; $attempt++) {
+            try {
+                Remove-Item -LiteralPath $qaSandbox -Recurse -Force
+                break
+            } catch {
+                if ($attempt -eq 39) {
+                    Write-Warning "UI QA completed, but its temporary directory is still locked: $qaSandbox"
+                    break
+                }
+                Start-Sleep -Milliseconds 250
+            }
+        }
     }
     $env:ELITE_PEN_QA_CAPTURE_DIR = $previousCaptureDirectory
     $env:ELITE_PEN_QA_SYNTHETIC_CAPTURE = $previousSyntheticCapture

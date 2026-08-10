@@ -9,6 +9,7 @@
 #include <wrl/client.h>
 
 #include <string>
+#include <cstdint>
 
 namespace elite_pen::win {
 
@@ -41,6 +42,7 @@ private:
 
 class Surface {
 public:
+    static constexpr UINT_PTR kPresentRetryTimer = 0xE117;
     bool initialize(GraphicsDevice& device, HWND window, UINT width, UINT height,
                     std::wstring& error);
     bool resize(UINT width, UINT height, std::wstring& error);
@@ -51,6 +53,7 @@ public:
     [[nodiscard]] ID2D1DeviceContext* context() const noexcept { return context_.Get(); }
     [[nodiscard]] UINT width() const noexcept { return width_; }
     [[nodiscard]] UINT height() const noexcept { return height_; }
+    [[nodiscard]] std::uint64_t generation() const noexcept { return generation_; }
 
 private:
     bool create_target(std::wstring& error);
@@ -64,6 +67,7 @@ private:
     ComPtr<IDCompositionVisual> visual_;
     ComPtr<ID2D1DeviceContext> context_;
     ComPtr<ID2D1Bitmap1> target_bitmap_;
+    std::uint64_t generation_{};
 };
 
 [[nodiscard]] std::wstring hresult_message(HRESULT result);

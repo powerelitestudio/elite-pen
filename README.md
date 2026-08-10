@@ -4,10 +4,16 @@ Elite Pen es la herramienta nativa de anotacion, pizarra y ampliacion de pantall
 Power Elite Studio. Su interfaz principal toma la forma de una paleta de pintor y un
 pincel funcional; no replica la barra vertical de otras aplicaciones.
 
-La edición 2.2 integra el sistema visual de la familia Elite: grafito o marfil según
+La edición 2.3 integra el sistema visual de la familia Elite: grafito o marfil según
 el tema, violeta como acento principal, menta para estados, divisores finos y
 tipografía Segoe UI Variable. Configuración permite elegir `Oscuro` o `Claro`; la
 preferencia queda guardada tanto al instalar como en la edición portable.
+
+El motor 2.3 conserva la tinta terminada en una superficie GPU y solo rasteriza el
+objeto recién añadido. El historial mueve los trazos sin duplicarlos, el borrador
+usa distancias al cuadrado y el simplificador de trazos es iterativo. El zoom evita
+reconfigurar su fuente cuando el puntero permanece quieto. El benchmark automatizado
+valida 5.000 trazos, cuadros en caché, dibujo activo, memoria y rutas de compatibilidad.
 
 ## Objetivos del producto
 
@@ -40,6 +46,7 @@ Visual Studio ni modifica la configuracion del equipo.
 pwsh -File .\scripts\bootstrap-toolchain.ps1
 pwsh -File .\scripts\build.ps1 -Configuration Release
 pwsh -File .\scripts\test.ps1 -Configuration Release
+pwsh -File .\scripts\render-performance-test.ps1 -Configuration Release
 ```
 
 Los binarios quedan en `build/<configuracion>/`. La distribucion portable se genera

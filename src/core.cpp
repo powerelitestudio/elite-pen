@@ -1,5 +1,6 @@
 #include "elite_pen/core.hpp"
 
+#include <iterator>
 #include <limits>
 
 namespace elite_pen {
@@ -74,6 +75,18 @@ PointF cubic_bezier_point(const CubicBezier& curve, float t) noexcept {
     };
 }
 
+ArrowHead arrow_head_points(PointF before, PointF end, float width) noexcept {
+    const float angle = std::atan2(end.y - before.y, end.x - before.x);
+    const float size = std::clamp(width * 3.2F, 12.0F, 38.0F);
+    constexpr float spread = 0.62F;
+    return {
+        {end.x - size * std::cos(angle - spread),
+         end.y - size * std::sin(angle - spread)},
+        {end.x - size * std::cos(angle + spread),
+         end.y - size * std::sin(angle + spread)}
+    };
+}
+
 RectF Drawable::bounds() const noexcept {
     if (bounds_cached_) return cached_bounds_;
     if (points.empty()) return {};
@@ -87,6 +100,18 @@ RectF Drawable::bounds() const noexcept {
     if (kind == Tool::CurvedArrow && points.size() >= 2) {
         const auto curve = curved_arrow_bezier(points.front(), points.back());
         for (const PointF point : {curve.control1, curve.control2}) {
+            result.left = std::min(result.left, point.x);
+            result.top = std::min(result.top, point.y);
+            result.right = std::max(result.right, point.x);
+            result.bottom = std::max(result.bottom, point.y);
+        }
+    }
+    if ((kind == Tool::Arrow || kind == Tool::CurvedArrow) && points.size() >= 2) {
+        const PointF before = kind == Tool::CurvedArrow
+            ? curved_arrow_bezier(points.front(), points.back()).control2
+            : points[points.size() - 2];
+        const auto head = arrow_head_points(before, points.back(), width);
+        for (const PointF point : {head.left, head.right}) {
             result.left = std::min(result.left, point.x);
             result.top = std::min(result.top, point.y);
             result.right = std::max(result.right, point.x);
@@ -109,13 +134,35 @@ RectF Drawable::bounds() const noexcept {
 
 namespace {
 
-bool path_hit(const Drawable& item, PointF point, float tolerance) noexcept {
-    if (item.points.size() == 1) {
-        return distance(item.points.front(), point) <= tolerance + item.width * 0.5F;
+float squared_distance(PointF a, PointF b) noexcept {
+    const float dx = a.x - b.x;
+    const float dy = a.y - b.y;
+    return dx * dx + dy * dy;
+}
+
+float squared_distance_to_segment(PointF point, PointF start, PointF end) noexcept {
+    const float dx = end.x - start.x;
+    const float dy = end.y - start.y;
+    const float denominator = dx * dx + dy * dy;
+    if (denominator <= std::numeric_limits<float>::epsilon()) {
+        return squared_distance(point, start);
     }
+    const float projection = std::clamp(
+        ((point.x - start.x) * dx + (point.y - start.y) * dy) / denominator,
+        0.0F, 1.0F);
+    const PointF closest{start.x + projection * dx, start.y + projection * dy};
+    return squared_distance(point, closest);
+}
+
+bool path_hit(const Drawable& item, PointF point, float tolerance) noexcept {
     const float radius = tolerance + item.width * 0.5F;
+    const float radius_squared = radius * radius;
+    if (item.points.size() == 1) {
+        return squared_distance(item.points.front(), point) <= radius_squared;
+    }
     for (std::size_t i = 1; i < item.points.size(); ++i) {
-        if (distance_to_segment(point, item.points[i - 1], item.points[i]) <= radius) {
+        if (squared_distance_to_segment(
+                point, item.points[i - 1], item.points[i]) <= radius_squared) {
             return true;
         }
     }
@@ -126,34 +173,24 @@ bool curved_arrow_hit(const Drawable& item, PointF point, float tolerance) noexc
     if (item.points.size() < 2) return false;
     const auto curve = curved_arrow_bezier(item.points.front(), item.points.back());
     const float radius = tolerance + item.width * 0.5F;
+    const float radius_squared = radius * radius;
     PointF previous = curve.start;
-    constexpr int samples = 32;
+    const int samples = std::clamp(
+        static_cast<int>(std::ceil(distance(curve.start, curve.end) / 8.0F)), 24, 128);
+    bool curve_hit = false;
     for (int index = 1; index <= samples; ++index) {
         const PointF current = cubic_bezier_point(
             curve, static_cast<float>(index) / static_cast<float>(samples));
-        if (distance_to_segment(point, previous, current) <= radius) return true;
+        if (squared_distance_to_segment(point, previous, current) <= radius_squared) {
+            curve_hit = true;
+            break;
+        }
         previous = current;
     }
-    return false;
-}
-
-void rdp(const std::vector<PointF>& input, std::size_t first, std::size_t last,
-         float epsilon, std::vector<bool>& keep) {
-    if (last <= first + 1) return;
-    float maximum = 0.0F;
-    std::size_t selected = first;
-    for (std::size_t index = first + 1; index < last; ++index) {
-        const float value = distance_to_segment(input[index], input[first], input[last]);
-        if (value > maximum) {
-            maximum = value;
-            selected = index;
-        }
-    }
-    if (maximum > epsilon) {
-        keep[selected] = true;
-        rdp(input, first, selected, epsilon, keep);
-        rdp(input, selected, last, epsilon, keep);
-    }
+    if (curve_hit) return true;
+    const auto head = arrow_head_points(curve.control2, curve.end, item.width);
+    return squared_distance_to_segment(point, curve.end, head.left) <= radius_squared ||
+           squared_distance_to_segment(point, curve.end, head.right) <= radius_squared;
 }
 
 }  // namespace
@@ -166,7 +203,18 @@ bool hit_test(const Drawable& item, PointF point, float tolerance) noexcept {
     if (item.kind == Tool::CurvedArrow) return curved_arrow_hit(item, point, tolerance);
     if (item.kind == Tool::Pen || item.kind == Tool::Highlighter ||
         item.kind == Tool::Line || item.kind == Tool::Arrow) {
-        return path_hit(item, point, tolerance);
+        if (path_hit(item, point, tolerance)) return true;
+        if (item.kind == Tool::Arrow && item.points.size() >= 2) {
+            const float radius = tolerance + item.width * 0.5F;
+            const float radius_squared = radius * radius;
+            const auto head = arrow_head_points(item.points[item.points.size() - 2],
+                                                item.points.back(), item.width);
+            return squared_distance_to_segment(point, item.points.back(), head.left) <=
+                       radius_squared ||
+                   squared_distance_to_segment(point, item.points.back(), head.right) <=
+                       radius_squared;
+        }
+        return false;
     }
     if ((item.kind == Tool::Rectangle || item.kind == Tool::Ellipse) &&
         item.points.size() >= 2) {
@@ -190,20 +238,49 @@ bool hit_test(const Drawable& item, PointF point, float tolerance) noexcept {
         const float ry = std::max(rect.height() * 0.5F, 0.01F);
         const float cx = rect.left + rx;
         const float cy = rect.top + ry;
-        const float normalized = std::sqrt(((point.x - cx) * (point.x - cx)) / (rx * rx) +
-                                           ((point.y - cy) * (point.y - cy)) / (ry * ry));
-        const float normalized_tolerance = radius / std::max(rx, ry);
-        return std::abs(normalized - 1.0F) <= normalized_tolerance;
+        const float dx = point.x - cx;
+        const float dy = point.y - cy;
+        const float normalized = std::sqrt((dx * dx) / (rx * rx) + (dy * dy) / (ry * ry));
+        if (normalized <= std::numeric_limits<float>::epsilon()) return false;
+        const float gradient = std::sqrt((dx * dx) / (rx * rx * rx * rx) +
+                                         (dy * dy) / (ry * ry * ry * ry)) / normalized;
+        const float approximate_distance = gradient > std::numeric_limits<float>::epsilon()
+            ? std::abs(normalized - 1.0F) / gradient
+            : std::numeric_limits<float>::max();
+        return approximate_distance <= radius;
     }
     return path_hit(item, point, tolerance);
 }
 
 std::vector<PointF> simplify_path(const std::vector<PointF>& input, float epsilon) {
     if (input.size() < 3 || epsilon <= 0.0F) return input;
-    std::vector<bool> keep(input.size(), false);
+    std::vector<std::uint8_t> keep(input.size(), 0);
     keep.front() = true;
     keep.back() = true;
-    rdp(input, 0, input.size() - 1, epsilon, keep);
+    std::vector<std::pair<std::size_t, std::size_t>> ranges;
+    ranges.reserve(64);
+    ranges.emplace_back(0, input.size() - 1);
+    const float epsilon_squared = epsilon * epsilon;
+    while (!ranges.empty()) {
+        const auto [first, last] = ranges.back();
+        ranges.pop_back();
+        if (last <= first + 1) continue;
+        float maximum_squared = 0.0F;
+        std::size_t selected = first;
+        for (std::size_t index = first + 1; index < last; ++index) {
+            const float value = squared_distance_to_segment(
+                input[index], input[first], input[last]);
+            if (value > maximum_squared) {
+                maximum_squared = value;
+                selected = index;
+            }
+        }
+        if (maximum_squared > epsilon_squared) {
+            keep[selected] = 1;
+            ranges.emplace_back(selected, last);
+            ranges.emplace_back(first, selected);
+        }
+    }
     std::vector<PointF> output;
     output.reserve(input.size());
     for (std::size_t index = 0; index < input.size(); ++index) {
@@ -213,7 +290,9 @@ std::vector<PointF> simplify_path(const std::vector<PointF>& input, float epsilo
 }
 
 Document::Document(std::size_t history_limit)
-    : history_limit_(std::max<std::size_t>(history_limit, 1)) {}
+    : history_limit_(std::max<std::size_t>(history_limit, 1)) {
+    items_.reserve(256);
+}
 
 void Document::commit(Operation operation) {
     if (compound_active_ && operation.kind == OperationKind::Remove) {
@@ -230,15 +309,14 @@ void Document::commit(Operation operation) {
             entry.index = original_index;
         }
         compound_operation_->entries.insert(compound_operation_->entries.end(),
-                                             operation.entries.begin(), operation.entries.end());
+            std::make_move_iterator(operation.entries.begin()),
+            std::make_move_iterator(operation.entries.end()));
         return;
     }
     apply(operation);
     undo_.push_back(std::move(operation));
     redo_.clear();
-    if (undo_.size() > history_limit_) {
-        undo_.erase(undo_.begin(), undo_.begin() + static_cast<std::ptrdiff_t>(undo_.size() - history_limit_));
-    }
+    while (undo_.size() > history_limit_) undo_.pop_front();
 }
 
 void Document::begin_compound() {
@@ -254,18 +332,20 @@ void Document::end_compound() {
         compound_operation_.reset();
         return;
     }
+    std::sort(compound_operation_->entries.begin(), compound_operation_->entries.end(),
+              [](const IndexedDrawable& left, const IndexedDrawable& right) {
+                  return left.index < right.index;
+              });
     undo_.push_back(std::move(*compound_operation_));
     compound_operation_.reset();
-    if (undo_.size() > history_limit_) {
-        undo_.erase(undo_.begin(), undo_.begin() +
-            static_cast<std::ptrdiff_t>(undo_.size() - history_limit_));
-    }
+    while (undo_.size() > history_limit_) undo_.pop_front();
 }
 
 void Document::add(Drawable drawable) {
     if (drawable.points.empty()) return;
     Operation operation;
     operation.kind = OperationKind::Add;
+    operation.entries.reserve(1);
     operation.entries.push_back({items_.size(), std::move(drawable)});
     commit(std::move(operation));
 }
@@ -276,7 +356,8 @@ bool Document::erase_at(PointF point, float tolerance) {
         if (hit_test(items_[index], point, tolerance)) {
             Operation operation;
             operation.kind = OperationKind::Remove;
-            operation.entries.push_back({index, items_[index]});
+            operation.entries.reserve(1);
+            operation.entries.push_back({index, {}});
             commit(std::move(operation));
             return true;
         }
@@ -290,41 +371,74 @@ bool Document::clear() {
     operation.kind = OperationKind::Clear;
     operation.entries.reserve(items_.size());
     for (std::size_t index = 0; index < items_.size(); ++index) {
-        operation.entries.push_back({index, items_[index]});
+        operation.entries.push_back({index, {}});
     }
     commit(std::move(operation));
     return true;
 }
 
-void Document::apply(const Operation& operation) {
+void Document::apply(Operation& operation) {
     if (operation.kind == OperationKind::Add) {
-        for (const auto& entry : operation.entries) {
-            items_.insert(items_.begin() + static_cast<std::ptrdiff_t>(std::min(entry.index, items_.size())),
-                          entry.drawable);
+        const bool append = operation.entries.size() == 1 &&
+            operation.entries.front().index == items_.size();
+        const std::size_t change_index = operation.entries.empty()
+            ? items_.size() : operation.entries.front().index;
+        for (auto& entry : operation.entries) {
+            const std::size_t index = std::min(entry.index, items_.size());
+            if (index == items_.size()) items_.push_back(std::move(entry.drawable));
+            else items_.insert(items_.begin() + static_cast<std::ptrdiff_t>(index),
+                               std::move(entry.drawable));
         }
+        changed(append ? DocumentChangeKind::Append : DocumentChangeKind::Rebuild,
+                change_index);
     } else if (operation.kind == OperationKind::Remove) {
+        const bool single = operation.entries.size() == 1;
+        const std::size_t change_index = single ? operation.entries.front().index : 0;
         for (auto iterator = operation.entries.rbegin(); iterator != operation.entries.rend(); ++iterator) {
             if (iterator->index < items_.size()) {
+                iterator->drawable = std::move(items_[iterator->index]);
                 items_.erase(items_.begin() + static_cast<std::ptrdiff_t>(iterator->index));
             }
         }
+        changed(single ? DocumentChangeKind::Remove : DocumentChangeKind::Rebuild,
+                change_index);
     } else {
+        const std::size_t count = std::min(operation.entries.size(), items_.size());
+        for (std::size_t index = 0; index < count; ++index) {
+            operation.entries[index].drawable = std::move(items_[index]);
+        }
         items_.clear();
+        changed(DocumentChangeKind::Clear);
     }
 }
 
-void Document::revert(const Operation& operation) {
+void Document::revert(Operation& operation) {
     if (operation.kind == OperationKind::Add) {
+        const bool single = operation.entries.size() == 1;
+        const std::size_t change_index = single ? operation.entries.front().index : 0;
         for (auto iterator = operation.entries.rbegin(); iterator != operation.entries.rend(); ++iterator) {
             if (iterator->index < items_.size()) {
+                iterator->drawable = std::move(items_[iterator->index]);
                 items_.erase(items_.begin() + static_cast<std::ptrdiff_t>(iterator->index));
             }
         }
-    } else {
-        for (const auto& entry : operation.entries) {
-            items_.insert(items_.begin() + static_cast<std::ptrdiff_t>(std::min(entry.index, items_.size())),
-                          entry.drawable);
+        changed(single ? DocumentChangeKind::Remove : DocumentChangeKind::Rebuild,
+                change_index);
+    } else if (operation.kind == OperationKind::Clear && items_.empty()) {
+        items_.reserve(operation.entries.size());
+        for (auto& entry : operation.entries) {
+            items_.push_back(std::move(entry.drawable));
         }
+        changed(DocumentChangeKind::Rebuild);
+    } else {
+        const bool single = operation.entries.size() == 1;
+        const std::size_t change_index = single ? operation.entries.front().index : 0;
+        for (auto& entry : operation.entries) {
+            items_.insert(items_.begin() + static_cast<std::ptrdiff_t>(std::min(entry.index, items_.size())),
+                          std::move(entry.drawable));
+        }
+        changed(single ? DocumentChangeKind::Insert : DocumentChangeKind::Rebuild,
+                change_index);
     }
 }
 

@@ -5,6 +5,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
+$version = (Get-Content -LiteralPath (Join-Path $repoRoot 'VERSION') -Raw).Trim()
 if (-not $SkipPortableBuild) {
     & (Join-Path $PSScriptRoot 'publish-portable.ps1')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -23,7 +24,7 @@ if (-not $compiler) {
     throw 'Inno Setup compiler was not found. Install JRSoftware.InnoSetup for the current user.'
 }
 
-& $compiler (Join-Path $repoRoot 'packaging\ElitePen.iss')
+& $compiler "/DMyAppVersion=$version" (Join-Path $repoRoot 'packaging\ElitePen.iss')
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-$installer = Join-Path $repoRoot 'dist\installer\Elite Pen Setup 2.2.0.exe'
+$installer = Join-Path $repoRoot "dist\installer\Elite Pen Setup $version.exe"
 Write-Output "Installer: $installer"

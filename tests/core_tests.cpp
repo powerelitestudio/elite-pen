@@ -1,5 +1,6 @@
 #include "elite_pen/core.hpp"
 
+#include <array>
 #include <cstdlib>
 #include <iostream>
 #include <string_view>
@@ -68,6 +69,53 @@ void test_compound_erase() {
     check(document.items().size() == 1, "compound erase applies all removals");
     check(document.undo(), "compound erase uses one undo operation");
     check(document.items().size() == 3, "one undo restores entire eraser gesture");
+    check(document.redo(), "compound erase can be redone");
+    check(document.items().size() == 1 && document.items().front().points.front().y == 40,
+          "compound erase redo preserves surviving order");
+
+    Document reverse;
+    reverse.add(line({0, 0}, {100, 0}));
+    reverse.add(line({0, 20}, {100, 20}));
+    reverse.add(line({0, 40}, {100, 40}));
+    reverse.begin_compound();
+    check(reverse.erase_at({50, 40}), "reverse compound removes the last object first");
+    check(reverse.erase_at({50, 0}), "reverse compound then removes the first object");
+    reverse.end_compound();
+    check(reverse.undo() && reverse.items().size() == 3,
+          "reverse compound undo restores every original position");
+    check(reverse.redo() && reverse.items().size() == 1 &&
+          reverse.items().front().points.front().y == 20,
+          "reverse compound redo removes the same objects deterministically");
+
+    std::array<std::size_t, 5> order{0, 1, 2, 3, 4};
+    do {
+        Document permutation;
+        for (std::size_t index = 0; index < 5; ++index) {
+            permutation.add(line({0, static_cast<float>(index * 20)},
+                                 {100, static_cast<float>(index * 20)}));
+        }
+        permutation.begin_compound();
+        for (std::size_t index = 0; index < 3; ++index) {
+            check(permutation.erase_at({50, static_cast<float>(order[index] * 20)}),
+                  "compound erase accepts every removal order");
+        }
+        permutation.end_compound();
+        std::array<bool, 5> removed{};
+        for (std::size_t index = 0; index < 3; ++index) removed[order[index]] = true;
+        check(permutation.undo() && permutation.items().size() == 5,
+              "permuted compound undo restores all objects");
+        check(permutation.redo() && permutation.items().size() == 2,
+              "permuted compound redo restores the survivor count");
+        std::size_t survivor = 0;
+        for (std::size_t index = 0; index < 5; ++index) {
+            if (!removed[index]) {
+                check(permutation.items()[survivor].points.front().y ==
+                          static_cast<float>(index * 20),
+                      "permuted compound redo preserves survivor ordering");
+                ++survivor;
+            }
+        }
+    } while (std::next_permutation(order.begin(), order.end()));
 }
 
 void test_hit_testing() {
@@ -82,6 +130,15 @@ void test_hit_testing() {
     ellipse.kind = Tool::Ellipse;
     check(hit_test(ellipse, {110, 35}), "ellipse edge hits");
     check(!hit_test(ellipse, {60, 35}), "ellipse center does not hit outline");
+
+    Drawable flat_ellipse;
+    flat_ellipse.kind = Tool::Ellipse;
+    flat_ellipse.width = 4;
+    flat_ellipse.points = {{0, 0}, {200, 20}};
+    check(hit_test(flat_ellipse, {100, 23}, 2),
+          "flat ellipse keeps pixel-accurate tolerance on its short axis");
+    check(!hit_test(flat_ellipse, {100, 30}, 2),
+          "flat ellipse rejects points beyond pixel tolerance");
 
     const RectF original_bounds = rectangle.bounds();
     rectangle.points.back() = {210, 160};
@@ -101,6 +158,29 @@ void test_hit_testing() {
     check(curved.bounds().bottom > 15.0F, "curved arrow bounds include Bezier controls");
     check(hit_test(curved, crest, 2.0F), "curved arrow hit testing follows Bezier path");
     check(!hit_test(curved, {50, -30}, 2.0F), "curved arrow misses away from Bezier path");
+
+    Drawable arrow;
+    arrow.kind = Tool::Arrow;
+    arrow.width = 4;
+    arrow.points = {{10, 100}, {110, 100}};
+    const auto arrow_head = arrow_head_points(arrow.points.front(), arrow.points.back(),
+                                              arrow.width);
+    const PointF arrow_head_midpoint{
+        (arrow.points.back().x + arrow_head.left.x) * 0.5F,
+        (arrow.points.back().y + arrow_head.left.y) * 0.5F};
+    check(arrow.bounds().contains(arrow_head.left),
+          "arrow bounds include the rendered arrowhead");
+    check(hit_test(arrow, arrow_head_midpoint, 1.0F),
+          "arrowhead can be selected and erased");
+
+    const auto curved_head = arrow_head_points(bezier.control2, bezier.end, curved.width);
+    const PointF curved_head_midpoint{
+        (bezier.end.x + curved_head.right.x) * 0.5F,
+        (bezier.end.y + curved_head.right.y) * 0.5F};
+    check(curved.bounds().contains(curved_head.right),
+          "curved arrow bounds include the rendered arrowhead");
+    check(hit_test(curved, curved_head_midpoint, 1.0F),
+          "curved arrowhead can be selected and erased");
 }
 
 void test_simplification() {
@@ -110,6 +190,33 @@ void test_simplification() {
     check(simplified.size() == 2, "nearly straight path is reduced to endpoints");
     check(simplified.front().x == 0 && simplified.back().x == 100,
           "simplification preserves endpoints");
+
+    std::vector<PointF> adversarial;
+    adversarial.reserve(12000);
+    for (int index = 0; index < 12000; ++index) {
+        adversarial.push_back({static_cast<float>(index),
+                               index % 2 == 0 ? 0.0F : 2.0F});
+    }
+    const auto stable = simplify_path(adversarial, 0.25F);
+    check(stable.size() > 1000 && stable.front().x == 0.0F &&
+          stable.back().x == 11999.0F,
+          "iterative simplification handles deep adversarial paths without recursion");
+}
+
+void test_document_revision() {
+    Document document;
+    const auto initial = document.revision();
+    document.add(line({0, 0}, {10, 10}));
+    const auto added = document.revision();
+    check(added > initial, "document revision advances on add");
+    check(document.undo() && document.revision() > added,
+          "document revision advances on undo");
+    const auto undone = document.revision();
+    check(document.redo() && document.revision() > undone,
+          "document revision advances on redo");
+    const auto redone = document.revision();
+    check(!document.erase_at({500, 500}) && document.revision() == redone,
+          "document revision stays stable for no-op eraser misses");
 }
 
 void test_history_limit() {
@@ -132,6 +239,7 @@ int main() {
     test_hit_testing();
     test_simplification();
     test_history_limit();
+    test_document_revision();
     if (failures == 0) {
         std::cout << "Elite Pen core: all tests passed\n";
         return EXIT_SUCCESS;

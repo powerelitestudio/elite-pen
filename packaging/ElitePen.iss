@@ -1,5 +1,7 @@
 #define MyAppName "Elite Pen"
-#define MyAppVersion "2.2.0"
+#ifndef MyAppVersion
+  #define MyAppVersion "2.3.0"
+#endif
 #define MyAppPublisher "Power Elite Studio"
 #define MyAppExeName "Elite Pen.exe"
 
@@ -13,7 +15,7 @@ VersionInfoCompany={#MyAppPublisher}
 VersionInfoDescription=Instalador de Elite Pen
 VersionInfoProductName={#MyAppName}
 VersionInfoProductVersion={#MyAppVersion}
-VersionInfoVersion=2.2.0.0
+VersionInfoVersion={#MyAppVersion}.0
 DefaultDirName={localappdata}\Programs\Power Elite Studio\Elite Pen
 DefaultGroupName=Power Elite Studio
 DisableProgramGroupPage=yes
@@ -22,7 +24,7 @@ ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 MinVersion=10.0.17763
 OutputDir=..\dist\installer
-OutputBaseFilename=Elite Pen Setup 2.2.0
+OutputBaseFilename=Elite Pen Setup {#MyAppVersion}
 SetupIconFile=..\resources\generated\elite_pen.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 LicenseFile=..\LICENSE.txt

@@ -1,5 +1,30 @@
 # Historial de cambios
 
+## 2.3.0 — 2026-08-10
+
+- El documento terminado se conserva como una superficie GPU retenida: los cuadros
+  normales reutilizan un único bitmap y cada trazo nuevo se incorpora de forma
+  incremental, sin volver a geometrizar todas las anotaciones anteriores.
+- El repintado deja de bloquear el hilo de entrada esperando al compositor; si la
+  GPU todavía está ocupada, Elite Pen conserva el cuadro pendiente y lo presenta
+  en cuanto queda disponible.
+- El historial mueve la propiedad de los trazos entre documento, Deshacer y Rehacer,
+  evitando copias profundas. Limpiar y restaurar miles de objetos deja de duplicar
+  vectores completos y la cola de historial descarta en tiempo constante.
+- Hit testing y borrador usan distancias al cuadrado; las elipses planas mantienen
+  tolerancia en píxeles y las flechas incluyen ahora sus puntas tanto en límites
+  como en selección y borrado.
+- La simplificación Ramer-Douglas-Peucker es iterativa y resiste trazos adversariales
+  extensos sin desbordar la pila. Se añadieron pruebas de 100.000 muestras.
+- El zoom vivo deja de repetir posición, transformación y fuente 60 veces por
+  segundo cuando no cambian puntero, vista ni aumento, y evita redimensionar la
+  ventana completa al desplazarse en las vistas Fullscreen y Acoplada.
+- QA incorpora un benchmark nativo con 5.000 trazos, cuadro frío, 240 cuadros en
+  caché, trazo activo y memoria; también cubre 120 órdenes de borrado compuesto,
+  puntas de flecha y trazos adversariales.
+- Los scripts del instalador toman la versión desde `VERSION`, evitando artefactos
+  con nombres o metadatos desincronizados.
+
 ## 2.2.0 — 2026-08-10
 
 - Elite Pen adopta el sistema visual de la familia de software definido por Elite

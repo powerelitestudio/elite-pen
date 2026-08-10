@@ -33,12 +33,14 @@ HRESULT create_d3d(D3D_DRIVER_TYPE type, ID3D11Device** device,
     };
     D3D_FEATURE_LEVEL selected{};
     HRESULT result = D3D11CreateDevice(
-        nullptr, type, nullptr, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+        nullptr, type, nullptr,
+        D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_SINGLETHREADED,
         feature_levels.data(), static_cast<UINT>(feature_levels.size()),
         D3D11_SDK_VERSION, device, &selected, context);
     if (result == E_INVALIDARG) {
         result = D3D11CreateDevice(
-            nullptr, type, nullptr, D3D11_CREATE_DEVICE_BGRA_SUPPORT,
+            nullptr, type, nullptr,
+            D3D11_CREATE_DEVICE_BGRA_SUPPORT | D3D11_CREATE_DEVICE_SINGLETHREADED,
             feature_levels.data() + 1,
             static_cast<UINT>(feature_levels.size() - 1), D3D11_SDK_VERSION,
             device, &selected, context);
@@ -65,6 +67,13 @@ bool GraphicsDevice::initialize(std::wstring& error) {
     if (FAILED(result)) {
         error = L"No se pudo obtener DXGI: " + hresult_message(result);
         return false;
+    }
+    // Every graphics call is issued by the Win32 UI thread. A one-frame DXGI
+    // queue keeps pointer-to-pixel latency low and prevents stale frames from
+    // accumulating behind DirectComposition on slower integrated GPUs.
+    ComPtr<IDXGIDevice1> low_latency_device;
+    if (SUCCEEDED(dxgi_device_.As(&low_latency_device))) {
+        low_latency_device->SetMaximumFrameLatency(1);
     }
 
     D2D1_FACTORY_OPTIONS factory_options{};
@@ -184,6 +193,7 @@ bool Surface::create_target(std::wstring& error) {
         return false;
     }
     context_->SetTarget(target_bitmap_.Get());
+    ++generation_;
     return true;
 }
 
@@ -227,7 +237,15 @@ bool Surface::end_draw(std::wstring& error) {
         error = L"Direct2D no pudo finalizar el cuadro: " + hresult_message(result);
         return false;
     }
-    result = swap_chain_->Present(1, 0);
+    // Composition already paces frames with DWM. A zero sync interval avoids
+    // serially blocking the UI thread once per transparent top-level surface.
+    result = swap_chain_->Present(0, DXGI_PRESENT_DO_NOT_WAIT);
+    if (result == DXGI_ERROR_WAS_STILL_DRAWING) {
+        // Never make pointer input wait for the compositor. Keep the newest
+        // frame dirty so it is presented as soon as a swap-chain buffer frees.
+        SetTimer(window_, kPresentRetryTimer, 8, nullptr);
+        return true;
+    }
     if (FAILED(result)) {
         error = L"No se pudo presentar el cuadro: " + hresult_message(result);
         return false;

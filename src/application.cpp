@@ -21,6 +21,7 @@
 #include <cstring>
 #include <cmath>
 #include <filesystem>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -49,6 +50,7 @@ constexpr UINT kZoomClickFreezeMessage = WM_APP + 101;
 constexpr UINT kQaQueryZoomSourceFocusXMessage = WM_APP + 102;
 constexpr UINT kQaQueryZoomSourceFocusYMessage = WM_APP + 103;
 constexpr UINT kQaQueryThemeMessage = WM_APP + 104;
+constexpr UINT kQaPopulateStressDocumentMessage = WM_APP + 105;
 constexpr UINT_PTR kTrayId = 1;
 constexpr int kPaletteDesignWidth = 290;
 constexpr int kPaletteDesignHeight = 280;
@@ -538,6 +540,24 @@ constexpr std::size_t kVisibleShortcutRows = 7;
 
 class Controller;
 
+class DocumentRenderCache {
+public:
+    bool update(GraphicsDevice& graphics, Surface& surface, const Document& document,
+                float offset_x, float offset_y, RectF viewport);
+    void draw(ID2D1DeviceContext* context) const;
+    void reset() noexcept;
+
+private:
+    ComPtr<ID2D1Bitmap1> bitmap_;
+    std::uint64_t revision_{std::numeric_limits<std::uint64_t>::max()};
+    std::uint64_t surface_generation_{};
+    UINT width_{};
+    UINT height_{};
+    float offset_x_{};
+    float offset_y_{};
+    std::size_t item_count_{};
+};
+
 class WindowBase {
 public:
     explicit WindowBase(Controller& controller) : controller_(controller) {}
@@ -598,6 +618,7 @@ private:
     bool pointer_active_{};
     UINT32 pointer_id_{};
     HCURSOR pencil_cursor_{};
+    DocumentRenderCache document_cache_;
 };
 
 class PaletteWindow final : public WindowBase {
@@ -640,6 +661,8 @@ private:
     POINT window_origin_{};
     NOTIFYICONDATAW tray_{};
     bool escape_down_{};
+    bool highlight_cursor_initialized_{};
+    POINT last_highlight_cursor_{};
     HWND tooltip_{};
     float scale_{kPaletteScales[1]};
     bool collapsed_{};
@@ -818,6 +841,7 @@ private:
     bool snapshot_has_content_{};
     UINT32 pointer_id_{};
     HCURSOR pencil_cursor_{};
+    DocumentRenderCache document_cache_;
 };
 
 class ZoomTargetWindow final : public WindowBase {
@@ -910,6 +934,11 @@ private:
     HCURSOR lens_cursor_{};
     UINT lens_cursor_dpi_{};
     bool lens_cursor_active_{};
+    bool source_initialized_{};
+    POINT last_source_cursor_{};
+    float last_source_factor_{};
+    int last_source_view_{-1};
+    bool last_source_overview_{};
     Tool tool_before_zoom_{Tool::Pen};
 };
 
@@ -939,7 +968,9 @@ public:
 
     void invalidate_all();
     void invalidate_document();
+    void invalidate_preview();
     void update_overlay_interaction();
+    void restack_palette();
     [[nodiscard]] bool route_palette_command(PointF screen_point);
     void set_tool(Tool tool);
     void set_color(Color color);
@@ -979,6 +1010,7 @@ public:
     [[nodiscard]] bool zoom_active() const noexcept;
     [[nodiscard]] bool zoom_frozen() const noexcept;
     void restack_zoom();
+    void populate_stress_document(std::size_t count);
 
 private:
     static BOOL CALLBACK collect_monitor(HMONITOR monitor, HDC, LPRECT, LPARAM data);
@@ -1291,36 +1323,67 @@ bool capture_desktop_duplication(GraphicsDevice& graphics, int left, int top,
                           static_cast<std::uint64_t>(height);
 }
 
+struct CachedTextFormat {
+    int size_key{};
+    ComPtr<IDWriteTextFormat> format;
+};
+
+struct DrawableRenderResources {
+    ComPtr<ID2D1SolidColorBrush> brush;
+    ComPtr<ID2D1SolidColorBrush> screenshot_shade;
+    ComPtr<ID2D1StrokeStyle> stroke_style;
+    std::vector<CachedTextFormat> text_formats;
+
+    bool initialize(GraphicsDevice& graphics, ID2D1DeviceContext* context) {
+        if (FAILED(context->CreateSolidColorBrush(
+                D2D1::ColorF(D2D1::ColorF::White), brush.GetAddressOf())) || !brush) {
+            return false;
+        }
+        context->CreateSolidColorBrush(
+            theme_color(current_ui_theme().violet, 0.12F), screenshot_shade.GetAddressOf());
+        const D2D1_STROKE_STYLE_PROPERTIES properties = D2D1::StrokeStyleProperties(
+            D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND,
+            D2D1_LINE_JOIN_ROUND, 10.0F, D2D1_DASH_STYLE_SOLID, 0.0F);
+        graphics.d2d_factory()->CreateStrokeStyle(
+            properties, nullptr, 0, stroke_style.GetAddressOf());
+        text_formats.reserve(5);
+        return true;
+    }
+
+    IDWriteTextFormat* text_format(GraphicsDevice& graphics, float size) {
+        const int key = static_cast<int>(std::lround(size * 10.0F));
+        for (const auto& cached : text_formats) {
+            if (cached.size_key == key) return cached.format.Get();
+        }
+        CachedTextFormat cached;
+        cached.size_key = key;
+        graphics.dwrite()->CreateTextFormat(
+            L"Segoe UI Variable Text", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
+            DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, size, L"es-CO",
+            cached.format.GetAddressOf());
+        if (!cached.format) return nullptr;
+        text_formats.push_back(std::move(cached));
+        return text_formats.back().format.Get();
+    }
+};
+
 void draw_arrow_head(ID2D1DeviceContext* context, ID2D1Brush* brush, PointF before,
                      PointF end, float width) {
-    const float angle = std::atan2(end.y - before.y, end.x - before.x);
-    const float size = std::clamp(width * 3.2F, 12.0F, 38.0F);
-    const float spread = 0.62F;
-    const D2D1_POINT_2F left{
-        end.x - size * std::cos(angle - spread),
-        end.y - size * std::sin(angle - spread)};
-    const D2D1_POINT_2F right{
-        end.x - size * std::cos(angle + spread),
-        end.y - size * std::sin(angle + spread)};
-    context->DrawLine(D2D1::Point2F(end.x, end.y), left, brush, width);
-    context->DrawLine(D2D1::Point2F(end.x, end.y), right, brush, width);
+    const auto head = arrow_head_points(before, end, width);
+    context->DrawLine(D2D1::Point2F(end.x, end.y),
+                      D2D1::Point2F(head.left.x, head.left.y), brush, width);
+    context->DrawLine(D2D1::Point2F(end.x, end.y),
+                      D2D1::Point2F(head.right.x, head.right.y), brush, width);
 }
 
 void draw_drawable(GraphicsDevice& graphics, ID2D1DeviceContext* context,
-                   const Drawable& drawable, float offset_x, float offset_y,
+                   DrawableRenderResources& resources, const Drawable& drawable,
+                   float offset_x, float offset_y,
                    float opacity = 1.0F) {
     if (drawable.points.empty()) return;
     const float alpha = drawable.kind == Tool::Highlighter ? 0.34F * opacity : opacity;
-    ComPtr<ID2D1SolidColorBrush> brush;
-    context->CreateSolidColorBrush(d2d_color(drawable.color, alpha), brush.GetAddressOf());
-    if (!brush) return;
-
-    ComPtr<ID2D1StrokeStyle> stroke_style;
-    D2D1_STROKE_STYLE_PROPERTIES properties = D2D1::StrokeStyleProperties(
-        D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND, D2D1_CAP_STYLE_ROUND,
-        D2D1_LINE_JOIN_ROUND, 10.0F, D2D1_DASH_STYLE_SOLID, 0.0F);
-    graphics.d2d_factory()->CreateStrokeStyle(properties, nullptr, 0,
-                                               stroke_style.GetAddressOf());
+    resources.brush->SetColor(d2d_color(drawable.color, alpha));
+    ID2D1SolidColorBrush* brush = resources.brush.Get();
 
     const auto local = [offset_x, offset_y](PointF point) {
         return D2D1::Point2F(point.x - offset_x, point.y - offset_y);
@@ -1333,11 +1396,10 @@ void draw_drawable(GraphicsDevice& graphics, ID2D1DeviceContext* context,
         const auto rectangle = D2D1::RectF(std::min(a.x, b.x), std::min(a.y, b.y),
                                             std::max(a.x, b.x), std::max(a.y, b.y));
         if (drawable.kind == Tool::Screenshot) {
-            ComPtr<ID2D1SolidColorBrush> shade;
-            context->CreateSolidColorBrush(D2D1::ColorF(0x1F88E5, 0.12F), shade.GetAddressOf());
-            context->FillRectangle(rectangle, shade.Get());
+            if (resources.screenshot_shade)
+                context->FillRectangle(rectangle, resources.screenshot_shade.Get());
         }
-        context->DrawRectangle(rectangle, brush.Get(), drawable.width, stroke_style.Get());
+        context->DrawRectangle(rectangle, brush, drawable.width, resources.stroke_style.Get());
         return;
     }
     if (drawable.kind == Tool::Ellipse && drawable.points.size() >= 2) {
@@ -1350,21 +1412,17 @@ void draw_drawable(GraphicsDevice& graphics, ID2D1DeviceContext* context,
         context->DrawEllipse(D2D1::Ellipse(D2D1::Point2F((left + right) * 0.5F,
                                                          (top + bottom) * 0.5F),
                                            (right - left) * 0.5F, (bottom - top) * 0.5F),
-                             brush.Get(), drawable.width, stroke_style.Get());
+                             brush, drawable.width, resources.stroke_style.Get());
         return;
     }
     if (drawable.kind == Tool::Text) {
-        ComPtr<IDWriteTextFormat> format;
         const float font_size = std::clamp(drawable.width * 3.4F, 16.0F, 72.0F);
-        graphics.dwrite()->CreateTextFormat(L"Segoe UI", nullptr,
-            DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL,
-            DWRITE_FONT_STRETCH_NORMAL, font_size, L"es-CO", format.GetAddressOf());
-        if (format) {
+        if (auto* format = resources.text_format(graphics, font_size)) {
             const auto origin = local(drawable.points.front());
             context->DrawTextW(drawable.text.c_str(), static_cast<UINT32>(drawable.text.size()),
-                               format.Get(), D2D1::RectF(origin.x, origin.y,
-                                                        origin.x + 600.0F,
-                                                        origin.y + 400.0F), brush.Get());
+                               format, D2D1::RectF(origin.x, origin.y,
+                                                  origin.x + 600.0F,
+                                                  origin.y + 400.0F), brush);
         }
         return;
     }
@@ -1381,21 +1439,22 @@ void draw_drawable(GraphicsDevice& graphics, ID2D1DeviceContext* context,
                                              local(curve.end)));
         sink->EndFigure(D2D1_FIGURE_END_OPEN);
         sink->Close();
-        context->DrawGeometry(geometry.Get(), brush.Get(), drawable.width, stroke_style.Get());
+        context->DrawGeometry(geometry.Get(), brush, drawable.width,
+                              resources.stroke_style.Get());
         PointF tangent = curve.control2;
         PointF end = curve.end;
         tangent.x -= offset_x;
         tangent.y -= offset_y;
         end.x -= offset_x;
         end.y -= offset_y;
-        draw_arrow_head(context, brush.Get(), tangent, end, drawable.width);
+        draw_arrow_head(context, brush, tangent, end, drawable.width);
         return;
     }
 
     if (drawable.points.size() == 1) {
         const auto point = local(drawable.points.front());
         context->FillEllipse(D2D1::Ellipse(point, drawable.width * 0.5F,
-                                           drawable.width * 0.5F), brush.Get());
+                                           drawable.width * 0.5F), brush);
         return;
     }
 
@@ -1427,7 +1486,8 @@ void draw_drawable(GraphicsDevice& graphics, ID2D1DeviceContext* context,
     }
     sink->EndFigure(D2D1_FIGURE_END_OPEN);
     sink->Close();
-    context->DrawGeometry(geometry.Get(), brush.Get(), drawable.width, stroke_style.Get());
+    context->DrawGeometry(geometry.Get(), brush, drawable.width,
+                          resources.stroke_style.Get());
     if (drawable.kind == Tool::Arrow && drawable.points.size() >= 2) {
         PointF before = drawable.points[drawable.points.size() - 2];
         PointF end = drawable.points.back();
@@ -1435,8 +1495,108 @@ void draw_drawable(GraphicsDevice& graphics, ID2D1DeviceContext* context,
         before.y -= offset_y;
         end.x -= offset_x;
         end.y -= offset_y;
-        draw_arrow_head(context, brush.Get(), before, end, drawable.width);
+        draw_arrow_head(context, brush, before, end, drawable.width);
     }
+}
+
+bool DocumentRenderCache::update(GraphicsDevice& graphics, Surface& surface,
+                                 const Document& document, float offset_x,
+                                 float offset_y, RectF viewport) {
+    if (revision_ == document.revision() &&
+        surface_generation_ == surface.generation() &&
+        width_ == surface.width() && height_ == surface.height() &&
+        offset_x_ == offset_x && offset_y_ == offset_y) {
+        return true;
+    }
+
+    auto* context = surface.context();
+    if (!context) return false;
+    const bool same_surface = bitmap_ &&
+        surface_generation_ == surface.generation() &&
+        width_ == surface.width() && height_ == surface.height() &&
+        offset_x_ == offset_x && offset_y_ == offset_y;
+    if (!same_surface) {
+        const auto properties = D2D1::BitmapProperties1(
+            D2D1_BITMAP_OPTIONS_TARGET,
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
+                              D2D1_ALPHA_MODE_PREMULTIPLIED),
+            96.0F, 96.0F);
+        bitmap_.Reset();
+        if (FAILED(context->CreateBitmap(
+                D2D1::SizeU(surface.width(), surface.height()), nullptr, 0,
+                properties, bitmap_.GetAddressOf())) || !bitmap_) {
+            return false;
+        }
+    }
+
+    const auto render_items = [&](std::size_t start, std::size_t count,
+                                  bool clear_first) {
+        if (start + count > document.items().size()) return false;
+        ComPtr<ID2D1Image> original_target;
+        context->GetTarget(original_target.GetAddressOf());
+        if (!original_target) return false;
+        context->SetTarget(bitmap_.Get());
+        context->BeginDraw();
+        context->SetTransform(D2D1::Matrix3x2F::Identity());
+        if (clear_first) context->Clear(D2D1::ColorF(0, 0.0F));
+        DrawableRenderResources resources;
+        const bool resources_ready = count == 0 ||
+                                     resources.initialize(graphics, context);
+        if (resources_ready) {
+            for (std::size_t index = start; index < start + count; ++index) {
+                const auto& drawable = document.items()[index];
+                if (drawable.bounds().intersects(viewport)) {
+                    draw_drawable(graphics, context, resources, drawable,
+                                  offset_x, offset_y);
+                }
+            }
+        }
+        const HRESULT draw_result = context->EndDraw();
+        context->SetTarget(original_target.Get());
+        return resources_ready && SUCCEEDED(draw_result);
+    };
+
+    bool updated_incrementally = false;
+    const bool consecutive = revision_ != std::numeric_limits<std::uint64_t>::max() &&
+                             document.revision() == revision_ + 1;
+    if (same_surface && consecutive) {
+        const auto change = document.last_change_kind();
+        const std::size_t change_index = document.last_change_index();
+        if (change == DocumentChangeKind::Append &&
+            change_index == item_count_ && document.items().size() == item_count_ + 1) {
+            updated_incrementally = render_items(item_count_, 1, false);
+        } else if (change == DocumentChangeKind::Clear && document.empty()) {
+            updated_incrementally = render_items(0, 0, true);
+        }
+    }
+
+    if (!updated_incrementally) {
+        if (!render_items(0, document.items().size(), true)) return false;
+    }
+
+    revision_ = document.revision();
+    surface_generation_ = surface.generation();
+    width_ = surface.width();
+    height_ = surface.height();
+    offset_x_ = offset_x;
+    offset_y_ = offset_y;
+    item_count_ = document.items().size();
+    return true;
+}
+
+void DocumentRenderCache::draw(ID2D1DeviceContext* context) const {
+    if (bitmap_) context->DrawBitmap(bitmap_.Get());
+}
+
+void DocumentRenderCache::reset() noexcept {
+    bitmap_.Reset();
+    revision_ = std::numeric_limits<std::uint64_t>::max();
+    surface_generation_ = 0;
+    width_ = 0;
+    height_ = 0;
+    offset_x_ = 0.0F;
+    offset_y_ = 0.0F;
+    item_count_ = 0;
 }
 
 bool WindowBase::create(const wchar_t* class_name, const wchar_t* title, DWORD ex_style,
@@ -1475,6 +1635,11 @@ bool WindowBase::initialize_surface(GraphicsDevice& graphics) {
 }
 
 LRESULT WindowBase::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
+    if (message == WM_TIMER && wparam == Surface::kPresentRetryTimer) {
+        KillTimer(window_, Surface::kPresentRetryTimer);
+        invalidate();
+        return 0;
+    }
     if (message == WM_ERASEBKGND) return 1;
     if (message == WM_SIZE && surface_.context()) {
         std::wstring error;
@@ -1536,8 +1701,11 @@ void OverlayWindow::refresh_pencil_cursor() {
 
 void OverlayWindow::update_interaction() {
     LONG_PTR style = GetWindowLongPtrW(window_, GWL_EXSTYLE);
-    if (controller_.state().tool == Tool::Interact || controller_.zoom_active())
-        style |= WS_EX_TRANSPARENT;
+    const bool transparent = controller_.state().tool == Tool::Interact ||
+                             controller_.zoom_active();
+    const bool was_transparent = (style & WS_EX_TRANSPARENT) != 0;
+    if (transparent == was_transparent) return;
+    if (transparent) style |= WS_EX_TRANSPARENT;
     else style &= ~static_cast<LONG_PTR>(WS_EX_TRANSPARENT);
     SetWindowLongPtrW(window_, GWL_EXSTYLE, style);
     SetWindowPos(window_, HWND_TOPMOST, 0, 0, 0, 0,
@@ -1598,7 +1766,7 @@ void OverlayWindow::begin_gesture(PointF point, float pressure) {
     controller_.preview() = std::move(drawable);
     drawing_ = true;
     SetCapture(window_);
-    controller_.invalidate_document();
+    controller_.invalidate_preview();
 }
 
 void OverlayWindow::update_gesture(PointF point, WPARAM keys) {
@@ -1639,7 +1807,7 @@ void OverlayWindow::update_gesture(PointF point, WPARAM keys) {
         }
         preview->points.push_back(point);
     }
-    controller_.invalidate_document();
+    controller_.invalidate_preview();
 }
 
 void OverlayWindow::finish_gesture(PointF point, WPARAM keys) {
@@ -1650,7 +1818,7 @@ void OverlayWindow::finish_gesture(PointF point, WPARAM keys) {
     if (erasing_) {
         controller_.state().document.end_compound();
         erasing_ = false;
-        controller_.update_overlay_interaction();
+        controller_.restack_palette();
         controller_.invalidate_document();
         return;
     }
@@ -1674,8 +1842,7 @@ void OverlayWindow::finish_gesture(PointF point, WPARAM keys) {
         completed.points.resize(1);
     }
     controller_.commit_drawable(std::move(completed));
-    controller_.update_overlay_interaction();
-    controller_.invalidate_document();
+    controller_.restack_palette();
 }
 
 LRESULT OverlayWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
@@ -1785,30 +1952,55 @@ LRESULT OverlayWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
 }
 
 void OverlayWindow::render() {
+    const RectF viewport{static_cast<float>(monitor_rect_.left),
+                         static_cast<float>(monitor_rect_.top),
+                         static_cast<float>(monitor_rect_.right),
+                         static_cast<float>(monitor_rect_.bottom)};
+    const bool annotations_visible = controller_.state().annotations_visible;
+    const bool cache_ready = !annotations_visible || document_cache_.update(
+        controller_.graphics(), surface_, controller_.state().document,
+        static_cast<float>(monitor_rect_.left),
+        static_cast<float>(monitor_rect_.top), viewport);
     const D2D1_COLOR_F background = controller_.state().whiteboard
         ? D2D1::ColorF(D2D1::ColorF::White)
         : (controller_.state().blackboard ? D2D1::ColorF(0x111318)
                                           : D2D1::ColorF(0, 0.0F));
     auto* context = surface_.begin_draw(background);
     if (!context) return;
-    if (controller_.state().annotations_visible) {
-        for (const auto& drawable : controller_.state().document.items()) {
-            draw_drawable(controller_.graphics(), context, drawable,
-                          static_cast<float>(monitor_rect_.left),
-                          static_cast<float>(monitor_rect_.top));
+    if (annotations_visible) {
+        if (cache_ready) {
+            document_cache_.draw(context);
+        } else {
+            DrawableRenderResources fallback;
+            if (fallback.initialize(controller_.graphics(), context)) {
+                for (const auto& drawable : controller_.state().document.items()) {
+                    if (drawable.bounds().intersects(viewport)) {
+                        draw_drawable(controller_.graphics(), context, fallback, drawable,
+                                      static_cast<float>(monitor_rect_.left),
+                                      static_cast<float>(monitor_rect_.top));
+                    }
+                }
+            }
         }
+        DrawableRenderResources live;
+        const bool has_live_content = !controller_.transient_drawables().empty() ||
+                                      controller_.preview().has_value();
+        const bool live_ready = has_live_content &&
+                                live.initialize(controller_.graphics(), context);
         const std::uint64_t now = monotonic_milliseconds();
         for (const auto& transient : controller_.transient_drawables()) {
+            if (!live_ready || !transient.drawable.bounds().intersects(viewport)) continue;
             const std::uint64_t remaining = transient.expires_at_ms > now
                 ? transient.expires_at_ms - now : 0;
             const float opacity = remaining >= 1200U ? 1.0F
                 : static_cast<float>(remaining) / 1200.0F;
-            draw_drawable(controller_.graphics(), context, transient.drawable,
+            draw_drawable(controller_.graphics(), context, live, transient.drawable,
                           static_cast<float>(monitor_rect_.left),
                           static_cast<float>(monitor_rect_.top), opacity);
         }
-        if (controller_.preview()) {
-            draw_drawable(controller_.graphics(), context, *controller_.preview(),
+        if (live_ready && controller_.preview() &&
+            controller_.preview()->bounds().intersects(viewport)) {
+            draw_drawable(controller_.graphics(), context, live, *controller_.preview(),
                           static_cast<float>(monitor_rect_.left),
                           static_cast<float>(monitor_rect_.top), 0.82F);
         }
@@ -2225,6 +2417,10 @@ LRESULT PaletteWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
             return collapsed_ ? 1 : 0;
         case kQaQueryThemeMessage:
             return static_cast<LRESULT>(controller_.preferences().theme);
+        case kQaPopulateStressDocumentMessage:
+            controller_.populate_stress_document(
+                std::clamp<std::size_t>(static_cast<std::size_t>(wparam), 1, 20000));
+            return static_cast<LRESULT>(controller_.state().document.items().size());
         case kQaQueryBoardModeMessage:
             return controller_.state().whiteboard ? 1 :
                    (controller_.state().blackboard ? 2 : 0);
@@ -2281,7 +2477,19 @@ LRESULT PaletteWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
                 const bool down = (GetAsyncKeyState(VK_ESCAPE) & 0x8000) != 0;
                 if (down && !escape_down_) controller_.stop_transient_mode();
                 escape_down_ = down;
-                if (controller_.state().cursor_highlight) controller_.invalidate_document();
+                if (controller_.state().cursor_highlight) {
+                    POINT cursor{};
+                    if (GetCursorPos(&cursor) &&
+                        (!highlight_cursor_initialized_ ||
+                         cursor.x != last_highlight_cursor_.x ||
+                         cursor.y != last_highlight_cursor_.y)) {
+                        last_highlight_cursor_ = cursor;
+                        highlight_cursor_initialized_ = true;
+                        controller_.invalidate_document();
+                    }
+                } else {
+                    highlight_cursor_initialized_ = false;
+                }
                 controller_.update_transient_ink();
                 return 0;
             }
@@ -3248,6 +3456,7 @@ void TextInputWindow::render() {
 }
 
 LRESULT TextInputWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
+    constexpr std::size_t max_text_length = 8192;
     switch (message) {
         case WM_NCHITTEST:
             return HTTRANSPARENT;
@@ -3269,10 +3478,14 @@ LRESULT TextInputWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpar
                 }
             } else if (wparam == L'\r') {
                 if ((GetKeyState(VK_CONTROL) & 0x8000) != 0) commit();
-                else text_.push_back(L'\n');
+                else if (text_.size() < max_text_length) text_.push_back(L'\n');
             } else if (wparam == L'\t') {
-                text_.append(4, L' ');
-            } else if (wparam >= 0x20 && wparam != 0x7F) {
+                text_.append(std::min<std::size_t>(4, max_text_length - text_.size()),
+                             L' ');
+            } else if (wparam >= 0x20 && wparam != 0x7F &&
+                       text_.size() < max_text_length &&
+                       !(wparam >= 0xD800 && wparam <= 0xDBFF &&
+                         text_.size() + 1 >= max_text_length)) {
                 text_.push_back(static_cast<wchar_t>(wparam));
             }
             caret_visible_ = true;
@@ -3282,7 +3495,11 @@ LRESULT TextInputWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpar
             if (active_ && OpenClipboard(window_)) {
                 if (HANDLE data = GetClipboardData(CF_UNICODETEXT)) {
                     if (const auto* value = static_cast<const wchar_t*>(GlobalLock(data))) {
-                        text_.append(value);
+                        const std::size_t remaining = max_text_length - text_.size();
+                        const std::size_t available = GlobalSize(data) / sizeof(wchar_t);
+                        text_.append(value, wcsnlen(value, std::min(remaining, available)));
+                        if (!text_.empty() && text_.back() >= 0xD800 &&
+                            text_.back() <= 0xDBFF) text_.pop_back();
                         GlobalUnlock(data);
                     }
                 }
@@ -4269,6 +4486,7 @@ void ZoomInkWindow::hide() {
     snapshot_has_content_ = false;
     preview_.reset();
     document_ = Document{};
+    document_cache_.reset();
     ShowWindow(window_, SW_HIDE);
 }
 
@@ -4549,8 +4767,18 @@ LRESULT ZoomInkWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
             return snapshot_ && snapshot_has_content_ ? 1 : 0;
         case WM_MOUSEACTIVATE:
             return MA_NOACTIVATE;
-        case WM_NCHITTEST:
-            return frozen_ ? HTCLIENT : HTTRANSPARENT;
+        case WM_NCHITTEST: {
+            if (!frozen_) return HTTRANSPARENT;
+            const POINT screen_point{GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+            if (controller_.palette() &&
+                controller_.palette()->contains_screen_point(screen_point)) {
+                // The palette is the authoritative command surface. Keep this
+                // hit-test transparent over its rectangle even during a brief
+                // topmost-order transition after the zoom snapshot is restored.
+                return HTTRANSPARENT;
+            }
+            return HTCLIENT;
+        }
         case WM_SETCURSOR:
             if (LOWORD(lparam) == HTCLIENT) {
                 const Tool tool = controller_.state().tool;
@@ -4643,6 +4871,11 @@ LRESULT ZoomInkWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
 }
 
 void ZoomInkWindow::render() {
+    const bool annotations_visible = controller_.state().annotations_visible;
+    const RectF viewport{0.0F, 0.0F, static_cast<float>(surface_.width()),
+                         static_cast<float>(surface_.height())};
+    const bool cache_ready = !annotations_visible || document_cache_.update(
+        controller_.graphics(), surface_, document_, 0.0F, 0.0F, viewport);
     auto* context = surface_.begin_draw(D2D1::ColorF(0, 0.0F));
     if (!context) return;
     if (frozen_ && snapshot_) {
@@ -4651,11 +4884,27 @@ void ZoomInkWindow::render() {
         context->DrawBitmap(snapshot_.Get(), destination, 1.0F,
                             D2D1_BITMAP_INTERPOLATION_MODE_LINEAR);
     }
-    if (controller_.state().annotations_visible) {
-        for (const auto& drawable : document_.items())
-            draw_drawable(controller_.graphics(), context, drawable, 0, 0);
-        if (preview_)
-            draw_drawable(controller_.graphics(), context, *preview_, 0, 0, 0.82F);
+    if (annotations_visible) {
+        if (cache_ready) {
+            document_cache_.draw(context);
+        } else {
+            DrawableRenderResources fallback;
+            if (fallback.initialize(controller_.graphics(), context)) {
+                for (const auto& drawable : document_.items()) {
+                    if (drawable.bounds().intersects(viewport)) {
+                        draw_drawable(controller_.graphics(), context, fallback,
+                                      drawable, 0, 0);
+                    }
+                }
+            }
+        }
+        if (preview_) {
+            DrawableRenderResources live;
+            if (live.initialize(controller_.graphics(), context)) {
+                draw_drawable(controller_.graphics(), context, live, *preview_,
+                              0, 0, 0.82F);
+            }
+        }
     }
     if (frozen_) {
         const auto& theme = current_ui_theme();
@@ -4891,6 +5140,7 @@ bool ZoomWindow::show_zoom() {
     }
     active_ = true;
     overview_ = false;
+    source_initialized_ = false;
     install_click_hook();
     SetTimer(window_, 1, 16, nullptr);
     refresh_source();
@@ -4905,6 +5155,7 @@ bool ZoomWindow::show_zoom() {
 void ZoomWindow::hide_zoom() {
     if (!active_) return;
     active_ = false;
+    source_initialized_ = false;
     uninstall_click_hook();
     KillTimer(window_, 1);
     update_lens_cursor(false);
@@ -4920,6 +5171,7 @@ bool ZoomWindow::toggle_freeze() {
     if (!active_ || !ink_) return false;
     if (ink_->frozen()) {
         ink_->show_live(zoom_rect_);
+        source_initialized_ = false;
         install_click_hook();
         SetTimer(window_, 1, 16, nullptr);
         refresh_source();
@@ -5098,13 +5350,20 @@ void ZoomWindow::apply_theme() {
 void ZoomWindow::refresh_source() {
     if (!active_ || (ink_ && ink_->frozen())) return;
     POINT cursor{};
-    GetCursorPos(&cursor);
+    if (!GetCursorPos(&cursor)) return;
+    const auto view = static_cast<ZoomView>(controller_.preferences().zoom_view);
+    const float factor = overview_ ? 1.0F : controller_.state().zoom_factor;
+    if (source_initialized_ && cursor.x == last_source_cursor_.x &&
+        cursor.y == last_source_cursor_.y &&
+        static_cast<int>(view) == last_source_view_ &&
+        factor == last_source_factor_ && overview_ == last_source_overview_) {
+        return;
+    }
     HMONITOR monitor = MonitorFromPoint(cursor, MONITOR_DEFAULTTONEAREST);
     MONITORINFO info{};
     info.cbSize = sizeof(info);
     GetMonitorInfoW(monitor, &info);
     monitor_rect_ = info.rcMonitor;
-    const auto view = static_cast<ZoomView>(controller_.preferences().zoom_view);
     update_lens_cursor(view == ZoomView::Lens);
     const int monitor_width = monitor_rect_.right - monitor_rect_.left;
     const int monitor_height = monitor_rect_.bottom - monitor_rect_.top;
@@ -5127,19 +5386,24 @@ void ZoomWindow::refresh_source() {
     }
     const int zoom_width = zoom_rect.right - zoom_rect.left;
     const int zoom_height = zoom_rect.bottom - zoom_rect.top;
+    const bool geometry_changed = !source_initialized_ ||
+                                  !EqualRect(&zoom_rect_, &zoom_rect);
     zoom_rect_ = zoom_rect;
-    const HWND root_insert_after = ink_ && IsWindowVisible(ink_->hwnd())
-        ? ink_->hwnd()
-        : (controller_.palette() && IsWindowVisible(controller_.palette()->hwnd())
-            ? controller_.palette()->hwnd() : HWND_TOPMOST);
-    SetWindowPos(window_, root_insert_after, zoom_rect.left, zoom_rect.top,
-                 zoom_width, zoom_height, SWP_SHOWWINDOW);
-    SetWindowPos(magnifier_, nullptr, 0, 0, zoom_width, zoom_height,
-                 SWP_NOZORDER | SWP_SHOWWINDOW);
+    if (geometry_changed) {
+        const HWND root_insert_after = ink_ && IsWindowVisible(ink_->hwnd())
+            ? ink_->hwnd()
+            : (controller_.palette() && IsWindowVisible(controller_.palette()->hwnd())
+                ? controller_.palette()->hwnd() : HWND_TOPMOST);
+        SetWindowPos(window_, root_insert_after, zoom_rect.left, zoom_rect.top,
+                     zoom_width, zoom_height, SWP_SHOWWINDOW);
+        SetWindowPos(magnifier_, nullptr, 0, 0, zoom_width, zoom_height,
+                     SWP_NOZORDER | SWP_SHOWWINDOW);
+    }
 
-    const float factor = overview_ ? 1.0F : controller_.state().zoom_factor;
-    MAGTRANSFORM transform{{{factor, 0, 0}, {0, factor, 0}, {0, 0, 1}}};
-    mag_set_transform_(magnifier_, &transform);
+    if (!source_initialized_ || factor != last_source_factor_) {
+        MAGTRANSFORM transform{{{factor, 0, 0}, {0, factor, 0}, {0, 0, 1}}};
+        mag_set_transform_(magnifier_, &transform);
+    }
     const int source_width = std::max(1, static_cast<int>(
         static_cast<float>(zoom_width) / factor));
     const int source_height = std::max(1, static_cast<int>(
@@ -5153,7 +5417,8 @@ void ZoomWindow::refresh_source() {
     source_rect_ = RECT{left, top, left + source_width, top + source_height};
     mag_set_source_(magnifier_, source_rect_);
     InvalidateRect(magnifier_, nullptr, TRUE);
-    if (ink_ && IsWindowVisible(ink_->hwnd())) ink_->set_bounds(zoom_rect_);
+    if (geometry_changed && ink_ && IsWindowVisible(ink_->hwnd()))
+        ink_->set_bounds(zoom_rect_);
     if (target_) {
         if (view == ZoomView::Lens) {
             // The source rectangle can be clamped at monitor edges. Its center,
@@ -5166,6 +5431,11 @@ void ZoomWindow::refresh_source() {
         }
         else target_->hide();
     }
+    source_initialized_ = true;
+    last_source_cursor_ = cursor;
+    last_source_factor_ = factor;
+    last_source_view_ = static_cast<int>(view);
+    last_source_overview_ = overview_;
 }
 
 LRESULT ZoomWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
@@ -5181,6 +5451,10 @@ LRESULT ZoomWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
             if (active_ && !frozen()) toggle_freeze();
             return 0;
         case WM_TIMER: refresh_source(); return 0;
+        case WM_DISPLAYCHANGE:
+            source_initialized_ = false;
+            refresh_source();
+            return 0;
         case WM_MOUSEWHEEL: {
             const float direction = GET_WHEEL_DELTA_WPARAM(wparam) > 0 ? 0.25F : -0.25F;
             controller_.state().zoom_factor = std::clamp(
@@ -5338,21 +5612,42 @@ void Controller::shutdown() {
 
 void Controller::invalidate_document() {
     for (const auto& overlay : overlays_) overlay->invalidate();
+}
+
+void Controller::invalidate_preview() {
+    if (!preview_) {
+        invalidate_document();
+        return;
+    }
+    const RectF bounds = preview_->bounds();
+    for (const auto& overlay : overlays_) {
+        const RECT& monitor = overlay->monitor_rect();
+        const RectF viewport{static_cast<float>(monitor.left),
+                             static_cast<float>(monitor.top),
+                             static_cast<float>(monitor.right),
+                             static_cast<float>(monitor.bottom)};
+        if (bounds.intersects(viewport)) overlay->invalidate();
+    }
+}
+
+void Controller::invalidate_all() {
+    invalidate_document();
     if (palette_) palette_->invalidate();
     if (zoom_) zoom_->invalidate_ink();
 }
 
-void Controller::invalidate_all() { invalidate_document(); }
+void Controller::restack_palette() {
+    if (!palette_) return;
+    SetWindowPos(palette_->hwnd(), HWND_TOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+}
 
 void Controller::update_overlay_interaction() {
     for (const auto& overlay : overlays_) overlay->update_interaction();
     restack_zoom();
     // Every overlay is topmost while drawing, so explicitly restore the palette
     // above them. Its controls must remain selectable in every tool mode.
-    if (palette_) {
-        SetWindowPos(palette_->hwnd(), HWND_TOPMOST, 0, 0, 0, 0,
-                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
-    }
+    restack_palette();
 }
 
 bool Controller::route_palette_command(PointF screen_point) {
@@ -5375,7 +5670,7 @@ void Controller::set_tool(Tool tool) {
     state_.tool = tool;
     close_panels();
     update_overlay_interaction();
-    invalidate_all();
+    if (palette_) palette_->invalidate();
 }
 
 void Controller::set_color(Color color) {
@@ -5383,16 +5678,14 @@ void Controller::set_color(Color color) {
     preferences_.color = color;
     if (state_.tool == Tool::Interact || state_.tool == Tool::Eraser) set_tool(Tool::Pen);
     if (text_input_) text_input_->update_style(state_.color, state_.thickness);
-    update_overlay_interaction();
-    invalidate_all();
+    if (palette_) palette_->invalidate();
 }
 
 void Controller::set_thickness(float thickness) {
     state_.thickness = thickness;
     preferences_.thickness = thickness;
     if (text_input_) text_input_->update_style(state_.color, state_.thickness);
-    update_overlay_interaction();
-    invalidate_all();
+    if (palette_) palette_->invalidate();
 }
 
 void Controller::toggle_visibility() {
@@ -5618,6 +5911,31 @@ void Controller::commit_drawable(Drawable drawable) {
         state_.document.add(std::move(drawable));
         invalidate_document();
     }
+}
+
+void Controller::populate_stress_document(std::size_t count) {
+    if (!state_.document.empty()) state_.document.clear();
+    transient_drawables_.clear();
+    preview_.reset();
+    state_.tool = Tool::Pen;
+    state_.annotations_visible = true;
+    for (std::size_t stroke = 0; stroke < count; ++stroke) {
+        Drawable drawable;
+        drawable.kind = stroke % 7 == 0 ? Tool::Highlighter : Tool::Pen;
+        drawable.color = stroke % 5 == 0 ? kPurple : kBlue;
+        drawable.width = drawable.kind == Tool::Highlighter ? 11.0F : 4.0F;
+        drawable.points.reserve(24);
+        const float base_x = 240.0F + static_cast<float>(stroke % 100) * 11.0F;
+        const float base_y = 180.0F + static_cast<float>((stroke / 100) % 55) * 9.0F;
+        for (std::size_t sample = 0; sample < 24; ++sample) {
+            const float x = base_x + static_cast<float>(sample) * 7.0F;
+            const float y = base_y + std::sin(static_cast<float>(sample) * 0.62F) * 9.0F;
+            drawable.points.push_back({x, y});
+        }
+        state_.document.add(std::move(drawable));
+    }
+    update_overlay_interaction();
+    invalidate_document();
 }
 
 void Controller::update_transient_ink() {
@@ -5851,7 +6169,7 @@ void Controller::set_theme(AppTheme theme) {
     if (tools_) tools_->invalidate();
     if (text_input_) text_input_->invalidate();
     if (zoom_) zoom_->apply_theme();
-    invalidate_document();
+    if (state_.cursor_highlight) invalidate_document();
     restack_zoom();
 }
 
