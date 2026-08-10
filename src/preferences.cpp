@@ -90,6 +90,8 @@ Preferences PreferencesStore::load() const {
         kCurrentHotkeySchemeVersion);
     result.theme = static_cast<AppTheme>(
         std::clamp(read_int(path_, L"Theme", 0), 0, 1));
+    result.control_mode = static_cast<ControlMode>(
+        std::clamp(read_int(path_, L"ControlMode", 0), 0, 1));
     result.confirm_clear = read_int(path_, L"ConfirmClear", 0) != 0;
     result.exclude_palette_from_capture = read_int(path_, L"ExcludePaletteFromCapture", 1) != 0;
     result.start_in_interact_mode = read_int(path_, L"StartInInteractMode", 0) != 0;
@@ -144,6 +146,7 @@ bool PreferencesStore::save(const Preferences& preferences) const {
     content << "[ElitePen]\r\n";
     content << "HotkeySchemeVersion=" << preferences.hotkey_scheme_version << "\r\n";
     content << "Theme=" << static_cast<int>(preferences.theme) << "\r\n";
+    content << "ControlMode=" << static_cast<int>(preferences.control_mode) << "\r\n";
     content << "ConfirmClear=" << (preferences.confirm_clear ? 1 : 0) << "\r\n";
     content << "ExcludePaletteFromCapture="
             << (preferences.exclude_palette_from_capture ? 1 : 0) << "\r\n";

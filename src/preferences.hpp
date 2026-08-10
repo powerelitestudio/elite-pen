@@ -15,6 +15,11 @@ enum class AppTheme : std::uint8_t {
     Light = 1,
 };
 
+enum class ControlMode : std::uint8_t {
+    Palette = 0,
+    Linear = 1,
+};
+
 enum class HotkeyAction : std::uint8_t {
     Interact,
     Visibility,
@@ -136,6 +141,7 @@ inline constexpr std::array<HotkeyBinding, kHotkeyActionCount> kLegacyDefaultHot
 struct Preferences {
     int hotkey_scheme_version{kCurrentHotkeySchemeVersion};
     AppTheme theme{AppTheme::Dark};
+    ControlMode control_mode{ControlMode::Palette};
     bool confirm_clear{false};
     bool exclude_palette_from_capture{true};
     bool start_in_interact_mode{false};

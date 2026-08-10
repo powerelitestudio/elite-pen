@@ -7,7 +7,10 @@
 - `platform/windows`: ciclo Win32, DPI, atajos, bandeja, entrada y ampliacion.
 - `graphics`: dispositivo D3D11/D2D compartido y superficies DirectComposition con
   alfa premultiplicado.
-- `ui`: paleta-pincel, selector de herramientas, selector de color y configuracion.
+- `ui`: superficie de control intercambiable Paleta/Lineal, selector de herramientas,
+  selector de color y configuracion. `control_layout.hpp` concentra geometría pura,
+  hit zones y contratos de tamaño; `PaletteWindow` mantiene una sola ventana y un
+  único enrutador de comandos para ambas presentaciones.
 - `capture`: seleccion de region, captura GDI con respaldo DXGI Desktop Duplication,
   transferencia al portapapeles y codificacion PNG mediante Windows Imaging Component.
 - `zoom`: control Magnifier nativo para el flujo vivo y una superficie

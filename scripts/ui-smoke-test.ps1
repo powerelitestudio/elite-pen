@@ -429,6 +429,47 @@ try {
         $activeTheme = [ElitePenUiNative]::SendMessage($palette, 0x8068, [IntPtr]::Zero, [IntPtr]::Zero)
         Assert-Ui ($activeTheme.ToInt64() -eq 0) 'Dark appearance was not restored after theme switching.'
 
+        # Paleta is the default presentation. Lineal reuses the same command
+        # engine, resizes in place and can return live without restarting.
+        $controlMode = [ElitePenUiNative]::GetDlgItem($settings, 4014)
+        Assert-Ui ($controlMode -ne [IntPtr]::Zero) 'Presentation selector is missing.'
+        $defaultMode = [ElitePenUiNative]::SendMessage(
+            $palette, 0x8070, [IntPtr]::Zero, [IntPtr]::Zero)
+        Assert-Ui ($defaultMode.ToInt64() -eq 0) 'Painter palette is not the default presentation.'
+        $null = [ElitePenUiNative]::SendMessage($controlMode, 0x014E, [IntPtr]1, [IntPtr]::Zero)
+        $null = [ElitePenUiNative]::SendMessage($settings, 0x0111, [IntPtr]0x00010FAE, $controlMode)
+        $linearMode = [ElitePenUiNative]::SendMessage(
+            $palette, 0x8070, [IntPtr]::Zero, [IntPtr]::Zero)
+        $linearBounds = New-Object ElitePenUiNative+RECT
+        $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$linearBounds)
+        Assert-Ui ($linearMode.ToInt64() -eq 1 -and
+                   ($linearBounds.Right - $linearBounds.Left) -eq 46 -and
+                   ($linearBounds.Bottom - $linearBounds.Top) -eq 406) `
+            'Lineal mode did not apply its compact vertical geometry.'
+        Click-PaletteWindow $palette 56 634
+        $linearColor = [ElitePenUiNative]::SendMessage(
+            $palette, 0x805B, [IntPtr]::Zero, [IntPtr]::Zero)
+        Assert-Ui ($linearColor.ToInt64() -eq 4287323382) `
+            'Lineal mode did not route its purple swatch through the shared color engine.'
+        Click-PaletteWindow $palette 49 571
+        $linearThickness = [ElitePenUiNative]::SendMessage(
+            $palette, 0x805C, [IntPtr]::Zero, [IntPtr]::Zero)
+        Assert-Ui ($linearThickness.ToInt64() -eq 120) `
+            'Lineal mode did not route its thickness controls through the shared engine.'
+        $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]23, [IntPtr]::Zero)
+        $linearCollapsedBounds = New-Object ElitePenUiNative+RECT
+        $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$linearCollapsedBounds)
+        Assert-Ui (($linearCollapsedBounds.Right - $linearCollapsedBounds.Left) -eq 46 -and
+                   ($linearCollapsedBounds.Bottom - $linearCollapsedBounds.Top) -eq 49) `
+            'Lineal hibernation did not collapse to its compact Elite pill.'
+        $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]23, [IntPtr]::Zero)
+        $null = [ElitePenUiNative]::SendMessage($controlMode, 0x014E, [IntPtr]0, [IntPtr]::Zero)
+        $null = [ElitePenUiNative]::SendMessage($settings, 0x0111, [IntPtr]0x00010FAE, $controlMode)
+        $paletteMode = [ElitePenUiNative]::SendMessage(
+            $palette, 0x8070, [IntPtr]::Zero, [IntPtr]::Zero)
+        Assert-Ui ($paletteMode.ToInt64() -eq 0) `
+            'Live presentation switch did not restore the painter palette.'
+
         $paletteSize = [ElitePenUiNative]::GetDlgItem($settings, 4011)
         Assert-Ui ($paletteSize -ne [IntPtr]::Zero) 'Whole-unit size selector is missing.'
         $null = [ElitePenUiNative]::SendMessage($paletteSize, 0x014E, [IntPtr]0, [IntPtr]::Zero)

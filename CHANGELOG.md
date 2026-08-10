@@ -1,5 +1,23 @@
 # Historial de cambios
 
+## 2.5.0 — 2026-08-10
+
+- Nueva presentación `Lineal`: una barra vertical estrecha, inspirada en la rapidez
+  de acceso de Epic Pen pero integrada al sistema premium de Elite Pen.
+- `Paleta de pintor` continúa siendo la presentación predeterminada. Configuración
+  permite cambiar en vivo entre ambas sin reiniciar y conserva la elección en
+  instalaciones y ediciones portables.
+- Lineal expone visibilidad, Cursor/Lápiz, herramientas, resaltador, borrador,
+  geometría, texto, pizarras, zoom, historial, limpieza y configuración; sus cinco
+  grosores y seis colores rápidos permanecen accesibles directamente.
+- Los temas Oscuro y Claro, tamaños 80/100/125/150 %, hibernación, arrastre,
+  tooltips, paneles y atajos usan el mismo motor en las dos presentaciones.
+- La interfaz de control se organizó en un contrato de geometría independiente de
+  la lógica de documentos. No se duplican estados, ventanas de dibujo ni rutas GPU.
+- QA valida Paleta como valor inicial, cambio bidireccional en vivo, dimensiones,
+  colores, grosor, contracción y persistencia de Lineal; se revisaron visualmente
+  Lineal oscuro, claro, contraído y la nueva Configuración.
+
 ## 2.4.0 — 2026-08-10
 
 - Nuevo esquema global: `Ctrl+Shift+Q` alterna Cursor/Lápiz, `Ctrl+Shift+A`

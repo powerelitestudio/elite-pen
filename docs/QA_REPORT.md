@@ -1,4 +1,4 @@
-# Informe de calidad — Elite Pen 2.4.0
+# Informe de calidad — Elite Pen 2.5.0
 
 Fecha: 2026-08-10
 Equipo de referencia: Lenovo 80NV, Intel Core i7-6700HQ, 12 GB RAM, Intel HD 530,
@@ -88,6 +88,11 @@ GeForce GTX 960M, Windows 10 Pro 22H2 x64, dos monitores con escalado mixto.
   expansión por `Ctrl+Shift+D`, y repite zoom vivo, lente, congelación, tinta y
   orden Z. En escritorios restringidos usa una imagen sintética solo dentro del
   sandbox de pruebas; el binario normal continúa capturando Magnifier realmente.
+- Presentaciones 2.5: QA inicia en Paleta, cambia en vivo a Lineal y vuelve sin
+  reiniciar; valida 46 × 406 px Estándar, color morado, grosor 12 px y la píldora
+  contraída de 46 × 49 px. El round trip portable conserva `ControlMode=1`.
+- Revisión visual 2.5: capturas reales verifican Lineal oscuro, claro y contraído,
+  además de Configuración con selector de presentación sin superposiciones.
 - Persistencia 2.0: una prueba portable aislada escribe y vuelve a leer posición con
   coordenadas negativas, escala, modo contraído, color, grosor, zoom y atajos
   personalizados; también comprueba el reemplazo atómico sin archivo `.tmp` residual.
@@ -134,5 +139,5 @@ Resultado final en el equipo de referencia:
 - Windows puede denegar la captura del escritorio en una sesion bloqueada, segura o
   no interactiva; Elite Pen informa el fallo y no genera un archivo corrupto.
 - La presion depende del controlador del lapiz y de que Windows entregue WM_POINTER.
-- El binario 2.4.0 no esta firmado digitalmente; los hashes del paquete permiten
+- El binario 2.5.0 no esta firmado digitalmente; los hashes del paquete permiten
   verificar integridad hasta incorporar el certificado de Power Elite Studio.

@@ -1,12 +1,14 @@
-# Elite Pen 2.4 — contrato de producto
+# Elite Pen 2.5 — contrato de producto
 
-Estado: version 2.4.0 implementada.
+Estado: version 2.5.0 implementada.
 
 ## 1. Identidad e interaccion principal
 
-La ventana de control es una paleta de pintor compacta, siempre visible, movible y
-escalada por monitor. El fondo exterior es transparente y el control no roba foco a
-la aplicacion sobre la que se presenta.
+La ventana de control ofrece dos presentaciones intercambiables: `Paleta`, una
+paleta de pintor compacta, y `Lineal`, una barra vertical estrecha. Ambas son
+siempre visibles, movibles y escaladas por monitor. El fondo exterior es
+transparente y el control no roba foco a la aplicacion sobre la que se presenta.
+Paleta es el valor predeterminado; la selección se conserva entre sesiones.
 
 ### Lenguaje visual
 
@@ -50,6 +52,23 @@ la aplicacion sobre la que se presenta.
   área útil del monitor.
 - Todos los comandos permanecen por encima del lienzo y muestran cursor de mano, por
   lo que color, grosor y herramienta se seleccionan sin abandonar el modo de dibujo.
+
+### Lineal
+
+- Organiza en una columna visibilidad, Cursor/Lápiz, menú completo, resaltador,
+  borrador, figuras, texto, pizarra, zoom, Deshacer, Rehacer, Limpiar y Configuración.
+- Conserva acceso directo a los cinco grosores y a negro, amarillo, azul, rojo,
+  verde, morado y el selector `+` en el pie de la barra.
+- A escala Estándar mide 46 × 406 píxeles físicos. Los otros tres tamaños aplican
+  el mismo factor uniforme usado por Paleta a dibujo, iconos y zonas de clic.
+- El estado activo se comunica mediante superficie violeta, contorno y cambio del
+  propio glifo. El hover solo invalida la barra cuando cambia de elemento.
+- Al contraerse queda una píldora Elite de 46 × 49 píxeles a escala Estándar; el
+  icono central expande y el espacio restante permite moverla.
+- Clic en Pizarra abre el lienzo blanco y clic derecho abre el negro. El selector de
+  herramientas y los paneles se anclan al costado disponible de la misma ventana.
+- Paleta y Lineal son presentaciones del mismo controlador: no duplican documento,
+  historial, zoom, preferencias, hotkeys ni superficies de renderizado.
 
 ### Pincel
 

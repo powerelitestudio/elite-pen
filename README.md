@@ -1,15 +1,16 @@
 # Elite Pen
 
 Elite Pen es la herramienta nativa de anotacion, pizarra y ampliacion de pantalla de
-Power Elite Studio. Su interfaz principal toma la forma de una paleta de pintor y un
-pincel funcional; no replica la barra vertical de otras aplicaciones.
+Power Elite Studio. Ofrece dos presentaciones del mismo motor: `Paleta`, con la
+paleta de pintor y su pincel funcional, y `Lineal`, una barra vertical ultracompacta.
+`Paleta` es el modo predeterminado.
 
-La edición 2.4 integra el sistema visual de la familia Elite: grafito o marfil según
+La edición 2.5 integra el sistema visual de la familia Elite: grafito o marfil según
 el tema, violeta como acento principal, menta para estados, divisores finos y
 tipografía Segoe UI Variable. Configuración permite elegir `Oscuro` o `Claro`; la
 preferencia queda guardada tanto al instalar como en la edición portable.
 
-El motor 2.4 conserva la tinta terminada en una superficie GPU y solo rasteriza el
+El motor 2.5 conserva la tinta terminada en una superficie GPU y solo rasteriza el
 objeto recién añadido. El historial mueve los trazos sin duplicarlos, el borrador
 usa distancias al cuadrado y el simplificador de trazos es iterativo. El zoom evita
 reconfigurar su fuente cuando el puntero permanece quieto. El benchmark automatizado
@@ -25,7 +26,7 @@ valida 5.000 trazos, cuadros en caché, dibujo activo, memoria y rutas de compat
 - Usar pizarras blanca y negra instantaneas.
 - Ampliar la pantalla en vista completa, lente o acoplada y seguir el puntero.
 - Congelar el zoom, anotar sobre la imagen fija y reanudar sin perder esa tinta.
-- Hibernar toda la interfaz en una paleta mínima que no estorba.
+- Hibernar toda la interfaz en una unidad mínima que no estorba.
 - Usar tinta temporal y un halo de cursor para presentaciones.
 - Mantener una respuesta fluida en equipos de 2017 con graficos integrados.
 - Funcionar instalado o como aplicacion portable sin privilegios de administrador.
@@ -53,6 +54,11 @@ Los binarios quedan en `build/<configuracion>/`. La distribucion portable se gen
 con `scripts/publish-portable.ps1`.
 
 ## Controles
+
+Configuración permite elegir `Paleta de pintor` o `Lineal vertical` sin reiniciar.
+Lineal reúne en una columna los comandos principales, añade los cinco grosores y
+una matriz inferior con los seis colores rápidos y `+`. Ambas presentaciones
+comparten estado, paneles, atajos, tema, escala y posición guardada.
 
 | Accion | Control principal | Atajo global |
 |---|---|---|
@@ -99,7 +105,8 @@ Al congelar se activa el lápiz y se admiten colores, texto y geometrías. La ti
 zoom usa historial propio: permanece al reanudar y la papelera la limpia sin tocar
 las anotaciones normales.
 
-Configuración permite escalar toda la unidad al 80 %, 100 %, 125 % o 150 %; el
+Configuración permite elegir Paleta o Lineal y escalar toda la unidad al 80 %,
+100 %, 125 % o 150 %; el
 100 % corresponde al tamaño Estándar original. El icono bajo el ojo contrae la unidad
 un 70 % y deja una paleta mínima. Solo el icono central la expande; el resto de la
 superficie conserva el cursor de cuatro flechas y permite moverla. La pestaña
@@ -108,7 +115,8 @@ Cada fila tiene su propio lápiz de edición; `Supr` o `Retroceso` deja la acci�
 asignar y `Restablecer` recupera los valores de fábrica. Todo se conserva tanto
 instalado como portable.
 
-La edición 2.4 migra únicamente los atajos que todavía coincidan con los valores de
+La edición 2.5 conserva el esquema de atajos 2.4 y migra únicamente las combinaciones
+que todavía coincidan con los valores de
 fábrica anteriores. Las combinaciones personalizadas se mantienen intactas;
 `Restablecer` aplica el esquema 2.4 completo.
 

@@ -88,6 +88,7 @@ int main() {
 
     Preferences expected;
     expected.theme = AppTheme::Light;
+    expected.control_mode = ControlMode::Linear;
     expected.confirm_clear = true;
     expected.exclude_palette_from_capture = false;
     expected.has_palette_position = true;
@@ -115,6 +116,8 @@ int main() {
     check(store.save(expected), "preferences save atomically");
     const Preferences actual = store.load();
     check(actual.theme == expected.theme, "appearance theme round trip");
+    check(actual.control_mode == expected.control_mode,
+          "control presentation mode round trip");
     check(actual.confirm_clear == expected.confirm_clear, "boolean preference round trip");
     check(actual.has_palette_position && actual.palette_x == expected.palette_x &&
           actual.palette_y == expected.palette_y, "negative monitor coordinates round trip");
