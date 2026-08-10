@@ -459,6 +459,28 @@ try {
     $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]3, [IntPtr]::Zero)
     $whiteboardMode = [ElitePenUiNative]::SendMessage($palette, 0x8063, [IntPtr]::Zero, [IntPtr]::Zero)
     Assert-Ui ($whiteboardMode.ToInt64() -eq 1) 'Whiteboard shortcut did not enter whiteboard mode.'
+    $boardStart = [IntPtr]((300 -shl 16) -bor 360)
+    $boardFinish = [IntPtr]((380 -shl 16) -bor 520)
+    $null = [ElitePenUiNative]::SendMessage($boardOverlay, 0x0201, [IntPtr]1, $boardStart)
+    $null = [ElitePenUiNative]::SendMessage($boardOverlay, 0x0200, [IntPtr]1, $boardFinish)
+    $null = [ElitePenUiNative]::SendMessage($boardOverlay, 0x0202, [IntPtr]0, $boardFinish)
+    Start-Sleep -Milliseconds 80
+    Assert-Ui ([ElitePenUiNative]::IsWindowVisible($palette) -and
+               [ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.Overlay')) `
+        'Whiteboard covered the palette after completing its first stroke.'
+    $whiteboardPaletteBounds = New-Object ElitePenUiNative+RECT
+    $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$whiteboardPaletteBounds)
+    $whiteboardPaletteProbe = New-Object ElitePenUiNative+POINT
+    $whiteboardPaletteProbe.X = [Math]::Floor(
+        ($whiteboardPaletteBounds.Left + $whiteboardPaletteBounds.Right) / 2)
+    $whiteboardPaletteProbe.Y = [Math]::Floor(
+        ($whiteboardPaletteBounds.Top + $whiteboardPaletteBounds.Bottom) / 2)
+    $whiteboardPaletteAtPoint = [ElitePenUiNative]::WindowFromPoint($whiteboardPaletteProbe)
+    $whiteboardPaletteClass = New-Object System.Text.StringBuilder 128
+    $null = [ElitePenUiNative]::GetClassName(
+        $whiteboardPaletteAtPoint, $whiteboardPaletteClass, 128)
+    Assert-Ui ($whiteboardPaletteClass.ToString() -eq 'ElitePen.Palette') `
+        'Whiteboard intercepted input over the palette after the first stroke.'
     $null = [ElitePenUiNative]::SendMessage($boardOverlay, 0x0100, [IntPtr]27, [IntPtr]::Zero)
     $boardAfterEscape = [ElitePenUiNative]::SendMessage($palette, 0x8063, [IntPtr]::Zero, [IntPtr]::Zero)
     Assert-Ui ($boardAfterEscape.ToInt64() -eq 0) 'Escape did not leave whiteboard mode.'
@@ -492,6 +514,10 @@ try {
     if ($textWindow -ne [IntPtr]::Zero) {
         $style = [ElitePenUiNative]::GetWindowLong($textWindow, -16)
         Assert-Ui (($style -band 0x00C00000) -eq 0) 'Inline text unexpectedly has a dialog caption.'
+        $extendedStyle = [ElitePenUiNative]::GetWindowLong($textWindow, -20)
+        Assert-Ui (($extendedStyle -band 0x00200000) -ne 0 -and
+                   ($extendedStyle -band 0x00080000) -eq 0) `
+            'Inline text editor still uses the opaque layered-window backing surface.'
         foreach ($character in 'Elite Pen QA'.ToCharArray()) {
             $null = [ElitePenUiNative]::SendMessage($textWindow, 0x0102, [IntPtr][int]$character, [IntPtr]::Zero)
         }

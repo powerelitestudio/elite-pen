@@ -3,7 +3,7 @@ param()
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
-$installer = Join-Path $repoRoot 'dist\installer\Elite Pen Setup 2.1.3.exe'
+$installer = Join-Path $repoRoot 'dist\installer\Elite Pen Setup 2.1.4.exe'
 $target = Join-Path $repoRoot 'artifacts\qa\installer-smoke'
 $resolvedRepo = [IO.Path]::GetFullPath($repoRoot).TrimEnd('\') + '\'
 $resolvedTarget = [IO.Path]::GetFullPath($target)

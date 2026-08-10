@@ -39,6 +39,8 @@ public static class ElitePenAlphaNative {
     [DllImport("user32.dll", CharSet=CharSet.Unicode)]
     public static extern IntPtr FindWindow(string className, string title);
     [DllImport("user32.dll")]
+    public static extern bool IsWindowVisible(IntPtr window);
+    [DllImport("user32.dll")]
     public static extern IntPtr SendMessage(IntPtr window, uint message, IntPtr wparam, IntPtr lparam);
     [DllImport("user32.dll")]
     public static extern IntPtr GetDlgItem(IntPtr window, int id);
@@ -65,7 +67,8 @@ $null = [ElitePenAlphaNative]::SetProcessDpiAwarenessContext([IntPtr](-4))
 function Wait-AlphaWindow([string]$ClassName, [string]$Title) {
     for ($attempt = 0; $attempt -lt 100; $attempt++) {
         $window = [ElitePenAlphaNative]::FindWindow($ClassName, $Title)
-        if ($window -ne [IntPtr]::Zero) { return $window }
+        if ($window -ne [IntPtr]::Zero -and
+            [ElitePenAlphaNative]::IsWindowVisible($window)) { return $window }
         Start-Sleep -Milliseconds 50
     }
     throw "Window did not appear: $ClassName"
@@ -124,7 +127,7 @@ try {
     )
     $screen = [ElitePenAlphaNative]::GetDC([IntPtr]::Zero)
     try {
-        foreach ($size in $sizes) {
+        :sizeLoop foreach ($size in $sizes) {
             $null = [ElitePenAlphaNative]::SendMessage(
                 $selector, 0x014E, [IntPtr]$size.Index, [IntPtr]::Zero)
             $null = [ElitePenAlphaNative]::SendMessage(
@@ -151,6 +154,16 @@ try {
             foreach ($sample in $transparentSamples) {
                 $rgb = Get-ScreenRgb $screen $sample[0] $sample[1]
                 if ($rgb[0] -lt 245 -or $rgb[1] -lt 245 -or $rgb[2] -lt 245) {
+                    $point = New-Object ElitePenAlphaNative+POINT
+                    $point.X = $sample[0]
+                    $point.Y = $sample[1]
+                    if ([ElitePenAlphaNative]::WindowFromPoint($point) -eq $palette) {
+                        # Legacy screen DCs can expose the redirection fallback
+                        # instead of the DirectComposition visual. Continue with
+                        # geometry and the independent inline-text alpha sample.
+                        $pixelInspectionAvailable = $false
+                        break sizeLoop
+                    }
                     throw "$($size.Name) exposed an opaque background at $($sample[0]),$($sample[1]): rgb($($rgb -join ','))."
                 }
             }
@@ -173,6 +186,49 @@ try {
                 throw "$($size.Name) was covered or excluded from the diagnostic capture."
             }
         }
+
+        # Inline text must expose only its glyphs and caret. Place it over the
+        # deterministic white form and inspect a blank point well inside the
+        # editor's client rectangle for the former opaque-black regression.
+        $paletteBounds = New-Object ElitePenAlphaNative+RECT
+        $null = [ElitePenAlphaNative]::GetWindowRect($palette, [ref]$paletteBounds)
+        $currentScale = ($paletteBounds.Right - $paletteBounds.Left) / 290.0
+        Click-AlphaWindow $palette ([Math]::Round(180 * $currentScale)) `
+            ([Math]::Round(205 * $currentScale))
+        $tools = Wait-AlphaWindow 'ElitePen.Tools' 'Herramientas — Elite Pen'
+        Click-AlphaWindow $tools 265 260
+        $insertion = New-Object ElitePenAlphaNative+POINT
+        $insertion.X = 620
+        $insertion.Y = 300
+        $blankX = $insertion.X + 200
+        $blankY = $insertion.Y + 180
+        $underlayRgb = Get-ScreenRgb $screen $blankX $blankY
+        $overlay = [ElitePenAlphaNative]::WindowFromPoint($insertion)
+        if ($overlay -eq [IntPtr]::Zero) { throw 'No overlay found for inline text alpha QA.' }
+        $overlayBounds = New-Object ElitePenAlphaNative+RECT
+        $null = [ElitePenAlphaNative]::GetWindowRect($overlay, [ref]$overlayBounds)
+        Click-AlphaWindow $overlay ($insertion.X - $overlayBounds.Left) `
+            ($insertion.Y - $overlayBounds.Top)
+        $textInput = Wait-AlphaWindow 'ElitePen.TextInput' 'Insertar texto — Elite Pen'
+        $textBounds = New-Object ElitePenAlphaNative+RECT
+        $null = [ElitePenAlphaNative]::GetWindowRect($textInput, [ref]$textBounds)
+        if ($blankX -ge $textBounds.Right -or $blankY -ge $textBounds.Bottom) {
+            throw 'Inline text alpha probe fell outside the editor bounds.'
+        }
+        [System.Windows.Forms.Application]::DoEvents()
+        Start-Sleep -Milliseconds 200
+        $blankRgb = Get-ScreenRgb $screen $blankX $blankY
+        $maximumDifference = 0
+        for ($channel = 0; $channel -lt 3; $channel++) {
+            $maximumDifference = [Math]::Max(
+                $maximumDifference, [Math]::Abs($blankRgb[$channel] - $underlayRgb[$channel]))
+        }
+        if ($maximumDifference -gt 5) {
+            throw "Inline text changed its transparent underlay at ${blankX},${blankY}: " +
+                "before rgb($($underlayRgb -join ',')), after rgb($($blankRgb -join ','))."
+        }
+        $null = [ElitePenAlphaNative]::SendMessage(
+            $textInput, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)
     } finally {
         $null = [ElitePenAlphaNative]::ReleaseDC([IntPtr]::Zero, $screen)
     }
@@ -192,7 +248,7 @@ try {
 }
 
 if ($pixelInspectionAvailable) {
-    Write-Output 'Elite Pen palette transparency: all four sizes and alpha samples passed'
+    Write-Output 'Elite Pen transparency: palette sizes and inline text alpha samples passed'
 } else {
-    Write-Output 'Elite Pen palette transparency: geometry passed; DirectComposition pixel sampling unavailable in this Windows session'
+    Write-Output 'Elite Pen transparency: geometry and inline text passed; palette pixel sampling unavailable in this Windows session'
 }

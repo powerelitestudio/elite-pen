@@ -62,6 +62,11 @@ con `scripts/publish-portable.ps1`.
 | Zoom | Herramientas | `Ctrl+Shift+M` |
 | Salir de modo/zoom | — | `Esc` |
 
+Texto se escribe directamente desde el punto seleccionado: la superficie es
+transparente por píxel y solo muestra el caret y los caracteres, nunca una caja.
+Las pizarras blanca y negra restauran la paleta sobre el lienzo después de cada
+trazo o borrado para conservar todos sus comandos disponibles.
+
 En zoom: `F` pantalla completa, `L` lente con una lupa persistente sincronizada con
 el centro real del área ampliada,
 `D` acoplado, `I` invertir,

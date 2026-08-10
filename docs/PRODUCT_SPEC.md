@@ -1,6 +1,6 @@
 # Elite Pen 2.1 — contrato de producto
 
-Estado: version 2.1.3 implementada.
+Estado: version 2.1.4 implementada.
 
 ## 1. Identidad e interaccion principal
 
@@ -76,7 +76,8 @@ la aplicacion sobre la que se presenta.
    limites y hit testing sobre la trayectoria real, y punta tangencial.
 10. Texto: al elegir `T`, el siguiente clic fija el punto de insercion y abre un editor
     transparente directamente sobre el escritorio. Admite multilinea, pegado,
-    `Ctrl+Enter` para confirmar y `Esc` para cancelar, sin dialogo independiente.
+    `Ctrl+Enter` para confirmar y `Esc` para cancelar, sin dialogo independiente ni
+    superficie opaca: DirectComposition muestra únicamente caracteres y caret.
 11. Captura: seleccion rectangular, guardado PNG y copia al portapapeles.
 12. Zoom: ampliacion en vivo centrada en el puntero, ajuste con rueda, congelación o
     reanudación con `P` y salida con `Esc`.
@@ -98,7 +99,8 @@ añade una fila independiente para Configuracion.
 
 - Las pizarras blanca y negra cubren el escritorio virtual, conservan las anotaciones
   y se activan sin recrear el documento. Al entrar en pizarra negra con color negro,
-  Elite Pen cambia a amarillo para conservar contraste.
+  Elite Pen cambia a amarillo para conservar contraste. Tras cada trazo o borrado,
+  la paleta se recompone sobre el lienzo y continúa visible y seleccionable.
 - Zoom usa la capacidad nativa de Windows en proceso x64. La ventana de control se
   excluye de la captura cuando el sistema lo permite para evitar recursion visual.
 - El zoom vivo presenta directamente la salida de Magnifier, sin interponer la capa

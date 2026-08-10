@@ -1,5 +1,17 @@
 # Historial de cambios
 
+## 2.1.4 — 2026-08-10
+
+- El editor directo de Texto abandona el respaldo heredado de ventana por capas y
+  usa exclusivamente DirectComposition con transparencia por píxel. Al pulsar `T`
+  solo aparecen el caret y los caracteres, sin rectángulo negro ni panel opaco.
+- Finalizar un trazo o borrado normal recompone inmediatamente el orden de ventanas;
+  la paleta permanece visible y seleccionable sobre las pizarras blanca y negra.
+- El lienzo normal responde `MA_NOACTIVATE`, reforzando que nunca pueda activarse y
+  ascender sobre la paleta al recibir el primer clic de dibujo.
+- QA dibuja el primer trazo sobre pizarra blanca, verifica orden Z e interacción de
+  la paleta y compara un punto vacío del editor de texto antes y después de abrirlo.
+
 ## 2.1.3 — 2026-08-10
 
 - Corregido el orden de las superficies del zoom congelado: la paleta, el objetivo

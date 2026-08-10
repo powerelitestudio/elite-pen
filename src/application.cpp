@@ -1585,6 +1585,7 @@ void OverlayWindow::finish_gesture(PointF point, WPARAM keys) {
     if (erasing_) {
         controller_.state().document.end_compound();
         erasing_ = false;
+        controller_.update_overlay_interaction();
         controller_.invalidate_document();
         return;
     }
@@ -1608,6 +1609,7 @@ void OverlayWindow::finish_gesture(PointF point, WPARAM keys) {
         completed.points.resize(1);
     }
     controller_.commit_drawable(std::move(completed));
+    controller_.update_overlay_interaction();
     controller_.invalidate_document();
 }
 
@@ -1615,6 +1617,8 @@ LRESULT OverlayWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
     switch (message) {
         case kQaQueryDrawingCursorMessage:
             return reinterpret_cast<LRESULT>(pencil_cursor_);
+        case WM_MOUSEACTIVATE:
+            return MA_NOACTIVATE;
         case WM_SETCURSOR:
             if (LOWORD(lparam) == HTCLIENT) {
                 const Tool tool = controller_.state().tool;
@@ -3056,10 +3060,13 @@ void ToolWindow::render() {
 
 bool TextInputWindow::initialize(GraphicsDevice& graphics) {
     const RECT bounds{0, 0, 640, 420};
-    constexpr DWORD ex_style = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_LAYERED;
+    // DirectComposition supplies the alpha channel. A legacy layered backing
+    // surface can be promoted to an opaque black rectangle when this large,
+    // focused window is shown over another DirectComposition surface.
+    constexpr DWORD ex_style = WS_EX_TOPMOST | WS_EX_TOOLWINDOW |
+                               WS_EX_NOREDIRECTIONBITMAP;
     if (!create(L"ElitePen.TextInput", L"Insertar texto — Elite Pen",
-                ex_style, WS_POPUP, bounds)) return false;
-    SetLayeredWindowAttributes(window_, 0, 255, LWA_ALPHA);
+                 ex_style, WS_POPUP, bounds)) return false;
     if (!initialize_surface(graphics)) return false;
 #ifndef ELITE_PEN_DEBUG
     if (controller_.preferences().exclude_palette_from_capture)
@@ -3250,7 +3257,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.1.3",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.1.4",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |

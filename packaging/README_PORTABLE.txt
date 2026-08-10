@@ -64,4 +64,4 @@ Configuracion.
 
 SOPORTE
 -------
-Producto de Power Elite Studio. Version 2.1.3.
+Producto de Power Elite Studio. Version 2.1.4.
