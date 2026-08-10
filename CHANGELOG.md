@@ -1,5 +1,18 @@
 # Historial de cambios
 
+## 2.5.1 — 2026-08-10
+
+- Paleta adopta las mismas superficies limpias de Lineal: grafito/marfil de baja
+  variación, bordes fríos y selección violeta con el mismo contraste semántico.
+- El ojo central y el control de hibernación usan las superficies activas de
+  Lineal, mejorando jerarquía sin cambiar geometría ni zonas de clic.
+- Los colores rápidos eliminan los halos negros pesados y usan una base integrada
+  al panel; el anillo violeta conserva una selección inequívoca en ambos temas.
+- El mango del pincel reduce su gradiente a los dos violetas canónicos, evitando el
+  brillo aislado y armonizando con la barra vertical.
+- QA visual compara Paleta y Lineal en Oscuro/Claro; las pruebas funcionales,
+  transparencia y rendimiento se mantienen sin regresiones.
+
 ## 2.5.0 — 2026-08-10
 
 - Nueva presentación `Lineal`: una barra vertical estrecha, inspirada en la rapidez

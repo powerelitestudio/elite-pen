@@ -2769,7 +2769,7 @@ void PaletteWindow::render() {
         ComPtr<ID2D1SolidColorBrush> icon;
         context->CreateSolidColorBrush(theme_color(theme.shadow, theme.light ? 0.18F : 0.42F),
                                        shadow.GetAddressOf());
-        context->CreateSolidColorBrush(theme_color(theme.violet, 0.92F), border.GetAddressOf());
+        context->CreateSolidColorBrush(theme_color(theme.line, 0.96F), border.GetAddressOf());
         context->CreateSolidColorBrush(theme_color(theme.violet_strong), icon.GetAddressOf());
         ComPtr<ID2D1PathGeometry> shape;
         controller_.graphics().d2d_factory()->CreatePathGeometry(shape.GetAddressOf());
@@ -2795,7 +2795,7 @@ void PaletteWindow::render() {
             D2D1::Point2F(width * 0.22F, height * 0.18F)));
         mini->EndFigure(D2D1_FIGURE_END_CLOSED);
         mini->Close();
-        const D2D1_GRADIENT_STOP stops[]{{0.0F, theme_color(theme.surface_4)},
+        const D2D1_GRADIENT_STOP stops[]{{0.0F, theme_color(theme.surface_2)},
                                          {1.0F, theme_color(theme.surface_1)}};
         const auto fill = linear_gradient(context, D2D1::Point2F(0, 0),
                                            D2D1::Point2F(width, height), stops, 2);
@@ -2841,6 +2841,8 @@ void PaletteWindow::render() {
     ComPtr<ID2D1SolidColorBrush> rail;
     ComPtr<ID2D1SolidColorBrush> muted;
     ComPtr<ID2D1SolidColorBrush> glass;
+    ComPtr<ID2D1SolidColorBrush> selected_surface;
+    ComPtr<ID2D1SolidColorBrush> swatch_shell;
     context->CreateSolidColorBrush(theme_color(theme.text), cream.GetAddressOf());
     context->CreateSolidColorBrush(theme_color(theme.shadow, theme.light ? 0.18F : 0.38F),
                                    shadow.GetAddressOf());
@@ -2853,6 +2855,10 @@ void PaletteWindow::render() {
     context->CreateSolidColorBrush(theme_color(theme.light ? 0xFFFFFF : 0xFFFFFF,
                                                theme.light ? 0.48F : 0.18F),
                                    glass.GetAddressOf());
+    context->CreateSolidColorBrush(
+        theme_color(theme.light ? 0xE7E2FB : 0x28223E), selected_surface.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.surface_2, 0.98F),
+                                   swatch_shell.GetAddressOf());
 
     context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(129, 87), 88, 78), shadow.Get());
     ComPtr<ID2D1PathGeometry> palette_geometry;
@@ -2875,9 +2881,9 @@ void PaletteWindow::render() {
     sink->EndFigure(D2D1_FIGURE_END_CLOSED);
     sink->Close();
     const D2D1_GRADIENT_STOP palette_stops[]{
-        {0.0F, theme_color(theme.light ? theme.surface_2 : theme.surface_4)},
-        {0.46F, theme_color(theme.light ? theme.surface_1 : theme.surface_3)},
-        {1.0F, theme_color(theme.light ? theme.surface_3 : theme.surface_1)}
+        {0.0F, theme_color(theme.surface_2)},
+        {0.58F, theme_color(theme.surface_1)},
+        {1.0F, theme_color(theme.surface_1)}
     };
     const auto palette_fill = linear_gradient(
         context, D2D1::Point2F(48, 15), D2D1::Point2F(191, 171),
@@ -2896,7 +2902,7 @@ void PaletteWindow::render() {
         ComPtr<ID2D1SolidColorBrush> color_brush;
         context->CreateSolidColorBrush(d2d_color(swatch.color), color_brush.GetAddressOf());
         context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(swatch.x, swatch.y), 14.5F, 14.5F),
-                             shadow.Get());
+                             swatch_shell.Get());
         if (controller_.state().color == swatch.color) {
             context->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(swatch.x, swatch.y), 17, 17),
                                  gold_bright.Get(), 2.4F);
@@ -2938,6 +2944,12 @@ void PaletteWindow::render() {
         }
     }
 
+    // The central action uses the same violet selection surface as Lineal.
+    context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(126.5F, 83), 25, 25),
+                         selected_surface.Get());
+    context->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(126.5F, 83), 25, 25),
+                         gold.Get(), 1.15F);
+
     // Eye: open means visible; closed means annotations are preserved but hidden.
     if (controller_.state().annotations_visible) {
         ComPtr<ID2D1PathGeometry> eye;
@@ -2976,6 +2988,10 @@ void PaletteWindow::render() {
     }
 
     // Compact hibernation control beneath the eye.
+    context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(126, 113), 10.5F, 10.5F),
+                         selected_surface.Get());
+    context->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(126, 113), 10.5F, 10.5F),
+                         panel_border.Get(), 0.8F);
     context->DrawLine(D2D1::Point2F(116.5F, 108.0F), D2D1::Point2F(123.5F, 113.0F),
                       gold_bright.Get(), 1.65F);
     context->DrawLine(D2D1::Point2F(116.5F, 118.0F), D2D1::Point2F(123.5F, 113.0F),
@@ -2991,7 +3007,7 @@ void PaletteWindow::render() {
     ComPtr<ID2D1SolidColorBrush> handle;
     ComPtr<ID2D1SolidColorBrush> active_paint;
     ComPtr<ID2D1SolidColorBrush> danger;
-    context->CreateSolidColorBrush(theme_color(theme.light ? 0x5A4674 : 0x3B2D55),
+    context->CreateSolidColorBrush(theme_color(theme.light ? 0x5A4674 : 0x28223E),
                                    bristle.GetAddressOf());
     context->CreateSolidColorBrush(theme_color(theme.light ? 0xF4F5F8 : 0xDDE1EA),
                                    ferrule.GetAddressOf());
@@ -3001,8 +3017,7 @@ void PaletteWindow::render() {
     context->CreateSolidColorBrush(theme_color(theme.danger), danger.GetAddressOf());
     const D2D1_GRADIENT_STOP handle_stops[]{
         {0.0F, theme_color(theme.violet_strong)},
-        {0.52F, theme_color(theme.violet)},
-        {1.0F, theme_color(theme.light ? 0x9A89F2 : 0xB2A6FF)}
+        {1.0F, theme_color(theme.violet)}
     };
     const auto handle_gradient = linear_gradient(
         context, D2D1::Point2F(106, 173), D2D1::Point2F(205, 220),
@@ -4030,7 +4045,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.5.0",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.5.1",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |

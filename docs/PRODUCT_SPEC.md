@@ -1,6 +1,6 @@
-# Elite Pen 2.5 — contrato de producto
+# Elite Pen 2.5.1 — contrato de producto
 
-Estado: version 2.5.0 implementada.
+Estado: version 2.5.1 implementada.
 
 ## 1. Identidad e interaccion principal
 
@@ -25,6 +25,10 @@ Paleta es el valor predeterminado; la selección se conserva entre sesiones.
   sustitución nativa Segoe UI sin descargar fuentes ni perder rendimiento.
 
 ### Paleta
+
+- Su cuerpo usa las mismas superficies grafito/marfil de Lineal. Ojo, hibernación,
+  selección de color y mango comparten el violeta activo y los bordes fríos; no se
+  emplean halos negros independientes alrededor de las muestras.
 
 - Seis colores rapidos en este orden: negro, amarillo, azul, rojo, verde y morado.
 - El septimo acceso es un `+` sin circulo exterior; abre una cuadricula de 42 colores
