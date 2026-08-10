@@ -4,12 +4,12 @@ Elite Pen es la herramienta nativa de anotacion, pizarra y ampliacion de pantall
 Power Elite Studio. Su interfaz principal toma la forma de una paleta de pintor y un
 pincel funcional; no replica la barra vertical de otras aplicaciones.
 
-La edición 2.3 integra el sistema visual de la familia Elite: grafito o marfil según
+La edición 2.4 integra el sistema visual de la familia Elite: grafito o marfil según
 el tema, violeta como acento principal, menta para estados, divisores finos y
 tipografía Segoe UI Variable. Configuración permite elegir `Oscuro` o `Claro`; la
 preferencia queda guardada tanto al instalar como en la edición portable.
 
-El motor 2.3 conserva la tinta terminada en una superficie GPU y solo rasteriza el
+El motor 2.4 conserva la tinta terminada en una superficie GPU y solo rasteriza el
 objeto recién añadido. El historial mueve los trazos sin duplicarlos, el borrador
 usa distancias al cuadrado y el simplificador de trazos es iterativo. El zoom evita
 reconfigurar su fuente cuando el puntero permanece quieto. El benchmark automatizado
@@ -56,18 +56,30 @@ con `scripts/publish-portable.ps1`.
 
 | Accion | Control principal | Atajo global |
 |---|---|---|
-| Alternar dibujar/interactuar | Punta del pincel | `Ctrl+Shift+P` |
-| Ocultar/mostrar trazos | Ojo | `Ctrl+Shift+H` |
+| Alternar dibujar/interactuar | Punta del pincel | `Ctrl+Shift+Q` |
+| Ocultar/mostrar trazos | Ojo | `Ctrl+Shift+A` |
 | Pizarra blanca | Ferula blanca | `Ctrl+Shift+W` |
 | Pizarra negra | Clic derecho en la ferula | `Ctrl+Shift+B` |
 | Texto | Herramientas, pulsando el mango | — |
 | Figuras | Herramientas, pulsando el mango | — |
 | Configuracion | Herramientas, pulsando el mango | — |
-| Deshacer | Menu/historial | `Ctrl+Shift+Z` |
+| Deshacer | Menu/historial | `Ctrl+Alt+Z` |
 | Rehacer | Menu/historial | `Ctrl+Shift+Y` |
-| Limpiar | Papelera | `Ctrl+Shift+C` |
-| Zoom | Herramientas | `Ctrl+Shift+M` |
+| Limpiar | Papelera | `Ctrl+Shift+E` |
+| Zoom | Herramientas | `Ctrl+Shift+Z` |
+| Contraer/expandir | Control bajo el ojo | `Ctrl+Shift+D` |
 | Salir de modo/zoom | — | `Esc` |
+
+Los seis colores rápidos también son directos: `Ctrl+Shift+1` negro,
+`Ctrl+Shift+2` amarillo, `Ctrl+Shift+3` azul, `Ctrl+Shift+4` rojo,
+`Ctrl+Shift+5` verde y `Ctrl+Shift+6` morado. `Ctrl+Shift+7` o
+`Ctrl+Shift++` abre el selector completo. En las superficies activas de Elite Pen,
+`Ctrl+Shift+rueda` recorre los cinco grosores visuales sin abrir ningún panel.
+
+Con Lápiz seleccionado, los modificadores convierten temporalmente el siguiente
+arrastre sin cambiar de herramienta: `Shift` crea una línea, `Ctrl` un rectángulo,
+`Tab` una elipse, `Ctrl+Shift` una flecha y `Ctrl+Alt` una flecha curva Bézier.
+Al soltar las teclas, el siguiente gesto vuelve a ser dibujo libre.
 
 Texto se escribe directamente desde el punto seleccionado: la superficie es
 transparente por píxel y solo muestra el caret y los caracteres, nunca una caja.
@@ -95,6 +107,10 @@ superficie conserva el cursor de cuatro flechas y permite moverla. La pestaña
 Cada fila tiene su propio lápiz de edición; `Supr` o `Retroceso` deja la acción sin
 asignar y `Restablecer` recupera los valores de fábrica. Todo se conserva tanto
 instalado como portable.
+
+La edición 2.4 migra únicamente los atajos que todavía coincidan con los valores de
+fábrica anteriores. Las combinaciones personalizadas se mantienen intactas;
+`Restablecer` aplica el esquema 2.4 completo.
 
 La especificacion funcional completa esta en
 [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md).

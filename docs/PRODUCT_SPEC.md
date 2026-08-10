@@ -1,6 +1,6 @@
-# Elite Pen 2.3 — contrato de producto
+# Elite Pen 2.4 — contrato de producto
 
-Estado: version 2.3.0 implementada.
+Estado: version 2.4.0 implementada.
 
 ## 1. Identidad e interaccion principal
 
@@ -36,6 +36,8 @@ la aplicacion sobre la que se presenta.
   salir del modo compacto. Su estado se conserva entre sesiones.
 - Los puntos de grosor seleccionan 2, 4, 7, 12 y 20 pixeles logicos; 4, el segundo
   punto de arriba hacia abajo, es el valor inicial y se configura desde Ajustes.
+  `Ctrl+Shift+rueda` recorre esos mismos cinco puntos cuando el puntero está sobre
+  una superficie activa de Elite Pen.
 - La paleta se arrastra desde cualquier zona vacia y recuerda su posicion por monitor.
 - El arrastre usa coordenadas absolutas derivadas del puntero y no realimenta la
   posición ya desplazada de la ventana; debe seguir cada delta sin rebote ni lastre.
@@ -84,6 +86,12 @@ la aplicacion sobre la que se presenta.
 12. Zoom: ampliacion en vivo centrada en el puntero, ajuste con rueda, congelación o
     reanudación con `P` y salida con `Esc`.
 
+Con Lapiz activo, un modificador aplicado al comenzar el arrastre selecciona una
+figura temporal sin cambiar la herramienta persistente: `Shift` Linea, `Ctrl`
+Rectangulo, `Tab` Elipse, `Ctrl+Shift` Flecha y `Ctrl+Alt` Flecha curva Bezier.
+Esta interpretación también funciona sobre el zoom congelado y nunca sustituye
+los gestos propios de Texto, Borrador ni una figura elegida explícitamente.
+
 El panel abierto desde el mango reune todas las herramientas en un solo lugar y
 añade una fila independiente para Configuracion.
 
@@ -124,7 +132,7 @@ añade una fila independiente para Configuracion.
   excluye de la captura cuando el sistema lo permite para evitar recursion visual.
 - El zoom vivo presenta directamente la salida de Magnifier, sin interponer la capa
   de tinta transparente antes de congelar. Esto evita superficies negras o sin
-  inicializar al entrar con `Ctrl+Shift+M`.
+  inicializar al entrar con `Ctrl+Shift+Z`.
 - La congelación copia la salida ampliada ya compuesta en pantalla, retirando durante
   ese instante la afinidad que la excluye de capturas. Una imagen completamente vacía
   se rechaza y el zoom continúa vivo en vez de mostrar una pizarra negra falsa.
@@ -175,6 +183,12 @@ añade una fila independiente para Configuracion.
   detecta duplicados dentro de su ámbito o reservas de Windows, admite dejar acciones
   sin asignar con `Supr`/`Retroceso`, restablece los valores de fábrica y explica
   `P`/clic, rueda, `+`/`-`, `F`/`L`/`D`, `I`, `0`, `Espacio`/`M`, `Esc`, `F4` y clic derecho.
+- El esquema global 2.4 usa `Ctrl+Shift+Q` para Cursor/Lapiz,
+  `Ctrl+Shift+A` para visibilidad, `Ctrl+Shift+Z` para Zoom, `Ctrl+Shift+E` para
+  Limpiar y `Ctrl+Shift+D` para contraer/expandir. Deshacer migra a `Ctrl+Alt+Z`.
+  Los colores rápidos usan `Ctrl+Shift+1..6`; `Ctrl+Shift+7` y `Ctrl+Shift++`
+  abren Colores. La migración reemplaza solo valores de fábrica antiguos y conserva
+  cualquier combinación personalizada.
 - Los atajos, la escala y el estado contraído se guardan atómicamente en LocalAppData
   para la instalación o en `data/settings.ini` junto al ejecutable portable.
 

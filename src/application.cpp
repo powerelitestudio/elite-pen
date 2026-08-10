@@ -51,10 +51,17 @@ constexpr UINT kQaQueryZoomSourceFocusXMessage = WM_APP + 102;
 constexpr UINT kQaQueryZoomSourceFocusYMessage = WM_APP + 103;
 constexpr UINT kQaQueryThemeMessage = WM_APP + 104;
 constexpr UINT kQaPopulateStressDocumentMessage = WM_APP + 105;
+constexpr UINT kThicknessWheelMessage = WM_APP + 106;
+constexpr UINT kQaQueryThicknessWheelRouteMessage = WM_APP + 107;
+constexpr UINT kQaQueryGlobalHotkeysMessage = WM_APP + 108;
+constexpr UINT kQaQueryZoomViewMessage = WM_APP + 109;
+constexpr UINT kQaQueryZoomGeometryWidthMessage = WM_APP + 110;
+constexpr UINT kQaToggleZoomFreezeMessage = WM_APP + 111;
 constexpr UINT_PTR kTrayId = 1;
 constexpr int kPaletteDesignWidth = 290;
 constexpr int kPaletteDesignHeight = 280;
 constexpr std::array<float, 4> kPaletteScales{0.48F, 0.60F, 0.75F, 0.90F};
+constexpr std::array<float, 5> kThicknessSteps{2.0F, 4.0F, 7.0F, 12.0F, 20.0F};
 
 struct UiTheme {
     bool light{};
@@ -459,6 +466,15 @@ HCURSOR create_zoom_lens_cursor(UINT dpi) {
 
 enum class ZoomView : int { Fullscreen = 0, Lens = 1, Docked = 2 };
 
+Tool current_gesture_tool(Tool selected) noexcept {
+    return gesture_tool(
+        selected,
+        (GetKeyState(VK_SHIFT) & 0x8000) != 0,
+        (GetKeyState(VK_CONTROL) & 0x8000) != 0,
+        (GetKeyState(VK_MENU) & 0x8000) != 0,
+        (GetKeyState(VK_TAB) & 0x8000) != 0);
+}
+
 std::wstring hotkey_text(HotkeyBinding binding) {
     if (binding.virtual_key == 0) return L"Sin asignar";
     std::wstring result;
@@ -525,6 +541,13 @@ constexpr std::array<HotkeyInfo, kHotkeyActionCount> kHotkeyInfo{{
     {L"Herramientas", L"Abre todas las herramientas"},
     {L"Configuracion", L"Abre preferencias y atajos"},
     {L"Contraer paleta", L"Contrae o expande Elite Pen"},
+    {L"Color: negro", L"Selecciona negro directamente"},
+    {L"Color: amarillo", L"Selecciona amarillo directamente"},
+    {L"Color: azul", L"Selecciona azul directamente"},
+    {L"Color: rojo", L"Selecciona rojo directamente"},
+    {L"Color: verde", L"Selecciona verde directamente"},
+    {L"Color: morado", L"Selecciona morado directamente"},
+    {L"Colores (+)", L"Alternativa para abrir el selector completo"},
     {L"Zoom: pausar", L"Congela o reanuda para anotar"},
     {L"Zoom: completa", L"Cambia a pantalla completa"},
     {L"Zoom: lente", L"Cambia a lente movil"},
@@ -975,6 +998,7 @@ public:
     void set_tool(Tool tool);
     void set_color(Color color);
     void set_thickness(float thickness);
+    void adjust_thickness_step(int direction);
     void toggle_visibility();
     void toggle_whiteboard();
     void toggle_blackboard();
@@ -1635,6 +1659,13 @@ bool WindowBase::initialize_surface(GraphicsDevice& graphics) {
 }
 
 LRESULT WindowBase::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
+    if (message == WM_MOUSEWHEEL &&
+        (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0 &&
+        (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0) {
+        const SHORT delta = GET_WHEEL_DELTA_WPARAM(wparam);
+        if (delta != 0) controller_.adjust_thickness_step(delta > 0 ? 1 : -1);
+        return 0;
+    }
     if (message == WM_TIMER && wparam == Surface::kPresentRetryTimer) {
         KillTimer(window_, Surface::kPresentRetryTimer);
         invalidate();
@@ -1737,7 +1768,7 @@ std::optional<PointF> OverlayWindow::pointer_point(WPARAM wparam) const noexcept
 
 void OverlayWindow::begin_gesture(PointF point, float pressure) {
     if (controller_.route_palette_command(point)) return;
-    const Tool tool = controller_.state().tool;
+    const Tool tool = current_gesture_tool(controller_.state().tool);
     if (tool == Tool::Eraser) {
         controller_.state().document.begin_compound();
         erasing_ = true;
@@ -1853,7 +1884,7 @@ LRESULT OverlayWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
             return MA_NOACTIVATE;
         case WM_SETCURSOR:
             if (LOWORD(lparam) == HTCLIENT) {
-                const Tool tool = controller_.state().tool;
+                const Tool tool = current_gesture_tool(controller_.state().tool);
                 HCURSOR cursor{};
                 if (tool == Tool::Interact) cursor = LoadCursorW(nullptr, IDC_ARROW);
                 else if (tool == Tool::Text) cursor = LoadCursorW(nullptr, IDC_IBEAM);
@@ -2362,11 +2393,10 @@ void PaletteWindow::activate_at(POINT point) {
     }
     const POINT physical_point = point;
     point = palette_logical_point(point, scale_);
-    constexpr std::array<float, 5> thicknesses{2.0F, 4.0F, 7.0F, 12.0F, 20.0F};
     constexpr std::array<float, 5> thickness_y{32.0F, 49.0F, 69.0F, 93.0F, 122.0F};
     for (std::size_t index = 0; index < thickness_y.size(); ++index) {
         if (point_in_circle(point, 23.0F, thickness_y[index], 10.0F)) {
-            controller_.set_thickness(thicknesses[index]);
+            controller_.set_thickness(kThicknessSteps[index]);
             return;
         }
     }
@@ -2411,6 +2441,10 @@ LRESULT PaletteWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
             return static_cast<LRESULT>(controller_.state().color.argb());
         case kQaQueryThicknessMessage:
             return static_cast<LRESULT>(std::lround(controller_.state().thickness * 10.0F));
+        case kQaQueryThicknessWheelRouteMessage:
+            return 1;
+        case kQaQueryGlobalHotkeysMessage:
+            return hotkeys_registered_ ? 1 : 0;
         case kQaQueryDocumentCountMessage:
             return static_cast<LRESULT>(controller_.state().document.items().size());
         case kQaQueryPaletteCollapsedMessage:
@@ -2471,6 +2505,9 @@ LRESULT PaletteWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
                 controller_.execute_hotkey(static_cast<HotkeyAction>(
                     static_cast<std::size_t>(wparam) - 1));
             }
+            return 0;
+        case kThicknessWheelMessage:
+            controller_.adjust_thickness_step(wparam != 0 ? 1 : -1);
             return 0;
         case WM_TIMER:
             if (wparam == 20) {
@@ -4547,8 +4584,29 @@ bool ZoomInkWindow::capture_snapshot(HWND magnifier, RECT bounds) {
     if (parent) SetWindowDisplayAffinity(parent, WDA_NONE);
     RedrawWindow(parent, nullptr, nullptr, RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
     DwmFlush();
-    bool captured = BitBlt(memory, 0, 0, width, height, screen,
-                           bounds.left, bounds.top, SRCCOPY | CAPTUREBLT) != FALSE;
+    wchar_t synthetic_capture[4]{};
+    const bool synthetic = GetEnvironmentVariableW(
+        L"ELITE_PEN_QA_SYNTHETIC_CAPTURE", synthetic_capture,
+        static_cast<DWORD>(std::size(synthetic_capture))) > 0;
+    bool captured{};
+    if (synthetic) {
+        auto* values = static_cast<std::uint32_t*>(pixels);
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                const std::uint32_t shade = static_cast<std::uint32_t>(
+                    0x24 + ((x / 48 + y / 48) % 2) * 0x18);
+                values[static_cast<std::size_t>(y) *
+                           static_cast<std::size_t>(width) +
+                       static_cast<std::size_t>(x)] =
+                    0xFF000000U | (shade << 16U) | ((shade + 8U) << 8U) |
+                    (shade + 16U);
+            }
+        }
+        captured = true;
+    } else {
+        captured = BitBlt(memory, 0, 0, width, height, screen,
+                          bounds.left, bounds.top, SRCCOPY | CAPTUREBLT) != FALSE;
+    }
     if (parent && had_affinity) SetWindowDisplayAffinity(parent, previous_affinity);
     if (ink_visible) ShowWindow(window_, frozen_ ? SW_SHOW : SW_SHOWNOACTIVATE);
     if (palette_visible) ShowWindow(controller_.palette()->hwnd(), SW_SHOWNOACTIVATE);
@@ -4648,7 +4706,7 @@ void ZoomInkWindow::begin_gesture(PointF point, float pressure) {
     PointF screen_point{point.x + static_cast<float>(bounds_.left),
                         point.y + static_cast<float>(bounds_.top)};
     if (controller_.route_palette_command(screen_point)) return;
-    const Tool tool = controller_.state().tool;
+    const Tool tool = current_gesture_tool(controller_.state().tool);
     if (tool == Tool::Eraser) {
         document_.begin_compound();
         erasing_ = true;
@@ -4781,7 +4839,7 @@ LRESULT ZoomInkWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
         }
         case WM_SETCURSOR:
             if (LOWORD(lparam) == HTCLIENT) {
-                const Tool tool = controller_.state().tool;
+                const Tool tool = current_gesture_tool(controller_.state().tool);
                 if (tool == Tool::Text) SetCursor(LoadCursorW(nullptr, IDC_IBEAM));
                 else if ((tool == Tool::Pen || tool == Tool::Highlighter) && pencil_cursor_)
                     SetCursor(pencil_cursor_);
@@ -5350,7 +5408,16 @@ void ZoomWindow::apply_theme() {
 void ZoomWindow::refresh_source() {
     if (!active_ || (ink_ && ink_->frozen())) return;
     POINT cursor{};
-    if (!GetCursorPos(&cursor)) return;
+    if (!GetCursorPos(&cursor)) {
+        if (source_initialized_) {
+            cursor = last_source_cursor_;
+        } else {
+            const int left = GetSystemMetrics(SM_XVIRTUALSCREEN);
+            const int top = GetSystemMetrics(SM_YVIRTUALSCREEN);
+            cursor = {left + GetSystemMetrics(SM_CXVIRTUALSCREEN) / 2,
+                      top + GetSystemMetrics(SM_CYVIRTUALSCREEN) / 2};
+        }
+    }
     const auto view = static_cast<ZoomView>(controller_.preferences().zoom_view);
     const float factor = overview_ ? 1.0F : controller_.state().zoom_factor;
     if (source_initialized_ && cursor.x == last_source_cursor_.x &&
@@ -5390,12 +5457,12 @@ void ZoomWindow::refresh_source() {
                                   !EqualRect(&zoom_rect_, &zoom_rect);
     zoom_rect_ = zoom_rect;
     if (geometry_changed) {
-        const HWND root_insert_after = ink_ && IsWindowVisible(ink_->hwnd())
-            ? ink_->hwnd()
-            : (controller_.palette() && IsWindowVisible(controller_.palette()->hwnd())
-                ? controller_.palette()->hwnd() : HWND_TOPMOST);
-        SetWindowPos(window_, root_insert_after, zoom_rect.left, zoom_rect.top,
-                     zoom_width, zoom_height, SWP_SHOWWINDOW);
+        // Resize independently from the transient topmost ordering. Using a
+        // sibling as hWndInsertAfter can make Windows accept the Z-order part
+        // while leaving a newly-created Magnifier root at its 1x1 bootstrap
+        // size. Restack the surfaces explicitly after geometry is established.
+        SetWindowPos(window_, HWND_TOPMOST, zoom_rect.left, zoom_rect.top,
+                     zoom_width, zoom_height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
         SetWindowPos(magnifier_, nullptr, 0, 0, zoom_width, zoom_height,
                      SWP_NOZORDER | SWP_SHOWWINDOW);
     }
@@ -5436,6 +5503,7 @@ void ZoomWindow::refresh_source() {
     last_source_factor_ = factor;
     last_source_view_ = static_cast<int>(view);
     last_source_overview_ = overview_;
+    if (geometry_changed) bring_to_front();
 }
 
 LRESULT ZoomWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
@@ -5446,6 +5514,12 @@ LRESULT ZoomWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
             return source_rect_.left + (source_rect_.right - source_rect_.left) / 2;
         case kQaQueryZoomSourceFocusYMessage:
             return source_rect_.top + (source_rect_.bottom - source_rect_.top) / 2;
+        case kQaQueryZoomViewMessage:
+            return controller_.preferences().zoom_view;
+        case kQaQueryZoomGeometryWidthMessage:
+            return zoom_rect_.right - zoom_rect_.left;
+        case kQaToggleZoomFreezeMessage:
+            return toggle_freeze() ? 1 : 0;
         case kZoomClickFreezeMessage:
             click_freeze_pending_ = false;
             if (active_ && !frozen()) toggle_freeze();
@@ -5456,6 +5530,12 @@ LRESULT ZoomWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
             refresh_source();
             return 0;
         case WM_MOUSEWHEEL: {
+            if ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0 &&
+                (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0) {
+                controller_.adjust_thickness_step(
+                    GET_WHEEL_DELTA_WPARAM(wparam) > 0 ? 1 : -1);
+                return 0;
+            }
             const float direction = GET_WHEEL_DELTA_WPARAM(wparam) > 0 ? 0.25F : -0.25F;
             controller_.state().zoom_factor = std::clamp(
                 controller_.state().zoom_factor + direction, 1.25F, 8.0F);
@@ -5688,6 +5768,22 @@ void Controller::set_thickness(float thickness) {
     if (palette_) palette_->invalidate();
 }
 
+void Controller::adjust_thickness_step(int direction) {
+    float next = state_.thickness;
+    if (direction > 0) {
+        const auto found = std::upper_bound(
+            kThicknessSteps.begin(), kThicknessSteps.end(), state_.thickness + 0.001F);
+        next = found == kThicknessSteps.end() ? kThicknessSteps.back() : *found;
+    } else if (direction < 0) {
+        const auto found = std::lower_bound(
+            kThicknessSteps.begin(), kThicknessSteps.end(), state_.thickness - 0.001F);
+        next = found == kThicknessSteps.begin() ? kThicknessSteps.front() : *(found - 1);
+    }
+    if (std::abs(next - state_.thickness) < 0.001F) return;
+    set_thickness(next);
+    save_preferences();
+}
+
 void Controller::toggle_visibility() {
     if (text_input_ && text_input_->active()) text_input_->commit();
     state_.annotations_visible = !state_.annotations_visible;
@@ -5835,6 +5931,13 @@ void Controller::execute_hotkey(HotkeyAction action) {
         case HotkeyAction::PaletteCollapse:
             if (palette_) palette_->set_collapsed(!palette_->collapsed());
             break;
+        case HotkeyAction::ColorBlack: set_color(kBlack); break;
+        case HotkeyAction::ColorYellow: set_color(kYellow); break;
+        case HotkeyAction::ColorBlue: set_color(kBlue); break;
+        case HotkeyAction::ColorRed: set_color(kRed); break;
+        case HotkeyAction::ColorGreen: set_color(kGreen); break;
+        case HotkeyAction::ColorPurple: set_color(kPurple); break;
+        case HotkeyAction::ColorPanelAlternate: toggle_color_panel(); break;
         default:
             if (zoom_) zoom_->execute_action(action);
             break;

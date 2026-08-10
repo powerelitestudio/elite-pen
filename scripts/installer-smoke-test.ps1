@@ -6,6 +6,7 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $version = (Get-Content -LiteralPath (Join-Path $repoRoot 'VERSION') -Raw).Trim()
 $installer = Join-Path $repoRoot "dist\installer\Elite Pen Setup $version.exe"
 $target = Join-Path $repoRoot 'artifacts\qa\installer-smoke'
+$log = Join-Path $repoRoot 'artifacts\qa\installer-smoke.log'
 $resolvedRepo = [IO.Path]::GetFullPath($repoRoot).TrimEnd('\') + '\'
 $resolvedTarget = [IO.Path]::GetFullPath($target)
 if (-not $resolvedTarget.StartsWith($resolvedRepo, [StringComparison]::OrdinalIgnoreCase)) {
@@ -13,15 +14,22 @@ if (-not $resolvedTarget.StartsWith($resolvedRepo, [StringComparison]::OrdinalIg
 }
 if (-not (Test-Path -LiteralPath $installer)) { throw "Missing installer: $installer" }
 if (Test-Path -LiteralPath $target) { Remove-Item -LiteralPath $target -Recurse -Force }
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $log) | Out-Null
+if (Test-Path -LiteralPath $log) { Remove-Item -LiteralPath $log -Force }
 
 try {
     $installArguments = @(
         '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/NOICONS',
-        "/DIR=`"$resolvedTarget`""
+        "/DIR=`"$resolvedTarget`"", "/LOG=`"$log`""
     )
     $installation = Start-Process -FilePath $installer -ArgumentList $installArguments `
         -PassThru -Wait -WindowStyle Hidden
-    if ($installation.ExitCode -ne 0) { throw "Installer exited with $($installation.ExitCode)." }
+    if ($installation.ExitCode -ne 0) {
+        $details = if (Test-Path -LiteralPath $log) {
+            (Get-Content -LiteralPath $log -Tail 20) -join [Environment]::NewLine
+        } else { 'No installer log was created.' }
+        throw "Installer exited with $($installation.ExitCode).`n$details"
+    }
 
     $installedExecutable = Join-Path $target 'Elite Pen.exe'
     if (-not (Test-Path -LiteralPath $installedExecutable)) {

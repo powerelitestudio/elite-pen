@@ -203,6 +203,27 @@ void test_simplification() {
           "iterative simplification handles deep adversarial paths without recursion");
 }
 
+void test_modifier_gestures() {
+    check(gesture_tool(Tool::Pen, true, false, false, false) == Tool::Line,
+          "Shift temporarily selects a straight line");
+    check(gesture_tool(Tool::Pen, false, true, false, false) == Tool::Rectangle,
+          "Control temporarily selects a rectangle");
+    check(gesture_tool(Tool::Pen, false, false, false, true) == Tool::Ellipse,
+          "Tab temporarily selects an ellipse");
+    check(gesture_tool(Tool::Pen, true, true, false, false) == Tool::Arrow,
+          "Control Shift temporarily selects an arrow");
+    check(gesture_tool(Tool::Pen, false, true, true, false) == Tool::CurvedArrow,
+          "Control Alt temporarily selects a curved arrow");
+    check(gesture_tool(Tool::Pen, true, true, true, true) == Tool::Arrow,
+          "arrow chord has deterministic priority over other modifiers");
+    check(gesture_tool(Tool::Rectangle, true, false, false, false) == Tool::Rectangle,
+          "explicit rectangle keeps Shift square constraint");
+    check(gesture_tool(Tool::Eraser, true, true, true, true) == Tool::Eraser,
+          "modifier gestures never override the eraser");
+    check(gesture_tool(Tool::Text, true, true, true, true) == Tool::Text,
+          "modifier gestures never override text insertion");
+}
+
 void test_document_revision() {
     Document document;
     const auto initial = document.revision();
@@ -238,6 +259,7 @@ int main() {
     test_compound_erase();
     test_hit_testing();
     test_simplification();
+    test_modifier_gestures();
     test_history_limit();
     test_document_revision();
     if (failures == 0) {

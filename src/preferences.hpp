@@ -39,6 +39,13 @@ enum class HotkeyAction : std::uint8_t {
     ToolPanel,
     Settings,
     PaletteCollapse,
+    ColorBlack,
+    ColorYellow,
+    ColorBlue,
+    ColorRed,
+    ColorGreen,
+    ColorPurple,
+    ColorPanelAlternate,
     ZoomFreeze,
     ZoomFullscreen,
     ZoomLens,
@@ -62,8 +69,45 @@ inline constexpr std::size_t kHotkeyActionCount =
     static_cast<std::size_t>(HotkeyAction::Count);
 inline constexpr std::size_t kGlobalHotkeyActionCount =
     static_cast<std::size_t>(HotkeyAction::ZoomFreeze);
+inline constexpr int kCurrentHotkeySchemeVersion = 2;
 
 inline constexpr std::array<HotkeyBinding, kHotkeyActionCount> kDefaultHotkeys{{
+    {MOD_CONTROL | MOD_SHIFT, 'Q'},
+    {MOD_CONTROL | MOD_SHIFT, 'A'},
+    {MOD_CONTROL | MOD_SHIFT, 'W'},
+    {MOD_CONTROL | MOD_ALT, 'Z'},
+    {MOD_CONTROL | MOD_SHIFT, 'Y'},
+    {MOD_CONTROL | MOD_SHIFT, 'E'},
+    {MOD_CONTROL | MOD_SHIFT, 'Z'},
+    {MOD_CONTROL | MOD_SHIFT, 'B'},
+    {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},
+    {MOD_CONTROL | MOD_SHIFT, 'T'},
+    {0, 0},
+    {MOD_CONTROL | MOD_SHIFT, '7'},
+    {MOD_CONTROL | MOD_SHIFT, 'G'},
+    {0, 0}, {0, 0},
+    {MOD_CONTROL | MOD_SHIFT, 'D'},
+    {MOD_CONTROL | MOD_SHIFT, '1'},
+    {MOD_CONTROL | MOD_SHIFT, '2'},
+    {MOD_CONTROL | MOD_SHIFT, '3'},
+    {MOD_CONTROL | MOD_SHIFT, '4'},
+    {MOD_CONTROL | MOD_SHIFT, '5'},
+    {MOD_CONTROL | MOD_SHIFT, '6'},
+    {MOD_CONTROL | MOD_SHIFT, VK_OEM_PLUS},
+    {0, 'P'},
+    {0, 'F'},
+    {0, 'L'},
+    {0, 'D'},
+    {0, VK_SPACE},
+    {0, 'I'},
+    {0, '0'},
+    {0, VK_OEM_PLUS},
+    {0, VK_OEM_MINUS}
+}};
+
+// Defaults shipped through 2.3. Existing installations are migrated only when
+// a saved binding still matches one of these values; genuine customizations win.
+inline constexpr std::array<HotkeyBinding, kHotkeyActionCount> kLegacyDefaultHotkeysV1{{
     {MOD_CONTROL | MOD_SHIFT, 'P'},
     {MOD_CONTROL | MOD_SHIFT, 'H'},
     {MOD_CONTROL | MOD_SHIFT, 'W'},
@@ -77,6 +121,7 @@ inline constexpr std::array<HotkeyBinding, kHotkeyActionCount> kDefaultHotkeys{{
     {0, 0}, {0, 0},
     {MOD_CONTROL | MOD_SHIFT, 'G'},
     {0, 0}, {0, 0}, {0, 0},
+    {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},
     {0, 'P'},
     {0, 'F'},
     {0, 'L'},
@@ -89,6 +134,7 @@ inline constexpr std::array<HotkeyBinding, kHotkeyActionCount> kDefaultHotkeys{{
 }};
 
 struct Preferences {
+    int hotkey_scheme_version{kCurrentHotkeySchemeVersion};
     AppTheme theme{AppTheme::Dark};
     bool confirm_clear{false};
     bool exclude_palette_from_capture{true};

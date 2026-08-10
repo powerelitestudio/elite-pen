@@ -1,4 +1,4 @@
-ELITE PEN 2.2 — EDICION PORTABLE
+ELITE PEN 2.4 — EDICION PORTABLE
 ================================
 
 Elite Pen es la herramienta de anotacion, pizarra y ampliacion de pantalla de
@@ -27,15 +27,23 @@ CONTROLES PRINCIPALES
 
 ATAJOS
 ------
-Ctrl+Shift+P  Cursor / lapiz
-Ctrl+Shift+H  Ocultar / mostrar
+Ctrl+Shift+Q  Cursor / lapiz
+Ctrl+Shift+A  Ocultar / mostrar
 Ctrl+Shift+W  Pizarra blanca
 Ctrl+Shift+B  Pizarra negra
-Ctrl+Shift+Z  Deshacer
+Ctrl+Alt+Z    Deshacer
 Ctrl+Shift+Y  Rehacer
-Ctrl+Shift+C  Limpiar
-Ctrl+Shift+M  Zoom
+Ctrl+Shift+E  Limpiar
+Ctrl+Shift+Z  Zoom
+Ctrl+Shift+D  Contraer / expandir Elite Pen
+Ctrl+Shift+1..6  Negro, amarillo, azul, rojo, verde y morado
+Ctrl+Shift+7 o Ctrl+Shift++  Selector completo de colores
+Ctrl+Shift+rueda  Recorrer los cinco grosores
 Esc           Volver al cursor / salir del zoom o de una pizarra
+
+Con Lapiz seleccionado: Shift+arrastre crea Linea; Ctrl+arrastre, Rectangulo;
+Tab+arrastre, Elipse; Ctrl+Shift+arrastre, Flecha; Ctrl+Alt+arrastre, Flecha curva
+Bezier. Al soltar las teclas vuelve automaticamente el dibujo libre.
 
 Configuracion > Atajos incluye todas las acciones de dibujo, texto, figuras, paneles
 y zoom. Pulsa el lapiz a la derecha para editar; Supr o Retroceso deja una accion sin
@@ -65,4 +73,4 @@ Configuracion.
 
 SOPORTE
 -------
-Producto de Power Elite Studio. Version 2.3.0.
+Producto de Power Elite Studio. Version 2.4.0.

@@ -85,6 +85,9 @@ PreferencesStore::PreferencesStore() {
 Preferences PreferencesStore::load() const {
     Preferences result;
     if (!std::filesystem::exists(path_)) return result;
+    result.hotkey_scheme_version = std::clamp(
+        read_int(path_, L"HotkeySchemeVersion", 1), 1,
+        kCurrentHotkeySchemeVersion);
     result.theme = static_cast<AppTheme>(
         std::clamp(read_int(path_, L"Theme", 0), 0, 1));
     result.confirm_clear = read_int(path_, L"ConfirmClear", 0) != 0;
@@ -109,6 +112,9 @@ Preferences PreferencesStore::load() const {
         L"HotkeyRectangle", L"HotkeyEllipse", L"HotkeyArrow", L"HotkeyCurvedArrow",
         L"HotkeyText", L"HotkeyScreenshot", L"HotkeyColorPanel", L"HotkeyGeometryPanel",
         L"HotkeyToolPanel", L"HotkeySettings", L"HotkeyPaletteCollapse",
+        L"HotkeyColorBlack", L"HotkeyColorYellow", L"HotkeyColorBlue",
+        L"HotkeyColorRed", L"HotkeyColorGreen", L"HotkeyColorPurple",
+        L"HotkeyColorPanelAlternate",
         L"HotkeyZoomFreeze", L"HotkeyZoomFullscreen", L"HotkeyZoomLens",
         L"HotkeyZoomDocked", L"HotkeyZoomCycleView", L"HotkeyZoomInvert",
         L"HotkeyZoomOverview", L"HotkeyZoomIn", L"HotkeyZoomOut"
@@ -116,6 +122,14 @@ Preferences PreferencesStore::load() const {
     for (std::size_t index = 0; index < hotkey_keys.size(); ++index) {
         result.hotkeys[index] = read_hotkey(path_, hotkey_keys[index],
                                              kDefaultHotkeys[index]);
+    }
+    if (result.hotkey_scheme_version < kCurrentHotkeySchemeVersion) {
+        for (std::size_t index = 0; index < result.hotkeys.size(); ++index) {
+            if (result.hotkeys[index] == kLegacyDefaultHotkeysV1[index]) {
+                result.hotkeys[index] = kDefaultHotkeys[index];
+            }
+        }
+        result.hotkey_scheme_version = kCurrentHotkeySchemeVersion;
     }
     return result;
 }
@@ -128,6 +142,7 @@ bool PreferencesStore::save(const Preferences& preferences) const {
 
     std::ostringstream content;
     content << "[ElitePen]\r\n";
+    content << "HotkeySchemeVersion=" << preferences.hotkey_scheme_version << "\r\n";
     content << "Theme=" << static_cast<int>(preferences.theme) << "\r\n";
     content << "ConfirmClear=" << (preferences.confirm_clear ? 1 : 0) << "\r\n";
     content << "ExcludePaletteFromCapture="
@@ -154,6 +169,9 @@ bool PreferencesStore::save(const Preferences& preferences) const {
         "HotkeyRectangle", "HotkeyEllipse", "HotkeyArrow", "HotkeyCurvedArrow",
         "HotkeyText", "HotkeyScreenshot", "HotkeyColorPanel", "HotkeyGeometryPanel",
         "HotkeyToolPanel", "HotkeySettings", "HotkeyPaletteCollapse",
+        "HotkeyColorBlack", "HotkeyColorYellow", "HotkeyColorBlue",
+        "HotkeyColorRed", "HotkeyColorGreen", "HotkeyColorPurple",
+        "HotkeyColorPanelAlternate",
         "HotkeyZoomFreeze", "HotkeyZoomFullscreen", "HotkeyZoomLens",
         "HotkeyZoomDocked", "HotkeyZoomCycleView", "HotkeyZoomInvert",
         "HotkeyZoomOverview", "HotkeyZoomIn", "HotkeyZoomOut"

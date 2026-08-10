@@ -47,6 +47,45 @@ int main() {
     check(std::filesystem::path(store.path()).parent_path() == data,
           "portable settings stay beside the executable");
 
+    std::filesystem::create_directories(data, error);
+    {
+        std::ofstream legacy(std::filesystem::path(store.path()),
+                             std::ios::binary | std::ios::trunc);
+        legacy << "[ElitePen]\r\n"
+               << "HotkeyInteract=6,80\r\n"
+               << "HotkeyVisibility=6,72\r\n"
+               << "HotkeyWhiteboard=3,88\r\n"
+               << "HotkeyUndo=6,90\r\n"
+               << "HotkeyClear=6,67\r\n"
+               << "HotkeyZoom=6,77\r\n"
+               << "HotkeyColorPanel=0,0\r\n"
+               << "HotkeyPaletteCollapse=0,0\r\n";
+    }
+    const Preferences migrated = store.load();
+    check(migrated.hotkey_scheme_version == kCurrentHotkeySchemeVersion,
+          "legacy shortcuts migrate to the current scheme");
+    check(migrated.hotkeys[static_cast<std::size_t>(HotkeyAction::Interact)] ==
+              HotkeyBinding{MOD_CONTROL | MOD_SHIFT, 'Q'} &&
+          migrated.hotkeys[static_cast<std::size_t>(HotkeyAction::Visibility)] ==
+              HotkeyBinding{MOD_CONTROL | MOD_SHIFT, 'A'} &&
+          migrated.hotkeys[static_cast<std::size_t>(HotkeyAction::Undo)] ==
+              HotkeyBinding{MOD_CONTROL | MOD_ALT, 'Z'} &&
+          migrated.hotkeys[static_cast<std::size_t>(HotkeyAction::Clear)] ==
+              HotkeyBinding{MOD_CONTROL | MOD_SHIFT, 'E'} &&
+          migrated.hotkeys[static_cast<std::size_t>(HotkeyAction::Zoom)] ==
+              HotkeyBinding{MOD_CONTROL | MOD_SHIFT, 'Z'},
+          "legacy primary shortcuts receive the new defaults");
+    check(migrated.hotkeys[static_cast<std::size_t>(HotkeyAction::ColorPanel)] ==
+              HotkeyBinding{MOD_CONTROL | MOD_SHIFT, '7'} &&
+          migrated.hotkeys[static_cast<std::size_t>(HotkeyAction::PaletteCollapse)] ==
+              HotkeyBinding{MOD_CONTROL | MOD_SHIFT, 'D'} &&
+          migrated.hotkeys[static_cast<std::size_t>(HotkeyAction::ColorBlack)] ==
+              HotkeyBinding{MOD_CONTROL | MOD_SHIFT, '1'},
+          "legacy settings gain palette and direct color shortcuts");
+    check(migrated.hotkeys[static_cast<std::size_t>(HotkeyAction::Whiteboard)] ==
+              HotkeyBinding{MOD_CONTROL | MOD_ALT, 'X'},
+          "migration preserves genuinely customized shortcuts");
+
     Preferences expected;
     expected.theme = AppTheme::Light;
     expected.confirm_clear = true;

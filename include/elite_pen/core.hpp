@@ -72,6 +72,8 @@ enum class Tool : std::uint8_t {
 
 [[nodiscard]] const wchar_t* tool_name(Tool tool) noexcept;
 [[nodiscard]] bool is_drawing_tool(Tool tool) noexcept;
+[[nodiscard]] Tool gesture_tool(Tool selected, bool shift, bool control,
+                                bool alt, bool tab) noexcept;
 
 struct Drawable {
     Tool kind{Tool::Pen};

@@ -27,6 +27,20 @@ bool is_drawing_tool(Tool tool) noexcept {
     return tool != Tool::Interact && tool != Tool::Zoom;
 }
 
+Tool gesture_tool(Tool selected, bool shift, bool control,
+                  bool alt, bool tab) noexcept {
+    // Modifier gestures are intentionally scoped to freehand Pen. Explicitly
+    // selected tools retain their own behavior (for example Shift keeps a
+    // manually selected rectangle square), while Eraser/Text remain protected.
+    if (selected != Tool::Pen) return selected;
+    if (control && shift) return Tool::Arrow;
+    if (control && alt) return Tool::CurvedArrow;
+    if (tab) return Tool::Ellipse;
+    if (control) return Tool::Rectangle;
+    if (shift) return Tool::Line;
+    return selected;
+}
+
 float distance(PointF a, PointF b) noexcept {
     return std::hypot(a.x - b.x, a.y - b.y);
 }

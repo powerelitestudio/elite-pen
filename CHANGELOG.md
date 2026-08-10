@@ -1,5 +1,28 @@
 # Historial de cambios
 
+## 2.4.0 — 2026-08-10
+
+- Nuevo esquema global: `Ctrl+Shift+Q` alterna Cursor/Lápiz, `Ctrl+Shift+A`
+  visibilidad, `Ctrl+Shift+Z` Zoom, `Ctrl+Shift+E` Limpiar y `Ctrl+Shift+D`
+  contraer/expandir. Deshacer pasa a `Ctrl+Alt+Z` para reservar `Z` al zoom.
+- `Ctrl+Shift+1..6` selecciona negro, amarillo, azul, rojo, verde y morado;
+  `Ctrl+Shift+7` y `Ctrl+Shift++` abren el selector completo de colores.
+- `Ctrl+Shift+rueda` recorre los cinco grosores desde cualquier superficie activa
+  de Elite Pen, con límites estables y persistencia inmediata de la selección.
+- Con Lápiz activo, `Shift`, `Ctrl`, `Tab`, `Ctrl+Shift` y `Ctrl+Alt` convierten el
+  arrastre temporalmente en Línea, Rectángulo, Elipse, Flecha o Flecha curva Bézier.
+  La misma gramática funciona sobre el zoom congelado sin abandonar dibujo libre.
+- Las preferencias incorporan una versión de esquema: las instalaciones existentes
+  migran solo combinaciones que aún coinciden con los valores de fábrica 2.3 y
+  preservan todos los atajos personalizados.
+- Configuración documenta y permite editar las 39 acciones globales y contextuales,
+  incluidos los seis colores directos y la combinación alternativa del selector.
+- El zoom recupera un centro seguro del escritorio virtual si Windows deniega
+  transitoriamente la lectura del puntero, evitando conservar la raíz Magnifier en
+  su tamaño de inicialización de 1 × 1 píxel.
+- QA cubre migración selectiva, gestos por modificadores, colores directos, selector
+  dual, grosor por rueda, contracción por atajo y congelación/anotación de zoom.
+
 ## 2.3.0 — 2026-08-10
 
 - El documento terminado se conserva como una superficie GPU retenida: los cuadros
