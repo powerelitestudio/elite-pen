@@ -46,6 +46,8 @@ constexpr UINT kQaQueryZoomDocumentCountMessage = WM_APP + 98;
 constexpr UINT kQaQueryBoardModeMessage = WM_APP + 99;
 constexpr UINT kQaQueryZoomSnapshotMessage = WM_APP + 100;
 constexpr UINT kZoomClickFreezeMessage = WM_APP + 101;
+constexpr UINT kQaQueryZoomSourceFocusXMessage = WM_APP + 102;
+constexpr UINT kQaQueryZoomSourceFocusYMessage = WM_APP + 103;
 constexpr UINT_PTR kTrayId = 1;
 constexpr int kPaletteDesignWidth = 290;
 constexpr int kPaletteDesignHeight = 280;
@@ -3248,7 +3250,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.1.2",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.1.3",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
@@ -4059,13 +4061,10 @@ void ZoomInkWindow::refresh_pencil_cursor() {
 
 void ZoomInkWindow::set_bounds(RECT bounds) {
     bounds_ = bounds;
-    const HWND insert_after = controller_.palette() &&
-        IsWindowVisible(controller_.palette()->hwnd())
-        ? controller_.palette()->hwnd() : HWND_TOPMOST;
-    SetWindowPos(window_, insert_after, bounds.left, bounds.top,
+    SetWindowPos(window_, nullptr, bounds.left, bounds.top,
                  std::max(1L, bounds.right - bounds.left),
                  std::max(1L, bounds.bottom - bounds.top),
-                 SWP_NOACTIVATE);
+                 SWP_NOZORDER | SWP_NOACTIVATE);
 }
 
 void ZoomInkWindow::show_live(RECT bounds) {
@@ -4097,19 +4096,16 @@ void ZoomInkWindow::set_frozen(bool frozen) {
         snapshot_.Reset();
     }
     SetWindowLongPtrW(window_, GWL_EXSTYLE, style);
-    SetWindowPos(window_, HWND_TOPMOST, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED |
-                 (frozen_ ? 0U : SWP_NOACTIVATE));
+    SetWindowPos(window_, nullptr, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                 SWP_FRAMECHANGED);
     invalidate();
 }
 
 void ZoomInkWindow::bring_to_front() {
     if (!IsWindowVisible(window_)) return;
-    const HWND insert_after = controller_.palette() &&
-        IsWindowVisible(controller_.palette()->hwnd())
-        ? controller_.palette()->hwnd() : HWND_TOPMOST;
-    SetWindowPos(window_, insert_after, 0, 0, 0, 0,
-                 SWP_NOMOVE | SWP_NOSIZE | (frozen_ ? 0U : SWP_NOACTIVATE));
+    SetWindowPos(window_, HWND_TOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 }
 
 bool ZoomInkWindow::capture_snapshot(HWND magnifier, RECT bounds) {
@@ -4518,21 +4514,15 @@ void ZoomTargetWindow::show_at(POINT cursor) {
     const int height = std::max(1L, client.bottom - client.top);
     const int focus_x = static_cast<int>(std::lround(static_cast<float>(width) * 0.43F));
     const int focus_y = static_cast<int>(std::lround(static_cast<float>(height) * 0.43F));
-    const HWND insert_after = controller_.palette() &&
-        IsWindowVisible(controller_.palette()->hwnd())
-        ? controller_.palette()->hwnd() : HWND_TOPMOST;
     const bool was_visible = visible();
-    SetWindowPos(window_, insert_after, cursor.x - focus_x, cursor.y - focus_y,
-                 0, 0, SWP_NOSIZE | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    SetWindowPos(window_, nullptr, cursor.x - focus_x, cursor.y - focus_y,
+                 0, 0, SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
     if (!was_visible) invalidate();
 }
 
 void ZoomTargetWindow::bring_to_front() {
     if (!visible()) return;
-    const HWND insert_after = controller_.palette() &&
-        IsWindowVisible(controller_.palette()->hwnd())
-        ? controller_.palette()->hwnd() : HWND_TOPMOST;
-    SetWindowPos(window_, insert_after, 0, 0, 0, 0,
+    SetWindowPos(window_, HWND_TOPMOST, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
 }
 
@@ -4776,16 +4766,19 @@ void ZoomWindow::execute_action(HotkeyAction action) {
             controller_.preferences().zoom_view = static_cast<int>(ZoomView::Fullscreen);
             controller_.save_preferences();
             refresh_source();
+            controller_.update_overlay_interaction();
             break;
         case HotkeyAction::ZoomLens:
             controller_.preferences().zoom_view = static_cast<int>(ZoomView::Lens);
             controller_.save_preferences();
             refresh_source();
+            controller_.update_overlay_interaction();
             break;
         case HotkeyAction::ZoomDocked:
             controller_.preferences().zoom_view = static_cast<int>(ZoomView::Docked);
             controller_.save_preferences();
             refresh_source();
+            controller_.update_overlay_interaction();
             break;
         case HotkeyAction::ZoomCycleView:
             cycle_view();
@@ -4816,10 +4809,17 @@ void ZoomWindow::execute_action(HotkeyAction action) {
 
 void ZoomWindow::bring_to_front() {
     if (!active_) return;
+    // Keep a deterministic topmost stack. Raising the native Magnifier root
+    // after the ink makes completed strokes appear to vanish even though they
+    // remain in the zoom document.
     SetWindowPos(window_, HWND_TOPMOST, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     if (ink_) ink_->bring_to_front();
     if (target_) target_->bring_to_front();
+    if (controller_.palette() && IsWindowVisible(controller_.palette()->hwnd())) {
+        SetWindowPos(controller_.palette()->hwnd(), HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+    }
 }
 
 void ZoomWindow::invalidate_ink() {
@@ -4868,6 +4868,7 @@ void ZoomWindow::cycle_view() {
         (controller_.preferences().zoom_view + 1) % 3;
     controller_.save_preferences();
     refresh_source();
+    controller_.update_overlay_interaction();
 }
 
 void ZoomWindow::update_lens_cursor(bool active) {
@@ -4952,7 +4953,15 @@ void ZoomWindow::refresh_source() {
     InvalidateRect(magnifier_, nullptr, TRUE);
     if (ink_ && IsWindowVisible(ink_->hwnd())) ink_->set_bounds(zoom_rect_);
     if (target_) {
-        if (view == ZoomView::Lens) target_->show_at(cursor);
+        if (view == ZoomView::Lens) {
+            // The source rectangle can be clamped at monitor edges. Its center,
+            // not the unclamped pointer, is the pixel represented at the center
+            // of the magnified output.
+            const POINT source_focus{
+                source_rect_.left + (source_rect_.right - source_rect_.left) / 2,
+                source_rect_.top + (source_rect_.bottom - source_rect_.top) / 2};
+            target_->show_at(source_focus);
+        }
         else target_->hide();
     }
 }
@@ -4961,6 +4970,10 @@ LRESULT ZoomWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
     switch (message) {
         case kQaQueryZoomFrozenMessage:
             return frozen() ? 1 : 0;
+        case kQaQueryZoomSourceFocusXMessage:
+            return source_rect_.left + (source_rect_.right - source_rect_.left) / 2;
+        case kQaQueryZoomSourceFocusYMessage:
+            return source_rect_.top + (source_rect_.bottom - source_rect_.top) / 2;
         case kZoomClickFreezeMessage:
             click_freeze_pending_ = false;
             if (active_ && !frozen()) toggle_freeze();

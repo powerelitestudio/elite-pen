@@ -1,4 +1,4 @@
-# Informe de calidad — Elite Pen 2.1.2
+# Informe de calidad — Elite Pen 2.1.3
 
 Fecha: 2026-08-10
 Equipo de referencia: Lenovo 80NV, Intel Core i7-6700HQ, 12 GB RAM, Intel HD 530,
@@ -63,6 +63,11 @@ GeForce GTX 960M, Windows 10 Pro 22H2 x64, dos monitores con escalado mixto.
   visibilidad y orden Z de la paleta, cambio a rojo y selección de Rectángulo.
 - Lente 2.1.2: una superficie transparente `ZoomTarget` permanece visible, cambia de
   posición con el puntero, deja pasar entrada y se excluye del filtro de Magnifier.
+- Regresión 2.1.3: después de completar el primer trazo se comprueba que `ZoomInk`
+  permanezca sobre la raíz nativa `Zoom` y que la paleta permanezca sobre ambas.
+  El mismo contrato se repite al cambiar color, elegir geometría y congelar Lente.
+- Sincronización 2.1.3: el centro óptico de `ZoomTarget` se compara directamente con
+  el centro de la región fuente enviada a Magnifier, incluido el ajuste en bordes.
 - Persistencia 2.0: una prueba portable aislada escribe y vuelve a leer posición con
   coordenadas negativas, escala, modo contraído, color, grosor, zoom y atajos
   personalizados; también comprueba el reemplazo atómico sin archivo `.tmp` residual.
@@ -84,10 +89,10 @@ Resultado final en el equipo de referencia:
 
 | Prueba | Resultado | Presupuesto |
 |---|---:|---:|
-| Agregar 5.000 trazos | 27,92 ms | 2.500 ms |
-| 250 borrados fallidos sobre 5.000 objetos | 33,36 ms | 1.500 ms |
-| Limpiar y restaurar 5.000 objetos | 12,68 ms | 2.500 ms |
-| Simplificar 100.000 muestras | 244,39 ms | 1.500 ms |
+| Agregar 5.000 trazos | 23,16 ms | 2.500 ms |
+| 250 borrados fallidos sobre 5.000 objetos | 17,23 ms | 1.500 ms |
+| Limpiar y restaurar 5.000 objetos | 10,40 ms | 2.500 ms |
+| Simplificar 100.000 muestras | 125,52 ms | 1.500 ms |
 
 ## Compatibilidad y recuperacion
 
@@ -109,5 +114,5 @@ Resultado final en el equipo de referencia:
 - Windows puede denegar la captura del escritorio en una sesion bloqueada, segura o
   no interactiva; Elite Pen informa el fallo y no genera un archivo corrupto.
 - La presion depende del controlador del lapiz y de que Windows entregue WM_POINTER.
-- El binario 2.1.2 no esta firmado digitalmente; los hashes del paquete permiten
+- El binario 2.1.3 no esta firmado digitalmente; los hashes del paquete permiten
   verificar integridad hasta incorporar el certificado de Power Elite Studio.

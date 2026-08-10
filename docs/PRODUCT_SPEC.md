@@ -1,6 +1,6 @@
 # Elite Pen 2.1 — contrato de producto
 
-Estado: version 2.1.2 implementada.
+Estado: version 2.1.3 implementada.
 
 ## 1. Identidad e interaccion principal
 

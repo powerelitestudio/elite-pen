@@ -1,5 +1,20 @@
 # Historial de cambios
 
+## 2.1.3 — 2026-08-10
+
+- Corregido el orden de las superficies del zoom congelado: la paleta, el objetivo
+  de lente y la tinta permanecen por encima de la imagen nativa Magnifier después
+  de completar un trazo, cambiar color o elegir una geometría.
+- El reposicionamiento y los cambios de estilo de `ZoomInk` ya no alteran por su
+  cuenta el orden Z; una única rutina restablece toda la jerarquía de forma
+  determinista y sin activar ventanas auxiliares.
+- El objetivo de la lupa usa exactamente el centro de la región fuente entregada a
+  Magnifier. Cuando la captura se ajusta a un borde del monitor, el indicador se
+  ajusta al mismo punto y deja de mostrar una referencia desincronizada.
+- QA comprueba ahora que `ZoomInk` esté encima de la raíz nativa, que la paleta esté
+  encima de ambas y que el punto visual de la lupa coincida con el centro de captura.
+  La regresión se ejecuta tanto en pantalla completa como en modo Lente.
+
 ## 2.1.2 — 2026-08-10
 
 - La paleta y sus paneles conservan una capa superior estable durante el zoom

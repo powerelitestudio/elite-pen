@@ -45,6 +45,7 @@ public static class ElitePenUiNative {
         int x, int y, int width, int height, uint flags);
     [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT point);
     [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
+    [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT point);
     [DllImport("user32.dll")] public static extern void mouse_event(
         uint flags, uint dx, uint dy, uint data, UIntPtr extraInfo);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern bool SetWindowText(IntPtr window, string value);
@@ -548,15 +549,46 @@ try {
         if ($zoomTarget -ne [IntPtr]::Zero) {
             $targetBefore = New-Object ElitePenUiNative+RECT
             $null = [ElitePenUiNative]::GetWindowRect($zoomTarget, [ref]$targetBefore)
-            $null = [ElitePenUiNative]::SetCursorPos(
-                ($full.Left + 280), ($full.Top + 240))
+            $beforeFocusX = $targetBefore.Left + [Math]::Round(
+                ($targetBefore.Right - $targetBefore.Left) * 0.43)
+            $beforeFocusY = $targetBefore.Top + [Math]::Round(
+                ($targetBefore.Bottom - $targetBefore.Top) * 0.43)
+            $moveX = if ($beforeFocusX -lt (($full.Left + $full.Right) / 2)) {
+                $full.Right - 420
+            } else { $full.Left + 420 }
+            $moveY = if ($beforeFocusY -lt (($full.Top + $full.Bottom) / 2)) {
+                $full.Bottom - 320
+            } else { $full.Top + 320 }
+            $cursorMoved = [ElitePenUiNative]::SetCursorPos($moveX, $moveY)
             Start-Sleep -Milliseconds 120
+            $actualCursor = New-Object ElitePenUiNative+POINT
+            $null = [ElitePenUiNative]::GetCursorPos([ref]$actualCursor)
             $targetAfter = New-Object ElitePenUiNative+RECT
             $null = [ElitePenUiNative]::GetWindowRect($zoomTarget, [ref]$targetAfter)
-            Assert-Ui ([ElitePenUiNative]::IsWindowVisible($zoomTarget) -and
-                       ($targetAfter.Left -ne $targetBefore.Left -or
-                        $targetAfter.Top -ne $targetBefore.Top)) `
-                'Lens focus target did not remain visible while following the pointer.'
+            Assert-Ui ([ElitePenUiNative]::IsWindowVisible($zoomTarget)) `
+                'Lens focus target disappeared while the pointer moved.'
+            Assert-Ui ([ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.ZoomTarget')) `
+                'Lens focus target covered the palette while following the pointer.'
+            Assert-Ui ($cursorMoved -and $actualCursor.X -eq $moveX -and
+                       $actualCursor.Y -eq $moveY) `
+                "Test harness could not move the physical pointer to $moveX,$moveY."
+            $movementMessage = "Lens focus target did not follow pointer at " +
+                "$($actualCursor.X),$($actualCursor.Y); target remained at " +
+                "$($targetAfter.Left),$($targetAfter.Top)."
+            Assert-Ui ($targetAfter.Left -ne $targetBefore.Left -or
+                       $targetAfter.Top -ne $targetBefore.Top) `
+                $movementMessage
+            $targetFocusX = $targetAfter.Left + [Math]::Round(
+                ($targetAfter.Right - $targetAfter.Left) * 0.43)
+            $targetFocusY = $targetAfter.Top + [Math]::Round(
+                ($targetAfter.Bottom - $targetAfter.Top) * 0.43)
+            $sourceFocusX = [ElitePenUiNative]::SendMessage(
+                $zoom, 0x8066, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+            $sourceFocusY = [ElitePenUiNative]::SendMessage(
+                $zoom, 0x8067, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+            Assert-Ui ([Math]::Abs($targetFocusX - $sourceFocusX) -le 2 -and
+                       [Math]::Abs($targetFocusY - $sourceFocusY) -le 2) `
+                'Lens target was not synchronized with the actual magnified source center.'
         }
         $lensCursor = [ElitePenUiNative]::GetCursor()
         $arrowCursor = [ElitePenUiNative]::LoadCursor([IntPtr]::Zero, [IntPtr]32512)
@@ -606,8 +638,20 @@ try {
             $zoomItems = [ElitePenUiNative]::SendMessage($zoomInk, 0x8062, [IntPtr]::Zero, [IntPtr]::Zero)
             Assert-Ui ($zoomItems.ToInt64() -eq 1) 'Frozen zoom did not accept pen annotations.'
             Assert-Ui ([ElitePenUiNative]::IsWindowVisible($palette) -and
-                       [ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.ZoomInk')) `
-                'Palette fell behind the frozen image after the first annotation.'
+                       [ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.ZoomInk') -and
+                       [ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.Zoom') -and
+                       [ElitePenUiNative]::IsAboveClass($zoomInk, 'ElitePen.Zoom')) `
+                'The native zoom image covered the completed annotation or palette.'
+            $inkBoundsDuringZoom = New-Object ElitePenUiNative+RECT
+            $null = [ElitePenUiNative]::GetWindowRect($zoomInk, [ref]$inkBoundsDuringZoom)
+            $inkProbe = New-Object ElitePenUiNative+POINT
+            $inkProbe.X = $inkBoundsDuringZoom.Left + 430
+            $inkProbe.Y = $inkBoundsDuringZoom.Top + 290
+            $inkAtPoint = [ElitePenUiNative]::WindowFromPoint($inkProbe)
+            $inkClass = New-Object System.Text.StringBuilder 128
+            $null = [ElitePenUiNative]::GetClassName($inkAtPoint, $inkClass, 128)
+            Assert-Ui ($inkClass.ToString() -eq 'ElitePen.ZoomInk') `
+                'Completed zoom ink was not the visible interactive layer at its stroke.'
             $paletteBoundsDuringZoom = New-Object ElitePenUiNative+RECT
             $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$paletteBoundsDuringZoom)
             $paletteProbe = New-Object ElitePenUiNative+POINT
@@ -624,13 +668,17 @@ try {
             $zoomColor = [ElitePenUiNative]::SendMessage(
                 $palette, 0x805B, [IntPtr]::Zero, [IntPtr]::Zero)
             Assert-Ui ($zoomColor.ToInt64() -eq 4293870660 -and
-                       [ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.ZoomInk')) `
+                       [ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.ZoomInk') -and
+                       [ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.Zoom') -and
+                       [ElitePenUiNative]::IsAboveClass($zoomInk, 'ElitePen.Zoom')) `
                 'Changing color during frozen zoom hid or deactivated the palette.'
             Select-Tool $palette 5
             $zoomGeometry = [ElitePenUiNative]::SendMessage(
                 $palette, 0x805A, [IntPtr]::Zero, [IntPtr]::Zero)
             Assert-Ui ($zoomGeometry.ToInt64() -eq 5 -and
-                       [ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.ZoomInk')) `
+                       [ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.ZoomInk') -and
+                       [ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.Zoom') -and
+                       [ElitePenUiNative]::IsAboveClass($zoomInk, 'ElitePen.Zoom')) `
                 'Geometry selection was not available above the frozen zoom image.'
             $null = [ElitePenUiNative]::SendMessage($zoomInk, 0x0100, [IntPtr][char]'P', [IntPtr]::Zero)
             Start-Sleep -Milliseconds 120
@@ -647,9 +695,28 @@ try {
             $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]5, [IntPtr]::Zero)
             $redoneZoomItems = [ElitePenUiNative]::SendMessage($zoomInk, 0x8062, [IntPtr]::Zero, [IntPtr]::Zero)
             Assert-Ui ($redoneZoomItems.ToInt64() -eq 0) 'Redo did not clear zoom annotations again.'
+
+            # Repeat freeze and annotation in Lens mode. It shares the same
+            # ordering contract, but uses a compact native Magnifier root.
+            $null = [ElitePenUiNative]::SendMessage($zoom, 0x0100, [IntPtr][char]'L', [IntPtr]::Zero)
+            Start-Sleep -Milliseconds 100
             $null = [ElitePenUiNative]::SendMessage($zoom, 0x0100, [IntPtr][char]'P', [IntPtr]::Zero)
             Start-Sleep -Milliseconds 120
-            $null = [ElitePenUiNative]::SendMessage($zoomInk, 0x0100, [IntPtr]27, [IntPtr]::Zero)
+            $lensStart = [IntPtr]((160 -shl 16) -bor 260)
+            $lensFinish = [IntPtr]((220 -shl 16) -bor 370)
+            $null = [ElitePenUiNative]::SendMessage($zoomInk, 0x0201, [IntPtr]1, $lensStart)
+            $null = [ElitePenUiNative]::SendMessage($zoomInk, 0x0200, [IntPtr]1, $lensFinish)
+            $null = [ElitePenUiNative]::SendMessage($zoomInk, 0x0202, [IntPtr]0, $lensFinish)
+            $lensItems = [ElitePenUiNative]::SendMessage(
+                $zoomInk, 0x8062, [IntPtr]::Zero, [IntPtr]::Zero)
+            Assert-Ui ($lensItems.ToInt64() -eq 1 -and
+                       [ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.ZoomInk') -and
+                       [ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.Zoom') -and
+                       [ElitePenUiNative]::IsAboveClass($zoomInk, 'ElitePen.Zoom')) `
+                'Lens freeze did not preserve its completed annotation and palette above the image.'
+            $null = [ElitePenUiNative]::SendMessage($zoomInk, 0x0100, [IntPtr][char]'P', [IntPtr]::Zero)
+            Start-Sleep -Milliseconds 120
+            $null = [ElitePenUiNative]::SendMessage($zoom, 0x0100, [IntPtr]27, [IntPtr]::Zero)
             Start-Sleep -Milliseconds 120
             Assert-Ui (-not [ElitePenUiNative]::IsWindowVisible($zoom)) 'Escape did not exit zoom.'
         }

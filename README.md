@@ -62,7 +62,8 @@ con `scripts/publish-portable.ps1`.
 | Zoom | Herramientas | `Ctrl+Shift+M` |
 | Salir de modo/zoom | — | `Esc` |
 
-En zoom: `F` pantalla completa, `L` lente con una lupa persistente y centro de enfoque,
+En zoom: `F` pantalla completa, `L` lente con una lupa persistente sincronizada con
+el centro real del área ampliada,
 `D` acoplado, `I` invertir,
 rueda/`+`/`-` para ampliar, `0` para vista general, `Espacio` o `M` para recorrer
 vistas, y `P` o clic para congelar o reanudar. `Esc`, `F4` o clic derecho salen.
