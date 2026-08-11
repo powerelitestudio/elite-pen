@@ -1,20 +1,38 @@
 # Elite Pen
 
-Elite Pen es la herramienta nativa de anotacion, pizarra y ampliacion de pantalla de
-Power Elite Studio. Ofrece dos presentaciones del mismo motor: `Paleta`, con la
-paleta de pintor y su pincel funcional, y `Lineal`, una barra vertical ultracompacta.
-`Paleta` es el modo predeterminado.
+![Marca de Elite Pen](assets/elite-pen-mark.svg)
 
-La edición 2.5 integra el sistema visual de la familia Elite: grafito o marfil según
-el tema, violeta como acento principal, menta para estados, divisores finos y
-tipografía Segoe UI Variable. Configuración permite elegir `Oscuro` o `Claro`; la
-preferencia queda guardada tanto al instalar como en la edición portable.
+Elite Pen es una herramienta nativa de anotación, pizarra, captura y ampliación de
+pantalla para Windows, desarrollada por [Power Elite Studio](https://powerelite.studio/).
+Permite explicar sobre cualquier aplicación sin convertir la presentación en una
+sucesión de ventanas y menús.
 
-El motor 2.5 conserva la tinta terminada en una superficie GPU y solo rasteriza el
+> **Estado:** acceso anticipado. La versión 2.7.0 es funcional y está validada para
+> empezar a compartirse, pero el producto continúa en desarrollo activo. Los reportes
+> de errores y casos de compatibilidad son bienvenidos.
+
+Ofrece dos presentaciones del mismo motor: `Paleta`, inspirada en una paleta de
+pintor, y `Lineal`, una barra vertical ultracompacta. `Paleta` es el modo
+predeterminado. Ambas usan el sistema visual Elite en marfil o grafito y conservan
+las preferencias tanto instaladas como portables.
+
+El motor conserva la tinta terminada en una superficie GPU y solo rasteriza el
 objeto recién añadido. El historial mueve los trazos sin duplicarlos, el borrador
 usa distancias al cuadrado y el simplificador de trazos es iterativo. El zoom evita
 reconfigurar su fuente cuando el puntero permanece quieto. El benchmark automatizado
 valida 5.000 trazos, cuadros en caché, dibujo activo, memoria y rutas de compatibilidad.
+
+## Descargar y ejecutar
+
+Cuando el repositorio esté público, los paquetes listos para usar se publican en
+**Releases**:
+
+- `Elite Pen Portable`: descomprime la carpeta y ejecuta `Elite Pen.exe`.
+- `Elite Pen Setup`: instala por usuario, sin privilegios de administrador.
+
+Windows puede mostrar una advertencia de SmartScreen mientras los binarios no estén
+firmados digitalmente. Verifica siempre que la descarga provenga del repositorio
+oficial y compara el SHA-256 publicado con cada versión.
 
 ## Objetivos del producto
 
@@ -22,7 +40,8 @@ valida 5.000 trazos, cuadros en caché, dibujo activo, memoria y rutas de compat
 - Usar un cursor de lápiz nativo, preciso y visible en lugar de la cruz genérica.
 - Ocultar y recuperar anotaciones sin perderlas.
 - Crear texto, lineas, rectangulos, elipses, flechas rectas y flechas curvas.
-- Capturar una region en PNG y copiarla al portapapeles.
+- Capturar una region en PNG y copiarla al portapapeles, incluido el zoom congelado
+  con sus anotaciones visibles.
 - Usar pizarras blanca y negra instantaneas.
 - Ampliar la pantalla en vista completa, lente o acoplada y seguir el puntero.
 - Congelar el zoom, anotar sobre la imagen fija y reanudar sin perder esa tinta.
@@ -43,6 +62,9 @@ valida 5.000 trazos, cuadros en caché, dibujo activo, memoria y rutas de compat
 El repositorio usa un LLVM-MinGW portable y scripts PowerShell, por lo que no exige
 Visual Studio ni modifica la configuracion del equipo.
 
+Requisitos: Windows 10 u 11 x64, PowerShell 7 y acceso a GitHub para descargar la
+cadena de compilación verificada por SHA-256.
+
 ```powershell
 pwsh -File .\scripts\bootstrap-toolchain.ps1
 pwsh -File .\scripts\build.ps1 -Configuration Release
@@ -51,7 +73,12 @@ pwsh -File .\scripts\render-performance-test.ps1 -Configuration Release
 ```
 
 Los binarios quedan en `build/<configuracion>/`. La distribucion portable se genera
-con `scripts/publish-portable.ps1`.
+con `scripts/publish-portable.ps1`. Los tres activos listos para GitHub Releases —ZIP
+portable, instalador y hashes— se generan desde la misma versión con:
+
+```powershell
+pwsh -File .\scripts\build-release-assets.ps1
+```
 
 ## Controles
 
@@ -84,7 +111,7 @@ Los seis colores rápidos también son directos: `Ctrl+Shift+1` negro,
 
 Con Lápiz seleccionado, los modificadores convierten temporalmente el siguiente
 arrastre sin cambiar de herramienta: `Shift` crea una línea, `Ctrl` un rectángulo,
-`Tab` una elipse, `Ctrl+Shift` una flecha y `Ctrl+Alt` una flecha curva Bézier.
+`Tab` una elipse, `Ctrl+Shift` una flecha y `Shift+Tab` una flecha curva Bézier.
 Al soltar las teclas, el siguiente gesto vuelve a ser dibujo libre.
 
 Texto se escribe directamente desde el punto seleccionado: la superficie es
@@ -103,7 +130,9 @@ Mientras la imagen está congelada, la paleta y sus paneles permanecen siempre p
 encima de la tinta para cambiar color, grosor, texto o geometría y mover la unidad.
 Al congelar se activa el lápiz y se admiten colores, texto y geometrías. La tinta del
 zoom usa historial propio: permanece al reanudar y la papelera la limpia sin tocar
-las anotaciones normales.
+las anotaciones normales. Captura funciona también sobre esta imagen fija: aplana la
+ampliación y la tinta visible en un PNG, copia el mismo resultado al portapapeles y
+respeta la preferencia que incluye o excluye la interfaz de Elite Pen.
 
 Configuración permite elegir Paleta o Lineal y escalar toda la unidad al 80 %,
 100 %, 125 % o 150 %; el
@@ -115,10 +144,36 @@ Cada fila tiene su propio lápiz de edición; `Supr` o `Retroceso` deja la acci�
 asignar y `Restablecer` recupera los valores de fábrica. Todo se conserva tanto
 instalado como portable.
 
-La edición 2.5 conserva el esquema de atajos 2.4 y migra únicamente las combinaciones
+La edición 2.7 conserva el esquema de atajos 2.4 y migra únicamente las combinaciones
 que todavía coincidan con los valores de
 fábrica anteriores. Las combinaciones personalizadas se mantienen intactas;
 `Restablecer` aplica el esquema 2.4 completo.
 
 La especificacion funcional completa esta en
 [`docs/PRODUCT_SPEC.md`](docs/PRODUCT_SPEC.md).
+
+## Privacidad y seguridad
+
+- No requiere cuenta, inicio de sesión ni servicio en segundo plano.
+- No incorpora telemetría ni envía anotaciones o capturas a Power Elite Studio.
+- Las preferencias se guardan en el equipo; los dibujos no se recuperan al cerrar.
+- Captura y zoom procesan la imagen localmente. El botón del sitio oficial solo abre
+  el navegador predeterminado.
+
+No publiques capturas, volcados o diagnósticos con información privada. Para una
+vulnerabilidad, sigue [SECURITY.md](SECURITY.md); para problemas funcionales, utiliza
+las plantillas de GitHub.
+
+## Colaborar
+
+Consulta [CONTRIBUTING.md](CONTRIBUTING.md) antes de abrir una incidencia o proponer
+un cambio y participa según [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md). La lista de
+pasos que debe completar la primera publicación está en
+[docs/PUBLIC_RELEASE_CHECKLIST.md](docs/PUBLIC_RELEASE_CHECKLIST.md).
+
+## Licencia
+
+El código es **source-available**, no software de código abierto según la definición
+OSI. Puedes examinarlo, compilarlo sin modificaciones y usar gratuitamente los
+binarios oficiales o esa compilación local. La redistribución, modificación y venta
+requieren autorización escrita de Power Elite Studio. Consulta [LICENSE.txt](LICENSE.txt).

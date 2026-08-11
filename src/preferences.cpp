@@ -89,7 +89,7 @@ Preferences PreferencesStore::load() const {
         read_int(path_, L"HotkeySchemeVersion", 1), 1,
         kCurrentHotkeySchemeVersion);
     result.theme = static_cast<AppTheme>(
-        std::clamp(read_int(path_, L"Theme", 0), 0, 1));
+        std::clamp(read_int(path_, L"Theme", 1), 0, 1));
     result.control_mode = static_cast<ControlMode>(
         std::clamp(read_int(path_, L"ControlMode", 0), 0, 1));
     result.confirm_clear = read_int(path_, L"ConfirmClear", 0) != 0;

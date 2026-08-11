@@ -1,5 +1,38 @@
 # Historial de cambios
 
+## 2.7.0 — 2026-08-10
+
+- Configuración incorpora una pestaña `Ayuda` con versión, propósito, compatibilidad,
+  estado de acceso anticipado, autoría de Power Elite Studio y acceso al sitio oficial.
+- `Atajos` documenta dentro de la aplicación los cinco gestos temporales del Lápiz:
+  `Shift` Línea, `Ctrl` Rectángulo, `Tab` Elipse, `Ctrl+Shift` Flecha y `Shift+Tab`
+  Flecha curva Bézier.
+- La interfaz de Configuración y su smoke test validan las tres pestañas, el texto
+  accesible de gestos y la información mínima de producto.
+- El repositorio queda preparado para compartirse públicamente con README de acceso
+  anticipado, licencia source-available y uso gratuito, CONTRIBUTING, SECURITY,
+  código de conducta, plantillas de comunidad, CI de Windows y checklist de publicación.
+- La auditoría local no detecta patrones comunes de secretos ni archivos rastreados
+  mayores de 1 MiB; builds, toolchain, artefactos y preferencias permanecen ignorados.
+- Un comando de Release crea el ZIP portable, el instalador y `SHA256SUMS.txt` desde
+  la misma versión para evitar paquetes manuales divergentes.
+- GitHub Actions compila y prueba en Windows; CodeQL analiza C++ en cada cambio a
+  `main`, pull request y ejecución semanal.
+
+## 2.6.0 — 2026-08-10
+
+- Captura inteligente sobre zoom congelado: la selección combina la imagen ampliada
+  exacta con tinta, texto y geometrías visibles, guarda PNG y copia el mismo bitmap
+  al portapapeles sin depender del orden de ventanas de Windows.
+- La preferencia de captura sigue decidiendo si la interfaz de Elite Pen queda fuera
+  o aparece en el resultado presentado.
+- Tema Claro como apariencia inicial para instalaciones y portables nuevos; Oscuro
+  continúa disponible y ambas elecciones se conservan.
+- Gestos temporales de Lápiz: `Shift` Línea, `Ctrl` Rectángulo, `Tab` Elipse,
+  `Ctrl+Shift` Flecha y `Shift+Tab` Flecha curva Bézier.
+- El control de contraer bajo el ojo elimina su círculo decorativo y conserva solo
+  el glifo limpio, sin reducir la zona interactiva.
+
 ## 2.5.2 — 2026-08-10
 
 - El ojo central de Paleta vuelve a descansar directamente sobre la superficie:

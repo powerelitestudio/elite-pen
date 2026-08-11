@@ -1,6 +1,6 @@
-# Elite Pen 2.5.2 — contrato de producto
+# Elite Pen 2.7.0 — contrato de producto
 
-Estado: version 2.5.2 implementada.
+Estado: versión 2.7.0 implementada y preparada para acceso anticipado público.
 
 ## 1. Identidad e interaccion principal
 
@@ -14,8 +14,9 @@ Paleta es el valor predeterminado; la selección se conserva entre sesiones.
 
 - El sistema visual compartido con Elite Slides usa fondos grafito o marfil,
   superficies frías, violeta para selección y jerarquía, y menta para estados.
-- Configuración ofrece temas `Oscuro` y `Claro`; el cambio es inmediato, abarca
-  paleta, paneles, configuración, lupa e indicadores y se conserva entre sesiones.
+- Configuración ofrece temas `Claro` y `Oscuro`; Claro es el valor inicial. El cambio
+  es inmediato, abarca paleta, paneles, configuración, lupa e indicadores y se
+  conserva entre sesiones.
 - El volumen se comunica con gradientes breves, brillos controlados y sombras
   contenidas; no se emplean biseles, marcos blancos ni cromados clásicos.
 - Las selecciones siempre disponen de forma, contorno o luminancia además del color.
@@ -35,7 +36,7 @@ Paleta es el valor predeterminado; la selección se conserva entre sesiones.
   y el selector RGB personalizado de Windows.
 - El ojo central abierto muestra las anotaciones; al ocultarlas se transforma en un
   parpado cerrado con pestanas sutiles, sin alterar el historial.
-- Un control menor bajo el ojo contrae la unidad completa. Desaparecen colores,
+- Un glifo limpio, sin círculo decorativo, bajo el ojo contrae la unidad completa. Desaparecen colores,
   grosores, ojo, pincel y papelera; queda únicamente una paleta oscura al 30 % del
   tamaño seleccionado con un icono de expansión. Solo ese icono expande la unidad;
   la superficie restante muestra el cursor de movimiento y permite reubicarla sin
@@ -105,13 +106,15 @@ Paleta es el valor predeterminado; la selección se conserva entre sesiones.
     transparente directamente sobre el escritorio. Admite multilinea, pegado,
     `Ctrl+Enter` para confirmar y `Esc` para cancelar, sin dialogo independiente ni
     superficie opaca: DirectComposition muestra únicamente caracteres y caret.
-11. Captura: seleccion rectangular, guardado PNG y copia al portapapeles.
+11. Captura: seleccion rectangular, guardado PNG y copia al portapapeles. Sobre zoom
+    congelado aplana la imagen ampliada exacta y todas las anotaciones visibles; la
+    paleta se incluye o excluye según la preferencia general de captura.
 12. Zoom: ampliacion en vivo centrada en el puntero, ajuste con rueda, congelación o
     reanudación con `P` y salida con `Esc`.
 
 Con Lapiz activo, un modificador aplicado al comenzar el arrastre selecciona una
 figura temporal sin cambiar la herramienta persistente: `Shift` Linea, `Ctrl`
-Rectangulo, `Tab` Elipse, `Ctrl+Shift` Flecha y `Ctrl+Alt` Flecha curva Bezier.
+Rectangulo, `Tab` Elipse, `Ctrl+Shift` Flecha y `Shift+Tab` Flecha curva Bezier.
 Esta interpretación también funciona sobre el zoom congelado y nunca sustituye
 los gestos propios de Texto, Borrador ni una figura elegida explícitamente.
 
@@ -201,7 +204,7 @@ añade una fila independiente para Configuracion.
 - Resaltado de cursor configurable para presentaciones.
 - Atajo de emergencia `Esc` devuelve interaccion al escritorio.
 - Icono de bandeja con acciones equivalentes y salida explicita.
-- Configuración separa `General` y `Atajos`; la segunda pestaña permite capturar una
+- Configuración separa `General`, `Atajos` y `Ayuda`; la segunda pestaña permite capturar una
   combinación nueva para cada acción global o contextual mediante un lápiz explícito,
   detecta duplicados dentro de su ámbito o reservas de Windows, admite dejar acciones
   sin asignar con `Supr`/`Retroceso`, restablece los valores de fábrica y explica
@@ -212,6 +215,13 @@ añade una fila independiente para Configuracion.
   Los colores rápidos usan `Ctrl+Shift+1..6`; `Ctrl+Shift+7` y `Ctrl+Shift++`
   abren Colores. La migración reemplaza solo valores de fábrica antiguos y conserva
   cualquier combinación personalizada.
+- `Atajos` documenta también los cinco gestos temporales del Lápiz en el propio
+  producto: `Shift` Línea, `Ctrl` Rectángulo, `Tab` Elipse, `Ctrl+Shift` Flecha y
+  `Shift+Tab` Flecha curva Bézier.
+- `Ayuda` identifica Elite Pen y su versión, resume su propósito y compatibilidad,
+  acredita a Power Elite Studio y abre https://powerelite.studio/ en el navegador
+  predeterminado. También comunica el estado de acceso anticipado y que las
+  preferencias son locales.
 - Los atajos, la escala y el estado contraído se guardan atómicamente en LocalAppData
   para la instalación o en `data/settings.ini` junto al ejecutable portable.
 

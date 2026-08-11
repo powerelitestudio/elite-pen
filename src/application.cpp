@@ -92,7 +92,7 @@ constexpr UiTheme kLightTheme{
     0x171B28, 0x4F586B, 0x7A8498, 0x6E55DF, 0x5E46CE, 0x0D9F85,
     0xD94B65, 0xB77719, 0xC7CDD9, 0x212A3E};
 
-AppTheme g_ui_theme = AppTheme::Dark;
+AppTheme g_ui_theme = AppTheme::Light;
 
 const UiTheme& ui_theme(AppTheme theme) noexcept {
     return theme == AppTheme::Light ? kLightTheme : kDarkTheme;
@@ -552,7 +552,7 @@ constexpr std::array<HotkeyInfo, kHotkeyActionCount> kHotkeyInfo{{
     {L"Zoom: alejar", L"Reduce el nivel de zoom"}
 }};
 
-constexpr std::size_t kVisibleShortcutRows = 7;
+constexpr std::size_t kVisibleShortcutRows = 6;
 
 class Controller;
 
@@ -767,6 +767,7 @@ protected:
 private:
     void paint_background(HDC dc);
     void paint_shortcuts(HDC dc, RECT bounds);
+    void paint_help(HDC dc, RECT bounds);
     void refresh_controls();
     void refresh_shortcut_rows();
     void show_tab(int tab);
@@ -777,6 +778,7 @@ private:
     HWND subtitle_{};
     HWND tab_general_{};
     HWND tab_shortcuts_{};
+    HWND tab_help_{};
     HWND capture_{};
     HWND confirm_clear_{};
     HWND start_interact_{};
@@ -800,6 +802,8 @@ private:
     HWND theme_light_{};
     HWND reset_position_{};
     HWND shortcuts_{};
+    HWND help_{};
+    HWND help_website_{};
     std::array<HWND, kVisibleShortcutRows> hotkey_buttons_{};
     std::array<HWND, kVisibleShortcutRows> hotkey_edit_buttons_{};
     HWND shortcut_scrollbar_{};
@@ -852,6 +856,7 @@ private:
     void update_gesture(PointF point, WPARAM keys);
     void finish_gesture(PointF point, WPARAM keys);
     bool capture_snapshot(HWND magnifier, RECT bounds);
+    bool capture_composite(PointF first, PointF second);
 
     Document document_;
     std::optional<Drawable> preview_;
@@ -1016,7 +1021,9 @@ public:
     void commit_text(PointF position, Color color, float thickness, std::wstring text);
     void commit_drawable(Drawable drawable);
     void update_transient_ink();
-    void capture_region(PointF first, PointF second);
+    bool capture_region(PointF first, PointF second,
+                        bool allow_synthetic_capture = true);
+    bool publish_capture_bitmap(HBITMAP bitmap, int width, int height);
     void rebuild_overlays();
     void report_runtime_error(const std::wstring& message);
     void request_exit();
@@ -2841,7 +2848,6 @@ void PaletteWindow::render() {
     ComPtr<ID2D1SolidColorBrush> rail;
     ComPtr<ID2D1SolidColorBrush> muted;
     ComPtr<ID2D1SolidColorBrush> glass;
-    ComPtr<ID2D1SolidColorBrush> selected_surface;
     ComPtr<ID2D1SolidColorBrush> swatch_shell;
     context->CreateSolidColorBrush(theme_color(theme.text), cream.GetAddressOf());
     context->CreateSolidColorBrush(theme_color(theme.shadow, theme.light ? 0.18F : 0.38F),
@@ -2855,8 +2861,6 @@ void PaletteWindow::render() {
     context->CreateSolidColorBrush(theme_color(theme.light ? 0xFFFFFF : 0xFFFFFF,
                                                theme.light ? 0.48F : 0.18F),
                                    glass.GetAddressOf());
-    context->CreateSolidColorBrush(
-        theme_color(theme.light ? 0xE7E2FB : 0x28223E), selected_surface.GetAddressOf());
     context->CreateSolidColorBrush(theme_color(theme.surface_2, 0.98F),
                                    swatch_shell.GetAddressOf());
 
@@ -2981,11 +2985,8 @@ void PaletteWindow::render() {
         context->DrawLine(D2D1::Point2F(138, 87), D2D1::Point2F(142, 92), gold.Get(), 1.5F);
     }
 
-    // Compact hibernation control beneath the eye.
-    context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(126, 113), 10.5F, 10.5F),
-                         selected_surface.Get());
-    context->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(126, 113), 10.5F, 10.5F),
-                         panel_border.Get(), 0.8F);
+    // Compact hibernation control beneath the eye. Its hit zone stays generous,
+    // but the visual is intentionally only the inward-chevron glyph.
     context->DrawLine(D2D1::Point2F(116.5F, 108.0F), D2D1::Point2F(123.5F, 113.0F),
                       gold_bright.Get(), 1.65F);
     context->DrawLine(D2D1::Point2F(116.5F, 118.0F), D2D1::Point2F(123.5F, 113.0F),
@@ -4039,7 +4040,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.5.2",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.7.0",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
@@ -4054,6 +4055,10 @@ bool SettingsWindow::initialize() {
                                    BS_OWNERDRAW, 174, 68, 150, 34, window_,
                                    reinterpret_cast<HMENU>(4102),
                                    GetModuleHandleW(nullptr), nullptr);
+    tab_help_ = CreateWindowW(L"BUTTON", L"Ayuda", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
+                              BS_OWNERDRAW, 330, 68, 150, 34, window_,
+                              reinterpret_cast<HMENU>(4104),
+                              GetModuleHandleW(nullptr), nullptr);
     capture_ = CreateWindowW(L"BUTTON", L"Ocultar Elite Pen en capturas de pantalla",
                              WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
                              24, 119, 500, 25, window_, reinterpret_cast<HMENU>(4001),
@@ -4148,7 +4153,9 @@ bool SettingsWindow::initialize() {
                                     WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
                                     24, 489, 284, 31, window_, reinterpret_cast<HMENU>(4005),
                                     GetModuleHandleW(nullptr), nullptr);
-    shortcuts_ = CreateWindowW(L"STATIC", L"Atajos de Elite Pen",
+    shortcuts_ = CreateWindowW(L"STATIC",
+        L"Atajos de Elite Pen. Gestos: Shift Línea; Ctrl Rectángulo; Tab Elipse; "
+        L"Ctrl+Shift Flecha; Shift+Tab Flecha curva.",
         WS_CHILD | SS_OWNERDRAW, 24, 119, 540, 400, window_,
         reinterpret_cast<HMENU>(4103), GetModuleHandleW(nullptr), nullptr);
     for (std::size_t index = 0; index < hotkey_buttons_.size(); ++index) {
@@ -4163,24 +4170,34 @@ bool SettingsWindow::initialize() {
     }
     shortcut_scrollbar_ = CreateWindowW(
         L"SCROLLBAR", L"", WS_CHILD | SBS_VERT,
-        550, 147, 14, 238, window_, reinterpret_cast<HMENU>(4408),
+        550, 147, 14, 203, window_, reinterpret_cast<HMENU>(4408),
         GetModuleHandleW(nullptr), nullptr);
     reset_hotkeys_ = CreateWindowW(L"BUTTON", L"Restablecer atajos",
                                     WS_CHILD | WS_TABSTOP | BS_OWNERDRAW,
                                     405, 112, 146, 29, window_,
                                     reinterpret_cast<HMENU>(4300),
                                     GetModuleHandleW(nullptr), nullptr);
+    help_ = CreateWindowW(L"STATIC",
+        L"Ayuda de Elite Pen 2.7.0. Anotación, pizarra, captura y zoom para Windows. "
+        L"Desarrollado por Power Elite Studio.",
+        WS_CHILD | SS_OWNERDRAW, 24, 119, 540, 400, window_,
+        reinterpret_cast<HMENU>(4105), GetModuleHandleW(nullptr), nullptr);
+    help_website_ = CreateWindowW(L"BUTTON", L"Visitar powerelite.studio",
+        WS_CHILD | WS_TABSTOP | BS_OWNERDRAW, 32, 465, 250, 38, window_,
+        reinterpret_cast<HMENU>(4500), GetModuleHandleW(nullptr), nullptr);
     close_ = CreateWindowW(L"BUTTON", L"Cerrar", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
                            BS_OWNERDRAW, 455, 542, 100, 32, window_,
                            reinterpret_cast<HMENU>(IDOK), GetModuleHandleW(nullptr), nullptr);
-    for (HWND child : {title_, subtitle_, tab_general_, tab_shortcuts_, capture_, confirm_clear_,
+    for (HWND child : {title_, subtitle_, tab_general_, tab_shortcuts_, tab_help_,
+                       capture_, confirm_clear_,
                        start_interact_, highlight_cursor_,
                        fade_label_, fade_, thickness_label_, thickness_, zoom_label_,
                        zoom_, zoom_view_label_, zoom_view_, zoom_invert_, control_mode_label_,
                        control_mode_, palette_size_label_, palette_size_, palette_size_hint_,
                        theme_label_, theme_dark_, theme_light_,
                        reset_position_,
-                       shortcuts_, shortcut_scrollbar_, reset_hotkeys_, close_, chrome_close_}) {
+                       shortcuts_, shortcut_scrollbar_, reset_hotkeys_, help_, help_website_,
+                       close_, chrome_close_}) {
         SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(body_font_), TRUE);
         SetWindowTheme(child, theme.light ? L"Explorer" : L"DarkMode_Explorer", nullptr);
     }
@@ -4196,6 +4213,7 @@ bool SettingsWindow::initialize() {
     SendMessageW(subtitle_, WM_SETFONT, reinterpret_cast<WPARAM>(small_font_), TRUE);
     SendMessageW(palette_size_hint_, WM_SETFONT, reinterpret_cast<WPARAM>(small_font_), TRUE);
     SendMessageW(shortcuts_, WM_SETFONT, reinterpret_cast<WPARAM>(small_font_), TRUE);
+    SendMessageW(help_, WM_SETFONT, reinterpret_cast<WPARAM>(small_font_), TRUE);
     SetWindowSubclass(fade_, premium_combo_subclass, 4009, 0);
     SetWindowSubclass(thickness_, premium_combo_subclass, 4010, 0);
     SetWindowSubclass(zoom_, premium_combo_subclass, 4004, 0);
@@ -4215,13 +4233,14 @@ void SettingsWindow::apply_theme() {
     card_brush_ = CreateSolidBrush(theme_colorref(theme.surface_2));
     apply_premium_window_chrome(window_);
     const wchar_t* native_theme = theme.light ? L"Explorer" : L"DarkMode_Explorer";
-    for (HWND child : {title_, subtitle_, tab_general_, tab_shortcuts_, capture_, confirm_clear_,
+    for (HWND child : {title_, subtitle_, tab_general_, tab_shortcuts_, tab_help_,
+                       capture_, confirm_clear_,
                        start_interact_, highlight_cursor_, fade_label_, fade_, thickness_label_,
                        thickness_, zoom_label_, zoom_, zoom_view_label_, zoom_view_, zoom_invert_,
                        control_mode_label_, control_mode_, palette_size_label_, palette_size_,
                        palette_size_hint_, theme_label_,
                        theme_dark_, theme_light_, reset_position_, shortcuts_, shortcut_scrollbar_,
-                       reset_hotkeys_, close_, chrome_close_}) {
+                       reset_hotkeys_, help_, help_website_, close_, chrome_close_}) {
         if (child) SetWindowTheme(child, native_theme, nullptr);
     }
     for (HWND child : hotkey_buttons_) if (child) SetWindowTheme(child, native_theme, nullptr);
@@ -4268,8 +4287,9 @@ void SettingsWindow::paint_background(HDC dc) {
 
     HPEN gold_pen = CreatePen(PS_SOLID, 3, theme_colorref(theme.violet));
     old_pen = SelectObject(dc, gold_pen);
-    MoveToEx(dc, 25, 110, nullptr);
-    LineTo(dc, 92, 110);
+    const int tab_accent_left = 25 + active_tab_ * 156;
+    MoveToEx(dc, tab_accent_left, 110, nullptr);
+    LineTo(dc, tab_accent_left + 67, 110);
     SelectObject(dc, old_pen);
     DeleteObject(gold_pen);
 }
@@ -4280,8 +4300,8 @@ void SettingsWindow::paint_shortcuts(HDC dc, RECT bounds) {
     SetBkMode(dc, TRANSPARENT);
     HGDIOBJ previous_font = SelectObject(dc, body_font_);
     SetTextColor(dc, theme_colorref(theme.violet));
-    RECT heading{bounds.left, bounds.top + 2, bounds.right, bounds.top + 23};
-    DrawTextW(dc, L"ATAJOS CONFIGURABLES · USA EL LAPIZ PARA EDITAR", -1, &heading,
+    RECT heading{bounds.left, bounds.top + 2, bounds.right - 168, bounds.top + 23};
+    DrawTextW(dc, L"ATAJOS CONFIGURABLES", -1, &heading,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
     for (std::size_t slot = 0; slot < kVisibleShortcutRows; ++slot) {
         const std::size_t index = shortcut_scroll_offset_ + slot;
@@ -4299,36 +4319,142 @@ void SettingsWindow::paint_shortcuts(HDC dc, RECT bounds) {
     }
     SelectObject(dc, body_font_);
     SetTextColor(dc, theme_colorref(theme.violet));
-    RECT context_heading{bounds.left, bounds.top + 262, bounds.right, bounds.top + 281};
+    RECT gesture_heading{bounds.left, bounds.top + 236, bounds.right, bounds.top + 255};
+    DrawTextW(dc, L"GESTOS DEL LAPIZ · TECLA + ARRASTRE", -1, &gesture_heading,
+              DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+    SelectObject(dc, small_font_);
+    constexpr std::array<HotkeyInfo, 5> gestures{{
+        {L"Shift", L"Linea"},
+        {L"Ctrl", L"Rectangulo"},
+        {L"Tab", L"Elipse"},
+        {L"Ctrl + Shift", L"Flecha"},
+        {L"Shift + Tab", L"Flecha curva Bezier"}
+    }};
+    constexpr std::array<int, 5> gesture_x{0, 170, 337, 0, 267};
+    constexpr std::array<int, 5> gesture_y{257, 257, 257, 279, 279};
+    constexpr std::array<int, 5> gesture_width{160, 157, 175, 257, 249};
+    constexpr std::array<int, 5> gesture_key_width{46, 46, 42, 86, 86};
+    for (std::size_t index = 0; index < gestures.size(); ++index) {
+        const int x = bounds.left + gesture_x[index];
+        const int y = bounds.top + gesture_y[index];
+        SetTextColor(dc, theme_colorref(theme.text));
+        RECT key{x, y, x + gesture_key_width[index], y + 18};
+        DrawTextW(dc, gestures[index].title, -1, &key,
+                  DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+        SetTextColor(dc, theme_colorref(theme.text_soft));
+        RECT description{x + gesture_key_width[index] + 8, y,
+                         x + gesture_width[index], y + 18};
+        DrawTextW(dc, gestures[index].description, -1, &description,
+                  DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+    }
+    SelectObject(dc, body_font_);
+    SetTextColor(dc, theme_colorref(theme.violet));
+    RECT context_heading{bounds.left, bounds.top + 303, bounds.right, bounds.top + 322};
     DrawTextW(dc, L"GUIA RAPIDA DEL ZOOM", -1, &context_heading,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
     SelectObject(dc, small_font_);
-    constexpr std::array<HotkeyInfo, 8> contextual{{
-        {L"P / clic", L"Congelar o reanudar; al pausar activa el lapiz"},
-        {L"Rueda / + / -", L"Aumentar o reducir la ampliacion"},
-        {L"F / L / D", L"Pantalla completa, lente o vista acoplada"},
-        {L"I / 0", L"Invertir colores o ver el monitor completo"},
-        {L"Espacio / M", L"Recorrer las vistas del zoom"},
-        {L"Esc / F4 / clic der.", L"Salir del zoom de forma segura"},
-        {L"Texto", L"Ctrl+Enter insertar, Ctrl+V pegar, Esc cancelar"},
-        {L"Figuras", L"Shift conserva cuadrado o circulo perfecto"}
+    constexpr std::array<HotkeyInfo, 4> contextual{{
+        {L"P / clic", L"Congelar o reanudar · Rueda / + / - ampliar"},
+        {L"F / L / D", L"Vistas · I invertir · 0 vista general"},
+        {L"Espacio / M", L"Recorrer vistas · Esc / F4 / clic der. salir"},
+        {L"Texto", L"Ctrl+Enter insertar · Ctrl+V pegar · Esc cancelar"}
     }};
     for (std::size_t index = 0; index < contextual.size(); ++index) {
-        const int y = bounds.top + 282 + static_cast<int>(index) * 14;
+        const int y = bounds.top + 324 + static_cast<int>(index) * 14;
         SetTextColor(dc, theme_colorref(theme.text));
-        RECT key{bounds.left, y, bounds.left + 118, y + 16};
+        RECT key{bounds.left, y, bounds.left + 92, y + 16};
         DrawTextW(dc, contextual[index].title, -1, &key,
                   DT_LEFT | DT_SINGLELINE | DT_VCENTER);
         SetTextColor(dc, theme_colorref(theme.text_soft));
-        RECT description{bounds.left + 122, y, bounds.right, y + 16};
+        RECT description{bounds.left + 96, y, bounds.right, y + 16};
         DrawTextW(dc, contextual[index].description, -1, &description,
                   DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
     }
     SelectObject(dc, previous_font);
 }
 
+void SettingsWindow::paint_help(HDC dc, RECT bounds) {
+    const auto& theme = current_ui_theme();
+    FillRect(dc, &bounds, card_brush_);
+    SetBkMode(dc, TRANSPARENT);
+    HGDIOBJ previous_font = SelectObject(dc, small_font_);
+
+    RECT badge{bounds.left + 4, bounds.top + 4, bounds.left + 154, bounds.top + 29};
+    HBRUSH badge_brush = CreateSolidBrush(theme_colorref(
+        theme.light ? 0xE5E0FA : 0x29233F));
+    HPEN badge_pen = CreatePen(PS_SOLID, 1, theme_colorref(theme.violet));
+    HGDIOBJ previous_brush = SelectObject(dc, badge_brush);
+    HGDIOBJ previous_pen = SelectObject(dc, badge_pen);
+    RoundRect(dc, badge.left, badge.top, badge.right, badge.bottom, 12, 12);
+    SelectObject(dc, previous_pen);
+    SelectObject(dc, previous_brush);
+    DeleteObject(badge_pen);
+    DeleteObject(badge_brush);
+    SetTextColor(dc, theme_colorref(theme.violet_strong));
+    DrawTextW(dc, L"ACCESO ANTICIPADO", -1, &badge,
+              DT_CENTER | DT_SINGLELINE | DT_VCENTER);
+
+    SelectObject(dc, title_font_);
+    SetTextColor(dc, theme_colorref(theme.text));
+    RECT product{bounds.left, bounds.top + 42, bounds.right, bounds.top + 74};
+    DrawTextW(dc, L"Elite Pen", -1, &product, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+    SelectObject(dc, small_font_);
+    SetTextColor(dc, theme_colorref(theme.text_muted));
+    RECT version{bounds.left, bounds.top + 73, bounds.right, bounds.top + 94};
+    DrawTextW(dc, L"Version 2.7.0 · Windows 10 y 11 · x64", -1, &version,
+              DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+
+    SelectObject(dc, body_font_);
+    SetTextColor(dc, theme_colorref(theme.text_soft));
+    RECT description{bounds.left, bounds.top + 104, bounds.right - 8, bounds.top + 168};
+    DrawTextW(dc,
+        L"Anota, explica y amplía sobre cualquier aplicación. Incluye tinta, texto, "
+        L"figuras, pizarras, captura y zoom congelable sin interrumpir tu presentación.",
+        -1, &description, DT_LEFT | DT_WORDBREAK);
+
+    SelectObject(dc, small_font_);
+    constexpr std::array<const wchar_t*, 3> capabilities{{
+        L"• Paleta de pintor y barra lineal con controles rápidos",
+        L"• Zoom vivo, lente, imagen congelada y anotaciones independientes",
+        L"• Edición portable o instalable; preferencias guardadas localmente"
+    }};
+    for (std::size_t index = 0; index < capabilities.size(); ++index) {
+        SetTextColor(dc, theme_colorref(index == 1 ? theme.mint : theme.text));
+        RECT line{bounds.left, bounds.top + 178 + static_cast<int>(index) * 23,
+                  bounds.right - 8, bounds.top + 199 + static_cast<int>(index) * 23};
+        DrawTextW(dc, capabilities[index], -1, &line,
+                  DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
+    }
+
+    HPEN divider = CreatePen(PS_SOLID, 1, theme_colorref(theme.line));
+    previous_pen = SelectObject(dc, divider);
+    MoveToEx(dc, bounds.left, bounds.top + 253, nullptr);
+    LineTo(dc, bounds.right - 8, bounds.top + 253);
+    SelectObject(dc, previous_pen);
+    DeleteObject(divider);
+
+    SetTextColor(dc, theme_colorref(theme.violet));
+    RECT maker_label{bounds.left, bounds.top + 263, bounds.right, bounds.top + 283};
+    DrawTextW(dc, L"DESARROLLADO POR", -1, &maker_label,
+              DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+    SelectObject(dc, body_font_);
+    SetTextColor(dc, theme_colorref(theme.text));
+    RECT maker{bounds.left, bounds.top + 286, bounds.right, bounds.top + 310};
+    DrawTextW(dc, L"Power Elite Studio", -1, &maker,
+              DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+    SelectObject(dc, small_font_);
+    SetTextColor(dc, theme_colorref(theme.text_muted));
+    RECT privacy{bounds.left, bounds.top + 311, bounds.right, bounds.top + 332};
+    DrawTextW(dc, L"Sin cuenta · Sin telemetría · Configuración local", -1, &privacy,
+              DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+    RECT website_label{bounds.left, bounds.top + 326, bounds.right, bounds.top + 344};
+    DrawTextW(dc, L"Sitio oficial, novedades y demás productos", -1, &website_label,
+              DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+    SelectObject(dc, previous_font);
+}
+
 void SettingsWindow::show_tab(int tab) {
-    active_tab_ = std::clamp(tab, 0, 1);
+    active_tab_ = std::clamp(tab, 0, 2);
     const int general_visibility = active_tab_ == 0 ? SW_SHOW : SW_HIDE;
     for (HWND control : {capture_, confirm_clear_, start_interact_, highlight_cursor_,
                          fade_label_, fade_, control_mode_label_, control_mode_,
@@ -4340,9 +4466,12 @@ void SettingsWindow::show_tab(int tab) {
     }
     ShowWindow(shortcuts_, active_tab_ == 1 ? SW_SHOW : SW_HIDE);
     ShowWindow(reset_hotkeys_, active_tab_ == 1 ? SW_SHOW : SW_HIDE);
+    ShowWindow(help_, active_tab_ == 2 ? SW_SHOW : SW_HIDE);
+    ShowWindow(help_website_, active_tab_ == 2 ? SW_SHOW : SW_HIDE);
     refresh_shortcut_rows();
     InvalidateRect(tab_general_, nullptr, TRUE);
     InvalidateRect(tab_shortcuts_, nullptr, TRUE);
+    InvalidateRect(tab_help_, nullptr, TRUE);
     InvalidateRect(window_, nullptr, TRUE);
 }
 
@@ -4504,7 +4633,8 @@ void SettingsWindow::show_settings() {
     InvalidateRect(window_, nullptr, TRUE);
     UpdateWindow(window_);
     SetForegroundWindow(window_);
-    SetFocus(active_tab_ == 0 ? capture_ : tab_shortcuts_);
+    SetFocus(active_tab_ == 0 ? capture_ :
+             (active_tab_ == 1 ? tab_shortcuts_ : help_website_));
 }
 
 LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
@@ -4524,6 +4654,21 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
             }
             if (id == 4102 && HIWORD(wparam) == BN_CLICKED) {
                 show_tab(1);
+                return 0;
+            }
+            if (id == 4104 && HIWORD(wparam) == BN_CLICKED) {
+                show_tab(2);
+                return 0;
+            }
+            if (id == 4500 && HIWORD(wparam) == BN_CLICKED) {
+                const HINSTANCE result = ShellExecuteW(
+                    window_, L"open", L"https://powerelite.studio/", nullptr, nullptr,
+                    SW_SHOWNORMAL);
+                if (reinterpret_cast<INT_PTR>(result) <= 32) {
+                    MessageBoxW(window_, L"No se pudo abrir el navegador. Visita "
+                                L"https://powerelite.studio/", L"Elite Pen",
+                                MB_OK | MB_ICONINFORMATION);
+                }
                 return 0;
             }
             if (id >= 4400 && id < 4400 + static_cast<int>(kVisibleShortcutRows) &&
@@ -4718,6 +4863,11 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
                 paint_shortcuts(item->hDC, bounds);
                 return TRUE;
             }
+            if (item->CtlType == ODT_STATIC && item->hwndItem == help_) {
+                RECT bounds = item->rcItem;
+                paint_help(item->hDC, bounds);
+                return TRUE;
+            }
             if (item->CtlType != ODT_BUTTON) break;
             const int id = static_cast<int>(item->CtlID);
             const bool checkbox = id == 4001 || id == 4002 || id == 4003 ||
@@ -4753,9 +4903,10 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
                 DeleteObject(pencil);
                 return TRUE;
             }
-            if (id == 4101 || id == 4102) {
+            if (id == 4101 || id == 4102 || id == 4104) {
                 const bool active = (id == 4101 && active_tab_ == 0) ||
-                                    (id == 4102 && active_tab_ == 1);
+                                    (id == 4102 && active_tab_ == 1) ||
+                                    (id == 4104 && active_tab_ == 2);
                 FillRect(item->hDC, &item->rcItem, background_brush_);
                 HBRUSH face = CreateSolidBrush(theme_colorref(
                     active ? (theme.light ? 0xE5E0FA : 0x29233F) : theme.surface_2));
@@ -5115,6 +5266,129 @@ bool ZoomInkWindow::capture_snapshot(HWND magnifier, RECT bounds) {
     return snapshot_has_content_;
 }
 
+bool ZoomInkWindow::capture_composite(PointF first, PointF second) {
+    const int left = std::clamp(
+        static_cast<int>(std::floor(std::min(first.x, second.x))),
+        0, static_cast<int>(surface_.width()));
+    const int top = std::clamp(
+        static_cast<int>(std::floor(std::min(first.y, second.y))),
+        0, static_cast<int>(surface_.height()));
+    const int right = std::clamp(
+        static_cast<int>(std::ceil(std::max(first.x, second.x))),
+        0, static_cast<int>(surface_.width()));
+    const int bottom = std::clamp(
+        static_cast<int>(std::ceil(std::max(first.y, second.y))),
+        0, static_cast<int>(surface_.height()));
+    const int width = right - left;
+    const int height = bottom - top;
+    if (width < 8 || height < 8 || !snapshot_ || !snapshot_has_content_) {
+        if (controller_.palette()) controller_.palette()->show_notification(
+            L"Captura cancelada", L"Selecciona una region visible mas grande.");
+        return false;
+    }
+
+    HDC screen = GetDC(nullptr);
+    BITMAPINFO information{};
+    information.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    information.bmiHeader.biWidth = width;
+    information.bmiHeader.biHeight = -height;
+    information.bmiHeader.biPlanes = 1;
+    information.bmiHeader.biBitCount = 32;
+    information.bmiHeader.biCompression = BI_RGB;
+    void* pixels = nullptr;
+    HBITMAP bitmap = screen ? CreateDIBSection(
+        screen, &information, DIB_RGB_COLORS, &pixels, nullptr, 0) : nullptr;
+    if (screen) ReleaseDC(nullptr, screen);
+    if (!bitmap || !pixels) {
+        if (bitmap) DeleteObject(bitmap);
+        if (controller_.palette()) controller_.palette()->show_notification(
+            L"No se pudo capturar", L"Windows no entrego una imagen para el zoom.");
+        return false;
+    }
+
+    ComPtr<ID2D1DeviceContext> context;
+    ComPtr<ID2D1Bitmap1> target;
+    ComPtr<ID2D1Bitmap1> readable;
+    HRESULT result = controller_.graphics().d2d_device()->CreateDeviceContext(
+        D2D1_DEVICE_CONTEXT_OPTIONS_NONE, context.GetAddressOf());
+    if (SUCCEEDED(result)) {
+        context->SetUnitMode(D2D1_UNIT_MODE_PIXELS);
+        const auto target_properties = D2D1::BitmapProperties1(
+            D2D1_BITMAP_OPTIONS_TARGET,
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
+                              D2D1_ALPHA_MODE_PREMULTIPLIED),
+            96.0F, 96.0F);
+        result = context->CreateBitmap(
+            D2D1::SizeU(static_cast<UINT>(width), static_cast<UINT>(height)),
+            nullptr, 0, target_properties, target.GetAddressOf());
+    }
+    if (SUCCEEDED(result)) {
+        context->SetTarget(target.Get());
+        context->BeginDraw();
+        context->SetTransform(D2D1::Matrix3x2F::Identity());
+        context->Clear(D2D1::ColorF(D2D1::ColorF::Black));
+        context->DrawBitmap(
+            snapshot_.Get(),
+            D2D1::RectF(0.0F, 0.0F, static_cast<float>(width),
+                        static_cast<float>(height)),
+            1.0F, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
+            D2D1::RectF(static_cast<float>(left), static_cast<float>(top),
+                        static_cast<float>(right), static_cast<float>(bottom)));
+        if (controller_.state().annotations_visible) {
+            DrawableRenderResources resources;
+            if (!document_.empty() &&
+                !resources.initialize(controller_.graphics(), context.Get())) {
+                result = E_FAIL;
+            } else {
+                const RectF viewport{static_cast<float>(left), static_cast<float>(top),
+                                     static_cast<float>(right), static_cast<float>(bottom)};
+                for (const auto& drawable : document_.items()) {
+                    if (drawable.bounds().intersects(viewport)) {
+                        draw_drawable(controller_.graphics(), context.Get(), resources,
+                                      drawable, static_cast<float>(left),
+                                      static_cast<float>(top));
+                    }
+                }
+            }
+        }
+        const HRESULT end_result = context->EndDraw();
+        if (SUCCEEDED(result)) result = end_result;
+        context->SetTarget(nullptr);
+    }
+    if (SUCCEEDED(result)) {
+        const auto readable_properties = D2D1::BitmapProperties1(
+            D2D1_BITMAP_OPTIONS_CPU_READ | D2D1_BITMAP_OPTIONS_CANNOT_DRAW,
+            D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
+                              D2D1_ALPHA_MODE_PREMULTIPLIED),
+            96.0F, 96.0F);
+        result = context->CreateBitmap(
+            D2D1::SizeU(static_cast<UINT>(width), static_cast<UINT>(height)),
+            nullptr, 0, readable_properties, readable.GetAddressOf());
+    }
+    if (SUCCEEDED(result)) result = readable->CopyFromBitmap(nullptr, target.Get(), nullptr);
+    if (SUCCEEDED(result)) {
+        D2D1_MAPPED_RECT mapped{};
+        result = readable->Map(D2D1_MAP_OPTIONS_READ, &mapped);
+        if (SUCCEEDED(result)) {
+            for (int row = 0; row < height; ++row) {
+                std::memcpy(static_cast<std::uint8_t*>(pixels) +
+                                static_cast<std::size_t>(row) *
+                                    static_cast<std::size_t>(width) * 4U,
+                            mapped.bits + static_cast<std::size_t>(row) * mapped.pitch,
+                            static_cast<std::size_t>(width) * 4U);
+            }
+            readable->Unmap();
+        }
+    }
+    if (FAILED(result)) {
+        DeleteObject(bitmap);
+        if (controller_.palette()) controller_.palette()->show_notification(
+            L"No se pudo capturar", L"No fue posible componer la imagen congelada.");
+        return false;
+    }
+    return controller_.publish_capture_bitmap(bitmap, width, height);
+}
+
 bool ZoomInkWindow::freeze(RECT bounds, HWND magnifier) {
     set_bounds(bounds);
     UpdateWindow(magnifier);
@@ -5191,12 +5465,6 @@ void ZoomInkWindow::begin_gesture(PointF point, float pressure) {
         controller_.begin_text(screen_point);
         return;
     }
-    if (tool == Tool::Screenshot) {
-        if (controller_.palette()) controller_.palette()->show_notification(
-            L"Captura durante zoom",
-            L"Reanuda o cierra el zoom para capturar una region del escritorio.");
-        return;
-    }
     if (!is_drawing_tool(tool)) return;
     Drawable drawable;
     drawable.kind = tool;
@@ -5205,7 +5473,8 @@ void ZoomInkWindow::begin_gesture(PointF point, float pressure) {
         std::clamp(pressure, 0.35F, 1.45F);
     drawable.points.push_back(point);
     if (tool == Tool::Line || tool == Tool::Rectangle || tool == Tool::Ellipse ||
-        tool == Tool::Arrow || tool == Tool::CurvedArrow) drawable.points.push_back(point);
+        tool == Tool::Arrow || tool == Tool::CurvedArrow || tool == Tool::Screenshot)
+        drawable.points.push_back(point);
     preview_ = std::move(drawable);
     drawing_ = true;
     SetCapture(window_);
@@ -5223,7 +5492,7 @@ void ZoomInkWindow::update_gesture(PointF point, WPARAM keys) {
     preview_->invalidate_bounds_cache();
     const Tool tool = preview_->kind;
     if (tool == Tool::Line || tool == Tool::Rectangle || tool == Tool::Ellipse ||
-        tool == Tool::Arrow || tool == Tool::CurvedArrow) {
+        tool == Tool::Arrow || tool == Tool::CurvedArrow || tool == Tool::Screenshot) {
         if ((keys & MK_SHIFT) != 0 &&
             (tool == Tool::Rectangle || tool == Tool::Ellipse)) {
             const PointF origin = preview_->points.front();
@@ -5265,6 +5534,37 @@ void ZoomInkWindow::finish_gesture(PointF point, WPARAM keys) {
     if (!preview_) return;
     Drawable completed = std::move(*preview_);
     preview_.reset();
+    if (completed.kind == Tool::Screenshot && completed.points.size() >= 2) {
+        invalidate();
+        UpdateWindow(window_);
+        if (controller_.preferences().exclude_palette_from_capture) {
+            capture_composite(completed.points.front(), completed.points.back());
+        } else {
+            // When the user explicitly asks to include Elite Pen itself, capture
+            // the presented composition so the palette and panels are preserved.
+            DWORD previous_affinity = WDA_NONE;
+            const bool had_affinity =
+                GetWindowDisplayAffinity(window_, &previous_affinity) != FALSE;
+            SetWindowDisplayAffinity(window_, WDA_NONE);
+            RedrawWindow(window_, nullptr, nullptr,
+                         RDW_INVALIDATE | RDW_UPDATENOW | RDW_ALLCHILDREN);
+            controller_.restack_zoom();
+            controller_.restack_palette();
+            DwmFlush();
+            controller_.capture_region(
+                {completed.points.front().x + static_cast<float>(bounds_.left),
+                 completed.points.front().y + static_cast<float>(bounds_.top)},
+                {completed.points.back().x + static_cast<float>(bounds_.left),
+                 completed.points.back().y + static_cast<float>(bounds_.top)},
+                false);
+            if (had_affinity) SetWindowDisplayAffinity(window_, previous_affinity);
+        }
+        controller_.set_tool(Tool::Interact);
+        controller_.restack_zoom();
+        controller_.restack_palette();
+        invalidate();
+        return;
+    }
     if (completed.kind == Tool::Pen || completed.kind == Tool::Highlighter) {
         completed.points = simplify_path(completed.points,
             std::clamp(completed.width * 0.08F, 0.5F, 2.0F));
@@ -6524,7 +6824,8 @@ void Controller::update_transient_ink() {
     }
 }
 
-void Controller::capture_region(PointF first, PointF second) {
+bool Controller::capture_region(PointF first, PointF second,
+                                bool allow_synthetic_capture) {
     const int left = static_cast<int>(std::floor(std::min(first.x, second.x)));
     const int top = static_cast<int>(std::floor(std::min(first.y, second.y)));
     const int right = static_cast<int>(std::ceil(std::max(first.x, second.x)));
@@ -6534,7 +6835,7 @@ void Controller::capture_region(PointF first, PointF second) {
     if (width < 8 || height < 8) {
         if (palette_) palette_->show_notification(L"Captura cancelada",
                                                    L"Selecciona una region mas grande.");
-        return;
+        return false;
     }
 
     HDC screen = GetDC(nullptr);
@@ -6555,11 +6856,11 @@ void Controller::capture_region(PointF first, PointF second) {
         if (screen) ReleaseDC(nullptr, screen);
         if (palette_) palette_->show_notification(L"No se pudo capturar",
                                                    L"Windows no entrego una superficie de captura.");
-        return;
+        return false;
     }
     HGDIOBJ previous = SelectObject(memory, bitmap);
     wchar_t synthetic_capture[4]{};
-    const bool use_synthetic_capture = GetEnvironmentVariableW(
+    const bool use_synthetic_capture = allow_synthetic_capture && GetEnvironmentVariableW(
         L"ELITE_PEN_QA_SYNTHETIC_CAPTURE", synthetic_capture,
         static_cast<DWORD>(std::size(synthetic_capture))) > 0;
     bool captured = false;
@@ -6587,96 +6888,138 @@ void Controller::capture_region(PointF first, PointF second) {
         }
     }
 
-    std::wstring saved_path;
-    if (captured) {
-        std::filesystem::path directory;
-        wchar_t qa_directory[32768]{};
-        const DWORD qa_length = GetEnvironmentVariableW(
-            L"ELITE_PEN_QA_CAPTURE_DIR", qa_directory,
-            static_cast<DWORD>(std::size(qa_directory)));
-        if (qa_length > 0 && qa_length < std::size(qa_directory)) {
-            directory = qa_directory;
-        } else {
-            PWSTR pictures = nullptr;
-            if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Pictures, KF_FLAG_CREATE,
-                                               nullptr, &pictures))) {
-                directory = std::filesystem::path(pictures) / L"Elite Pen Captures";
-                CoTaskMemFree(pictures);
-            }
-        }
-        if (!directory.empty()) {
-            std::error_code directory_error;
-            std::filesystem::create_directories(directory, directory_error);
-            if (!directory_error) {
-                SYSTEMTIME time{};
-                GetLocalTime(&time);
-                wchar_t filename[96]{};
-                swprintf_s(filename, std::size(filename),
-                           L"Elite Pen %04u-%02u-%02u %02u-%02u-%02u-%03u.png",
-                           time.wYear, time.wMonth, time.wDay, time.wHour, time.wMinute,
-                           time.wSecond, time.wMilliseconds);
-                const std::filesystem::path destination = directory / filename;
-                ComPtr<IWICImagingFactory> factory;
-                ComPtr<IWICStream> stream;
-                ComPtr<IWICBitmapEncoder> encoder;
-                ComPtr<IWICBitmapFrameEncode> frame;
-                ComPtr<IPropertyBag2> properties;
-                ComPtr<IWICBitmap> source_bitmap;
-                ComPtr<IWICFormatConverter> converter;
-                HRESULT result = CoCreateInstance(CLSID_WICImagingFactory, nullptr,
-                    CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory));
-                if (SUCCEEDED(result)) result = factory->CreateStream(stream.GetAddressOf());
-                if (SUCCEEDED(result)) result = stream->InitializeFromFilename(
-                    destination.c_str(), GENERIC_WRITE);
-                if (SUCCEEDED(result)) result = factory->CreateEncoder(
-                    GUID_ContainerFormatPng, nullptr, encoder.GetAddressOf());
-                if (SUCCEEDED(result)) result = encoder->Initialize(
-                    stream.Get(), WICBitmapEncoderNoCache);
-                if (SUCCEEDED(result)) result = encoder->CreateNewFrame(
-                    frame.GetAddressOf(), properties.GetAddressOf());
-                if (SUCCEEDED(result)) result = frame->Initialize(properties.Get());
-                if (SUCCEEDED(result)) result = frame->SetSize(
-                    static_cast<UINT>(width), static_cast<UINT>(height));
-                WICPixelFormatGUID pixel_format = GUID_WICPixelFormat32bppBGRA;
-                if (SUCCEEDED(result)) result = frame->SetPixelFormat(&pixel_format);
-                if (SUCCEEDED(result)) result = factory->CreateBitmapFromHBITMAP(
-                    bitmap, nullptr, WICBitmapIgnoreAlpha, source_bitmap.GetAddressOf());
-                if (SUCCEEDED(result)) result = factory->CreateFormatConverter(
-                    converter.GetAddressOf());
-                if (SUCCEEDED(result)) result = converter->Initialize(
-                    source_bitmap.Get(), pixel_format, WICBitmapDitherTypeNone,
-                    nullptr, 0.0, WICBitmapPaletteTypeCustom);
-                if (SUCCEEDED(result)) result = frame->WriteSource(converter.Get(), nullptr);
-                if (SUCCEEDED(result)) result = frame->Commit();
-                if (SUCCEEDED(result)) result = encoder->Commit();
-                if (SUCCEEDED(result)) saved_path = destination.wstring();
-            }
-        }
-    }
-
     SelectObject(memory, previous);
     DeleteDC(memory);
     ReleaseDC(nullptr, screen);
-
-    bool copied = false;
-    if (captured && OpenClipboard(palette_ ? palette_->hwnd() : nullptr)) {
-        EmptyClipboard();
-        copied = SetClipboardData(CF_BITMAP, bitmap) != nullptr;
-        CloseClipboard();
-    }
-    if (!copied) DeleteObject(bitmap);  // Clipboard owns it after a successful transfer.
-
     if (!captured) {
+        DeleteObject(bitmap);
         if (palette_) palette_->show_notification(L"No se pudo capturar",
                                                    L"La copia de pantalla fallo.");
-        return;
+        return false;
     }
+    return publish_capture_bitmap(bitmap, width, height);
+}
+
+bool Controller::publish_capture_bitmap(HBITMAP bitmap, int width, int height) {
+    if (!bitmap || width <= 0 || height <= 0) return false;
+    std::wstring saved_path;
+    std::filesystem::path directory;
+    wchar_t qa_directory[32768]{};
+    const DWORD qa_length = GetEnvironmentVariableW(
+        L"ELITE_PEN_QA_CAPTURE_DIR", qa_directory,
+        static_cast<DWORD>(std::size(qa_directory)));
+    if (qa_length > 0 && qa_length < std::size(qa_directory)) {
+        directory = qa_directory;
+    } else {
+        PWSTR pictures = nullptr;
+        if (SUCCEEDED(SHGetKnownFolderPath(FOLDERID_Pictures, KF_FLAG_CREATE,
+                                           nullptr, &pictures))) {
+            directory = std::filesystem::path(pictures) / L"Elite Pen Captures";
+            CoTaskMemFree(pictures);
+        }
+    }
+    if (!directory.empty()) {
+        std::error_code directory_error;
+        std::filesystem::create_directories(directory, directory_error);
+        if (!directory_error) {
+            SYSTEMTIME time{};
+            GetLocalTime(&time);
+            wchar_t filename[96]{};
+            swprintf_s(filename, std::size(filename),
+                       L"Elite Pen %04u-%02u-%02u %02u-%02u-%02u-%03u.png",
+                       time.wYear, time.wMonth, time.wDay, time.wHour, time.wMinute,
+                       time.wSecond, time.wMilliseconds);
+            const std::filesystem::path destination = directory / filename;
+            ComPtr<IWICImagingFactory> factory;
+            ComPtr<IWICStream> stream;
+            ComPtr<IWICBitmapEncoder> encoder;
+            ComPtr<IWICBitmapFrameEncode> frame;
+            ComPtr<IPropertyBag2> properties;
+            ComPtr<IWICBitmap> source_bitmap;
+            ComPtr<IWICFormatConverter> converter;
+            HRESULT result = CoCreateInstance(CLSID_WICImagingFactory, nullptr,
+                CLSCTX_INPROC_SERVER, IID_PPV_ARGS(&factory));
+            if (SUCCEEDED(result)) result = factory->CreateStream(stream.GetAddressOf());
+            if (SUCCEEDED(result)) result = stream->InitializeFromFilename(
+                destination.c_str(), GENERIC_WRITE);
+            if (SUCCEEDED(result)) result = factory->CreateEncoder(
+                GUID_ContainerFormatPng, nullptr, encoder.GetAddressOf());
+            if (SUCCEEDED(result)) result = encoder->Initialize(
+                stream.Get(), WICBitmapEncoderNoCache);
+            if (SUCCEEDED(result)) result = encoder->CreateNewFrame(
+                frame.GetAddressOf(), properties.GetAddressOf());
+            if (SUCCEEDED(result)) result = frame->Initialize(properties.Get());
+            if (SUCCEEDED(result)) result = frame->SetSize(
+                static_cast<UINT>(width), static_cast<UINT>(height));
+            WICPixelFormatGUID pixel_format = GUID_WICPixelFormat32bppBGRA;
+            if (SUCCEEDED(result)) result = frame->SetPixelFormat(&pixel_format);
+            if (SUCCEEDED(result)) result = factory->CreateBitmapFromHBITMAP(
+                bitmap, nullptr, WICBitmapIgnoreAlpha, source_bitmap.GetAddressOf());
+            if (SUCCEEDED(result)) result = factory->CreateFormatConverter(
+                converter.GetAddressOf());
+            if (SUCCEEDED(result)) result = converter->Initialize(
+                source_bitmap.Get(), pixel_format, WICBitmapDitherTypeNone,
+                nullptr, 0.0, WICBitmapPaletteTypeCustom);
+            if (SUCCEEDED(result)) result = frame->WriteSource(converter.Get(), nullptr);
+            if (SUCCEEDED(result)) result = frame->Commit();
+            if (SUCCEEDED(result)) result = encoder->Commit();
+            if (SUCCEEDED(result)) saved_path = destination.wstring();
+        }
+    }
+
+    const std::size_t pixel_bytes = static_cast<std::size_t>(width) *
+                                    static_cast<std::size_t>(height) * 4U;
+    HGLOBAL dib = GlobalAlloc(GMEM_MOVEABLE, sizeof(BITMAPINFOHEADER) + pixel_bytes);
+    if (dib) {
+        auto* header = static_cast<BITMAPINFOHEADER*>(GlobalLock(dib));
+        if (header) {
+            *header = {};
+            header->biSize = sizeof(BITMAPINFOHEADER);
+            header->biWidth = width;
+            header->biHeight = height;
+            header->biPlanes = 1;
+            header->biBitCount = 32;
+            header->biCompression = BI_RGB;
+            header->biSizeImage = static_cast<DWORD>(pixel_bytes);
+            HDC screen = GetDC(nullptr);
+            const int copied_rows = screen ? GetDIBits(
+                screen, bitmap, 0, static_cast<UINT>(height),
+                reinterpret_cast<std::uint8_t*>(header) + sizeof(BITMAPINFOHEADER),
+                reinterpret_cast<BITMAPINFO*>(header), DIB_RGB_COLORS) : 0;
+            if (screen) ReleaseDC(nullptr, screen);
+            GlobalUnlock(dib);
+            if (copied_rows != height) {
+                GlobalFree(dib);
+                dib = nullptr;
+            }
+        } else {
+            GlobalFree(dib);
+            dib = nullptr;
+        }
+    }
+
+    bool copied = false;
+    bool clipboard_owns_bitmap = false;
+    if (OpenClipboard(palette_ ? palette_->hwnd() : nullptr)) {
+        EmptyClipboard();
+        if (dib && SetClipboardData(CF_DIB, dib) != nullptr) {
+            dib = nullptr;  // Clipboard owns the global block.
+            copied = true;
+        }
+        clipboard_owns_bitmap = SetClipboardData(CF_BITMAP, bitmap) != nullptr;
+        copied = copied || clipboard_owns_bitmap;
+        CloseClipboard();
+    }
+    if (dib) GlobalFree(dib);
+    if (!clipboard_owns_bitmap) DeleteObject(bitmap);
+
     std::wstring message;
     if (copied && !saved_path.empty()) message = L"Copiada y guardada en " + saved_path;
     else if (copied) message = L"Copiada al portapapeles.";
     else if (!saved_path.empty()) message = L"Guardada en " + saved_path;
     else message = L"No se pudo guardar ni copiar la captura.";
     if (palette_) palette_->show_notification(L"Captura de Elite Pen", message);
+    return copied || !saved_path.empty();
 }
 
 void Controller::rebuild_overlays() {

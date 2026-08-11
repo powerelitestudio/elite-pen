@@ -140,7 +140,7 @@ inline constexpr std::array<HotkeyBinding, kHotkeyActionCount> kLegacyDefaultHot
 
 struct Preferences {
     int hotkey_scheme_version{kCurrentHotkeySchemeVersion};
-    AppTheme theme{AppTheme::Dark};
+    AppTheme theme{AppTheme::Light};
     ControlMode control_mode{ControlMode::Palette};
     bool confirm_clear{false};
     bool exclude_palette_from_capture{true};

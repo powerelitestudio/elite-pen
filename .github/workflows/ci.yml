@@ -1,0 +1,33 @@
+name: Windows CI
+
+on:
+  push:
+    branches: [main, "codex/**"]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: elite-pen-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Obtener el código
+        uses: actions/checkout@v6
+
+      - name: Preparar LLVM-MinGW verificado
+        shell: pwsh
+        run: ./scripts/bootstrap-toolchain.ps1
+
+      - name: Ejecutar pruebas nativas
+        shell: pwsh
+        run: ./scripts/test.ps1 -Configuration Release
+
+      - name: Compilar la aplicación
+        shell: pwsh
+        run: ./scripts/build.ps1 -Configuration Release

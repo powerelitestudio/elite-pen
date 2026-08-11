@@ -212,8 +212,10 @@ void test_modifier_gestures() {
           "Tab temporarily selects an ellipse");
     check(gesture_tool(Tool::Pen, true, true, false, false) == Tool::Arrow,
           "Control Shift temporarily selects an arrow");
-    check(gesture_tool(Tool::Pen, false, true, true, false) == Tool::CurvedArrow,
-          "Control Alt temporarily selects a curved arrow");
+    check(gesture_tool(Tool::Pen, true, false, false, true) == Tool::CurvedArrow,
+          "Shift Tab temporarily selects a curved arrow");
+    check(gesture_tool(Tool::Pen, false, true, true, false) == Tool::Rectangle,
+          "Alt does not change the Control rectangle gesture");
     check(gesture_tool(Tool::Pen, true, true, true, true) == Tool::Arrow,
           "arrow chord has deterministic priority over other modifiers");
     check(gesture_tool(Tool::Rectangle, true, false, false, false) == Tool::Rectangle,

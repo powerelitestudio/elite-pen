@@ -1,0 +1,30 @@
+name: Proponer una mejora
+description: Sugiere una función o mejora de experiencia.
+title: "[Mejora]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problema que quieres resolver
+      description: Describe el flujo o la fricción, no solo la solución.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Propuesta
+      description: Explica cómo debería comportarse y qué atajos o controles afectaría.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternativas consideradas
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Compatibilidad
+      options:
+        - label: La propuesta puede funcionar sin cuenta y mantener la edición portable.
+          required: true

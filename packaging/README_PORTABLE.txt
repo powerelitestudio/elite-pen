@@ -1,4 +1,4 @@
-ELITE PEN 2.5.2 — EDICION PORTABLE
+ELITE PEN 2.7.0 — EDICION PORTABLE
 ================================
 
 Elite Pen es la herramienta de anotacion, pizarra y ampliacion de pantalla de
@@ -44,12 +44,15 @@ Ctrl+Shift+rueda  Recorrer los cinco grosores
 Esc           Volver al cursor / salir del zoom o de una pizarra
 
 Con Lapiz seleccionado: Shift+arrastre crea Linea; Ctrl+arrastre, Rectangulo;
-Tab+arrastre, Elipse; Ctrl+Shift+arrastre, Flecha; Ctrl+Alt+arrastre, Flecha curva
+Tab+arrastre, Elipse; Ctrl+Shift+arrastre, Flecha; Shift+Tab+arrastre, Flecha curva
 Bezier. Al soltar las teclas vuelve automaticamente el dibujo libre.
 
 Configuracion > Atajos incluye todas las acciones de dibujo, texto, figuras, paneles
 y zoom. Pulsa el lapiz a la derecha para editar; Supr o Retroceso deja una accion sin
 asignar. Se guardan en data\settings.ini junto con las demas preferencias portables.
+La misma pestaña documenta los cinco gestos temporales del Lapiz. Configuracion >
+Ayuda muestra la version, una descripcion breve, la autoria de Power Elite Studio y
+el acceso al sitio oficial https://powerelite.studio/.
 
 ZOOM
 ----
@@ -75,4 +78,5 @@ Configuracion.
 
 SOPORTE
 -------
-Producto de Power Elite Studio. Version 2.5.2.
+Producto de Power Elite Studio. Version 2.7.0.
+Sitio oficial: https://powerelite.studio/

@@ -46,6 +46,9 @@ int main() {
     check(store.portable(), "portable.flag selects portable preferences");
     check(std::filesystem::path(store.path()).parent_path() == data,
           "portable settings stay beside the executable");
+    const Preferences fresh = store.load();
+    check(fresh.theme == AppTheme::Light,
+          "fresh installations start with the light appearance");
 
     std::filesystem::create_directories(data, error);
     {
@@ -62,6 +65,8 @@ int main() {
                << "HotkeyPaletteCollapse=0,0\r\n";
     }
     const Preferences migrated = store.load();
+    check(migrated.theme == AppTheme::Light,
+          "settings without an appearance choice inherit the light default");
     check(migrated.hotkey_scheme_version == kCurrentHotkeySchemeVersion,
           "legacy shortcuts migrate to the current scheme");
     check(migrated.hotkeys[static_cast<std::size_t>(HotkeyAction::Interact)] ==

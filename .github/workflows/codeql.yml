@@ -1,0 +1,44 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: "23 7 * * 2"
+
+permissions:
+  contents: read
+  security-events: write
+  packages: read
+
+concurrency:
+  group: codeql-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  analyze-cpp:
+    name: Analizar C++
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Obtener el código
+        uses: actions/checkout@v6
+
+      - name: Inicializar CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: c-cpp
+          build-mode: manual
+
+      - name: Preparar LLVM-MinGW verificado
+        shell: pwsh
+        run: ./scripts/bootstrap-toolchain.ps1
+
+      - name: Compilar Elite Pen
+        shell: pwsh
+        run: ./scripts/build.ps1 -Configuration Release
+
+      - name: Analizar
+        uses: github/codeql-action/analyze@v4

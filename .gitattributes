@@ -1,0 +1,18 @@
+* text=auto
+
+*.cpp text eol=lf
+*.hpp text eol=lf
+*.md text eol=lf
+*.ps1 text eol=crlf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.iss text eol=crlf
+*.rc text eol=crlf
+*.manifest text eol=lf
+*.svg text eol=lf
+
+*.ico binary
+*.png binary
+*.exe binary
+*.zip binary

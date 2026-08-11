@@ -61,12 +61,19 @@ public static class ElitePenUiNative {
     [DllImport("user32.dll")] public static extern void mouse_event(
         uint flags, uint dx, uint dy, uint data, UIntPtr extraInfo);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern bool SetWindowText(IntPtr window, string value);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(
+        IntPtr window, StringBuilder value, int count);
     [DllImport("user32.dll")] public static extern IntPtr LoadCursor(IntPtr instance, IntPtr name);
     [DllImport("user32.dll")] public static extern IntPtr GetCursor();
     [DllImport("user32.dll")] public static extern bool GetIconInfo(IntPtr cursor, out ICONINFO information);
     [DllImport("gdi32.dll", EntryPoint="GetObjectW")] public static extern int GetBitmapObject(
         IntPtr bitmap, int size, out BITMAP information);
     [DllImport("gdi32.dll")] public static extern bool DeleteObject(IntPtr value);
+    [DllImport("user32.dll")] public static extern bool OpenClipboard(IntPtr owner);
+    [DllImport("user32.dll")] public static extern bool CloseClipboard();
+    [DllImport("user32.dll")] public static extern IntPtr GetClipboardData(uint format);
+    [DllImport("kernel32.dll")] public static extern IntPtr GlobalLock(IntPtr memory);
+    [DllImport("kernel32.dll")] public static extern bool GlobalUnlock(IntPtr memory);
     public static int CountClass(string className) {
         int count = 0;
         EnumWindows((window, data) => {
@@ -111,6 +118,11 @@ public static class ElitePenUiNative {
         }, IntPtr.Zero);
         return found;
     }
+    public static string WindowText(IntPtr window) {
+        var value = new StringBuilder(2048);
+        GetWindowText(window, value, value.Capacity);
+        return value.ToString();
+    }
 }
 '@
 
@@ -133,6 +145,25 @@ if ($RealDesktopCapture) {
 
 function Assert-Ui([bool]$Condition, [string]$Message) {
     if (-not $Condition) { $script:failures.Add($Message) }
+}
+
+function Save-WindowImage([IntPtr]$Window, [string]$Name) {
+    $bounds = New-Object ElitePenUiNative+RECT
+    if (-not [ElitePenUiNative]::GetWindowRect($Window, [ref]$bounds)) { return }
+    $width = $bounds.Right - $bounds.Left
+    $height = $bounds.Bottom - $bounds.Top
+    if ($width -le 0 -or $height -le 0) { return }
+    Add-Type -AssemblyName System.Drawing
+    $bitmap = New-Object System.Drawing.Bitmap($width, $height)
+    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    try {
+        $graphics.CopyFromScreen($bounds.Left, $bounds.Top, 0, 0, $bitmap.Size)
+        $bitmap.Save((Join-Path $script:captureDirectory $Name),
+                     [System.Drawing.Imaging.ImageFormat]::Png)
+    } finally {
+        $graphics.Dispose()
+        $bitmap.Dispose()
+    }
 }
 
 function Wait-Window([string]$ClassName, [int]$TimeoutMilliseconds = 5000) {
@@ -209,6 +240,10 @@ try {
     if ($palette -eq [IntPtr]::Zero) { throw 'Palette unavailable; remaining UI checks cannot run.' }
 
     Assert-Ui ([ElitePenUiNative]::CountClass('ElitePen.Overlay') -ge 1) 'No monitor overlay was created.'
+    $defaultTheme = [ElitePenUiNative]::SendMessage(
+        $palette, 0x8068, [IntPtr]::Zero, [IntPtr]::Zero)
+    Assert-Ui ($defaultTheme.ToInt64() -eq 1) `
+        'A fresh Elite Pen session did not start in the light appearance.'
     $globalHotkeys = [ElitePenUiNative]::SendMessage(
         $palette, 0x806C, [IntPtr]::Zero, [IntPtr]::Zero)
     Assert-Ui ($globalHotkeys.ToInt64() -eq 1) `
@@ -391,15 +426,29 @@ try {
         Assert-Ui (($settingsBounds.Bottom - $settingsBounds.Top) -eq 590) 'Tabbed Settings window has an unexpected height.'
         $generalTab = [ElitePenUiNative]::GetDlgItem($settings, 4101)
         $shortcutsTab = [ElitePenUiNative]::GetDlgItem($settings, 4102)
+        $helpTab = [ElitePenUiNative]::GetDlgItem($settings, 4104)
         $shortcutGuide = [ElitePenUiNative]::GetDlgItem($settings, 4103)
+        $helpPanel = [ElitePenUiNative]::GetDlgItem($settings, 4105)
+        $helpWebsite = [ElitePenUiNative]::GetDlgItem($settings, 4500)
         Assert-Ui ($generalTab -ne [IntPtr]::Zero -and $shortcutsTab -ne [IntPtr]::Zero -and
+                   $helpTab -ne [IntPtr]::Zero -and $helpPanel -ne [IntPtr]::Zero -and
+                   $helpWebsite -ne [IntPtr]::Zero -and
                    $shortcutGuide -ne [IntPtr]::Zero) 'Settings tabs or shortcut guide are missing.'
         $null = [ElitePenUiNative]::SendMessage($shortcutsTab, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
         Assert-Ui ([ElitePenUiNative]::IsWindowVisible($shortcutGuide)) 'Shortcuts tab did not reveal the complete guide.'
+        Start-Sleep -Milliseconds 120
+        Save-WindowImage $settings 'settings-shortcuts.png'
+        $shortcutAccessibleText = [ElitePenUiNative]::WindowText($shortcutGuide)
+        Assert-Ui ($shortcutAccessibleText.Contains('Shift Línea') -and
+                   $shortcutAccessibleText.Contains('Ctrl Rectángulo') -and
+                   $shortcutAccessibleText.Contains('Tab Elipse') -and
+                   $shortcutAccessibleText.Contains('Ctrl+Shift Flecha') -and
+                   $shortcutAccessibleText.Contains('Shift+Tab Flecha curva')) `
+            'Shortcut guide does not document all five pencil gestures.'
         $firstHotkey = [ElitePenUiNative]::GetDlgItem($settings, 4200)
-        $lastHotkey = [ElitePenUiNative]::GetDlgItem($settings, 4206)
+        $lastHotkey = [ElitePenUiNative]::GetDlgItem($settings, 4205)
         $firstHotkeyEditor = [ElitePenUiNative]::GetDlgItem($settings, 4400)
-        $lastHotkeyEditor = [ElitePenUiNative]::GetDlgItem($settings, 4406)
+        $lastHotkeyEditor = [ElitePenUiNative]::GetDlgItem($settings, 4405)
         $shortcutScrollbar = [ElitePenUiNative]::GetDlgItem($settings, 4408)
         $resetHotkeys = [ElitePenUiNative]::GetDlgItem($settings, 4300)
         Assert-Ui ($firstHotkey -ne [IntPtr]::Zero -and $lastHotkey -ne [IntPtr]::Zero -and
@@ -415,8 +464,21 @@ try {
         $null = [ElitePenUiNative]::SendMessage($settings, 0x0115, [IntPtr]7, $shortcutScrollbar)
         Assert-Ui ([ElitePenUiNative]::IsWindowVisible($firstHotkeyEditor)) `
             'Shortcut list did not remain usable after scrolling to zoom controls.'
+        $null = [ElitePenUiNative]::SendMessage($helpTab, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
+        Assert-Ui ([ElitePenUiNative]::IsWindowVisible($helpPanel) -and
+                   [ElitePenUiNative]::IsWindowVisible($helpWebsite) -and
+                   -not [ElitePenUiNative]::IsWindowVisible($shortcutGuide)) `
+            'Help tab did not expose its product information and official website action.'
+        $helpAccessibleText = [ElitePenUiNative]::WindowText($helpPanel)
+        Assert-Ui ($helpAccessibleText.Contains('Elite Pen 2.7.0') -and
+                   $helpAccessibleText.Contains('Power Elite Studio')) `
+            'Help tab is missing the application version or developer identity.'
+        Start-Sleep -Milliseconds 120
+        Save-WindowImage $settings 'settings-help.png'
         $null = [ElitePenUiNative]::SendMessage($generalTab, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
         Assert-Ui (-not [ElitePenUiNative]::IsWindowVisible($shortcutGuide)) 'General tab did not hide the shortcut guide.'
+        Assert-Ui (-not [ElitePenUiNative]::IsWindowVisible($helpPanel)) `
+            'General tab did not hide the Help content.'
 
         $darkTheme = [ElitePenUiNative]::GetDlgItem($settings, 4012)
         $lightTheme = [ElitePenUiNative]::GetDlgItem($settings, 4013)
@@ -428,6 +490,7 @@ try {
         $null = [ElitePenUiNative]::SendMessage($darkTheme, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
         $activeTheme = [ElitePenUiNative]::SendMessage($palette, 0x8068, [IntPtr]::Zero, [IntPtr]::Zero)
         Assert-Ui ($activeTheme.ToInt64() -eq 0) 'Dark appearance was not restored after theme switching.'
+        $null = [ElitePenUiNative]::SendMessage($lightTheme, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
 
         # Paleta is the default presentation. Lineal reuses the same command
         # engine, resizes in place and can return live without restarting.
@@ -808,6 +871,7 @@ try {
                    [ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.Zoom')) `
             'Zoom surfaces covered the palette while annotation mode was active.'
         if ($zoomInk -ne [IntPtr]::Zero) {
+            Click-PaletteWindow $palette 169 53
             $start = [IntPtr]((220 -shl 16) -bor 300)
             $finish = [IntPtr]((290 -shl 16) -bor 430)
             $null = [ElitePenUiNative]::SendMessage($zoomInk, 0x0201, [IntPtr]1, $start)
@@ -844,6 +908,66 @@ try {
             $null = [ElitePenUiNative]::GetClassName($paletteAtPoint, $paletteClass, 128)
             Assert-Ui ($paletteClass.ToString() -eq 'ElitePen.Palette') `
                 "Frozen zoom still intercepted physical input over the palette; hit $($paletteClass.ToString()) at $($paletteProbe.X),$($paletteProbe.Y)."
+
+            # Screenshot selection on a frozen zoom must flatten the exact enlarged
+            # frame and its red annotation, save it, and copy the same bitmap.
+            $capturesBeforeZoom = (Get-ChildItem -LiteralPath $captureDirectory -Filter '*.png' -File).Count
+            Select-Tool $palette 10
+            $zoomCaptureStart = [IntPtr]((190 -shl 16) -bor 260)
+            $zoomCaptureFinish = [IntPtr]((320 -shl 16) -bor 470)
+            $null = [ElitePenUiNative]::SendMessage($zoomInk, 0x0201, [IntPtr]1, $zoomCaptureStart)
+            $null = [ElitePenUiNative]::SendMessage($zoomInk, 0x0200, [IntPtr]1, $zoomCaptureFinish)
+            $null = [ElitePenUiNative]::SendMessage($zoomInk, 0x0202, [IntPtr]0, $zoomCaptureFinish)
+            Start-Sleep -Milliseconds 350
+            $zoomCaptures = @(Get-ChildItem -LiteralPath $captureDirectory -Filter '*.png' -File |
+                Sort-Object LastWriteTimeUtc)
+            Assert-Ui ($zoomCaptures.Count -eq $capturesBeforeZoom + 1) `
+                'Frozen zoom capture did not create exactly one PNG.'
+            $clipboardOpened = [ElitePenUiNative]::OpenClipboard([IntPtr]::Zero)
+            Assert-Ui $clipboardOpened 'Frozen zoom capture did not leave an accessible clipboard image.'
+            if ($clipboardOpened) {
+                try {
+                    $clipboardDib = [ElitePenUiNative]::GetClipboardData(8)
+                    $clipboardPixels = if ($clipboardDib -ne [IntPtr]::Zero) {
+                        [ElitePenUiNative]::GlobalLock($clipboardDib)
+                    } else { [IntPtr]::Zero }
+                    try {
+                        $clipboardWidth = if ($clipboardPixels -ne [IntPtr]::Zero) {
+                            [Runtime.InteropServices.Marshal]::ReadInt32($clipboardPixels, 4)
+                        } else { 0 }
+                        $clipboardHeight = if ($clipboardPixels -ne [IntPtr]::Zero) {
+                            [Math]::Abs([Runtime.InteropServices.Marshal]::ReadInt32($clipboardPixels, 8))
+                        } else { 0 }
+                        Assert-Ui ($clipboardWidth -eq 210 -and $clipboardHeight -eq 130) `
+                            'Frozen zoom capture did not copy the selected 210 x 130 image.'
+                    } finally {
+                        if ($clipboardPixels -ne [IntPtr]::Zero) {
+                            $null = [ElitePenUiNative]::GlobalUnlock($clipboardDib)
+                        }
+                    }
+                } finally {
+                    $null = [ElitePenUiNative]::CloseClipboard()
+                }
+            }
+            if ($zoomCaptures.Count -gt $capturesBeforeZoom) {
+                Add-Type -AssemblyName System.Drawing
+                $zoomBitmap = [System.Drawing.Bitmap]::FromFile($zoomCaptures[-1].FullName)
+                try {
+                    $redPixels = 0
+                    for ($y = 0; $y -lt $zoomBitmap.Height; $y += 2) {
+                        for ($x = 0; $x -lt $zoomBitmap.Width; $x += 2) {
+                            $pixel = $zoomBitmap.GetPixel($x, $y)
+                            if ($pixel.R -gt 180 -and $pixel.G -lt 125 -and $pixel.B -lt 125) {
+                                $redPixels++
+                            }
+                        }
+                    }
+                    Assert-Ui ($redPixels -ge 4) `
+                        'Frozen zoom PNG did not contain the visible red annotation.'
+                } finally {
+                    $zoomBitmap.Dispose()
+                }
+            }
             Click-PaletteWindow $palette 169 53
             $zoomColor = [ElitePenUiNative]::SendMessage(
                 $palette, 0x805B, [IntPtr]::Zero, [IntPtr]::Zero)
@@ -932,6 +1056,36 @@ try {
     }
     $env:ELITE_PEN_QA_CAPTURE_DIR = $previousCaptureDirectory
     $env:ELITE_PEN_QA_SYNTHETIC_CAPTURE = $previousSyntheticCapture
+}
+
+# The clipboard payload must outlive Elite Pen itself. This catches native bitmap
+# handles that appeared valid only while the producer process remained open.
+$clipboardOpenedAfterExit = [ElitePenUiNative]::OpenClipboard([IntPtr]::Zero)
+Assert-Ui $clipboardOpenedAfterExit 'Clipboard image was unavailable after Elite Pen exited.'
+if ($clipboardOpenedAfterExit) {
+    try {
+        $clipboardDibAfterExit = [ElitePenUiNative]::GetClipboardData(8)
+        $clipboardPixelsAfterExit = if ($clipboardDibAfterExit -ne [IntPtr]::Zero) {
+            [ElitePenUiNative]::GlobalLock($clipboardDibAfterExit)
+        } else { [IntPtr]::Zero }
+        try {
+            $widthAfterExit = if ($clipboardPixelsAfterExit -ne [IntPtr]::Zero) {
+                [Runtime.InteropServices.Marshal]::ReadInt32($clipboardPixelsAfterExit, 4)
+            } else { 0 }
+            $heightAfterExit = if ($clipboardPixelsAfterExit -ne [IntPtr]::Zero) {
+                [Math]::Abs([Runtime.InteropServices.Marshal]::ReadInt32(
+                    $clipboardPixelsAfterExit, 8))
+            } else { 0 }
+            Assert-Ui ($widthAfterExit -eq 210 -and $heightAfterExit -eq 130) `
+                'Clipboard image did not survive Elite Pen shutdown.'
+        } finally {
+            if ($clipboardPixelsAfterExit -ne [IntPtr]::Zero) {
+                $null = [ElitePenUiNative]::GlobalUnlock($clipboardDibAfterExit)
+            }
+        }
+    } finally {
+        $null = [ElitePenUiNative]::CloseClipboard()
+    }
 }
 
 if ($failures.Count -gt 0) {
