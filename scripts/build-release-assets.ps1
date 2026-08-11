@@ -9,7 +9,8 @@ $version = (Get-Content -LiteralPath (Join-Path $repoRoot 'VERSION') -Raw).Trim(
 $portableDirectory = Join-Path $repoRoot 'dist\Elite Pen'
 $installer = Join-Path $repoRoot "dist\installer\Elite Pen Setup $version.exe"
 $releaseDirectory = Join-Path $repoRoot 'dist\release'
-$portableArchive = Join-Path $releaseDirectory "Elite Pen Portable $version.zip"
+$portableArchive = Join-Path $releaseDirectory "Elite.Pen.Portable.$version.zip"
+$releaseInstaller = Join-Path $releaseDirectory "Elite.Pen.Setup.$version.exe"
 
 if ($SkipBuild) {
     & (Join-Path $PSScriptRoot 'publish-portable.ps1') -SkipBuild
@@ -33,7 +34,7 @@ New-Item -ItemType Directory -Force -Path $releaseDirectory | Out-Null
 
 Compress-Archive -Path (Join-Path $portableDirectory '*') `
     -DestinationPath $portableArchive -CompressionLevel Optimal
-Copy-Item -LiteralPath $installer -Destination $releaseDirectory
+Copy-Item -LiteralPath $installer -Destination $releaseInstaller
 
 $assets = Get-ChildItem -LiteralPath $releaseDirectory -File |
     Where-Object Name -ne 'SHA256SUMS.txt' |
