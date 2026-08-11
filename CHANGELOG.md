@@ -11,6 +11,8 @@
   de forma coherente los permisos, atribuciones y proceso de publicación abierta.
 - Los paquetes oficiales se sincronizan en la versión 2.7.1 y publican hashes
   SHA-256 para el ejecutable portable, ZIP e instalador.
+- Los nombres de los activos usan puntos en lugar de espacios para que GitHub los
+  preserve literalmente y `SHA256SUMS.txt` pueda verificarse sin renombrar archivos.
 
 ## 2.7.0 — 2026-08-10
 
