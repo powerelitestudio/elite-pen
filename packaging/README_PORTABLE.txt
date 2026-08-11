@@ -1,4 +1,4 @@
-ELITE PEN 2.7.0 — EDICION PORTABLE
+ELITE PEN 2.7.1 — EDICION PORTABLE
 ================================
 
 Elite Pen es la herramienta de anotacion, pizarra y ampliacion de pantalla de
@@ -52,7 +52,7 @@ y zoom. Pulsa el lapiz a la derecha para editar; Supr o Retroceso deja una accio
 asignar. Se guardan en data\settings.ini junto con las demas preferencias portables.
 La misma pestaña documenta los cinco gestos temporales del Lapiz. Configuracion >
 Ayuda muestra la version, una descripcion breve, la autoria de Power Elite Studio y
-el acceso al sitio oficial https://powerelite.studio/.
+accesos al sitio oficial y al codigo fuente publico.
 
 ZOOM
 ----
@@ -78,5 +78,13 @@ Configuracion.
 
 SOPORTE
 -------
-Producto de Power Elite Studio. Version 2.7.0.
+Producto de Power Elite Studio. Version 2.7.1.
 Sitio oficial: https://powerelite.studio/
+Codigo fuente: https://github.com/powerelitestudio/elite-pen
+
+CODIGO ABIERTO
+---------------
+Elite Pen se distribuye bajo Apache License 2.0. Puedes usarlo, modificarlo y
+redistribuirlo, incluso con fines comerciales, sujeto a los terminos de LICENSE.txt.
+NOTICE conserva la atribucion del proyecto. TRADEMARKS.md explica el uso separado de
+los nombres, logotipos e identidad visual de Elite Pen y Power Elite Studio.

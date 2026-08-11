@@ -1,6 +1,6 @@
 #define MyAppName "Elite Pen"
 #ifndef MyAppVersion
-  #define MyAppVersion "2.7.0"
+  #define MyAppVersion "2.7.1"
 #endif
 #define MyAppPublisher "Power Elite Studio"
 #define MyAppExeName "Elite Pen.exe"
@@ -27,7 +27,7 @@ OutputDir=..\dist\installer
 OutputBaseFilename=Elite Pen Setup {#MyAppVersion}
 SetupIconFile=..\resources\generated\elite_pen.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
-LicenseFile=..\LICENSE.txt
+LicenseFile=..\LICENSE
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern dynamic
@@ -45,7 +45,9 @@ Name: "desktopicon"; Description: "Crear un acceso directo en el escritorio"; Gr
 
 [Files]
 Source: "..\dist\Elite Pen\Elite Pen.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "..\LICENSE.txt"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\LICENSE"; DestDir: "{app}"; DestName: "LICENSE.txt"; Flags: ignoreversion
+Source: "..\NOTICE"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\TRADEMARKS.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "..\packaging\README_PORTABLE.txt"; DestDir: "{app}"; DestName: "LEEME.txt"; Flags: ignoreversion
 
 [Icons]

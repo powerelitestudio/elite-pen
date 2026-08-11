@@ -35,6 +35,22 @@ try {
     if (-not (Test-Path -LiteralPath $installedExecutable)) {
         throw 'Installer completed but Elite Pen.exe is missing.'
     }
+    $installedDocuments = @{
+        'LICENSE.txt' = Join-Path $repoRoot 'LICENSE'
+        'NOTICE' = Join-Path $repoRoot 'NOTICE'
+        'TRADEMARKS.md' = Join-Path $repoRoot 'TRADEMARKS.md'
+        'LEEME.txt' = Join-Path $repoRoot 'packaging\README_PORTABLE.txt'
+    }
+    foreach ($document in $installedDocuments.GetEnumerator()) {
+        $installedPath = Join-Path $target $document.Key
+        if (-not (Test-Path -LiteralPath $installedPath)) {
+            throw "Installer completed but $($document.Key) is missing."
+        }
+        if ((Get-FileHash -LiteralPath $installedPath -Algorithm SHA256).Hash -ne
+            (Get-FileHash -LiteralPath $document.Value -Algorithm SHA256).Hash) {
+            throw "Installed $($document.Key) does not match the repository source."
+        }
+    }
     $powerShell = (Get-Process -Id $PID).Path
     $uiTestScript = Join-Path $PSScriptRoot 'ui-smoke-test.ps1'
     $uiTestArguments = @('-NoProfile', '-File', "`"$uiTestScript`"",

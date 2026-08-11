@@ -1,53 +1,49 @@
-# Preparación del repositorio público
+# Publicación abierta de Elite Pen
 
-Auditoría local: 10 de agosto de 2026. Objetivo: publicar Elite Pen como acceso
-anticipado, con código fuente visible y paquetes gratuitos listos para usar.
+Última actualización: 10 de agosto de 2026. Elite Pen se mantiene en el repositorio
+público <https://github.com/powerelitestudio/elite-pen>. La versión 2.7.1 es la
+primera publicada íntegramente como software de código abierto bajo Apache License
+2.0; la licencia source-available de 2.7.0 solo conserva valor histórico para aquel
+tag y sus paquetes.
 
-## Ya preparado en el repositorio
+## Repositorio y gobierno
 
-- [x] README público con estado, instalación, compilación, privacidad y licencia.
-- [x] Licencia source-available coherente con acceso al código y uso gratuito.
-- [x] Guía de contribución, código de conducta y política de seguridad.
-- [x] Plantillas para errores, mejoras y pull requests.
-- [x] CI de Windows con permisos de solo lectura, pruebas y compilación Release.
-- [x] CodeQL para C++ con permisos mínimos y compilación manual reproducible.
-- [x] Binarios, builds, toolchain, artefactos y preferencias locales ignorados por Git.
-- [x] Revisión de nombres sensibles y patrones comunes de secretos en archivos
-  rastreados: sin coincidencias.
-- [x] Revisión de tamaño: ningún archivo rastreado supera 1 MiB.
-- [x] El toolchain descargado está fijado por versión y SHA-256.
-- [x] Un comando genera ZIP portable, instalador y `SHA256SUMS.txt` desde la misma
-  versión.
+- [x] `LICENSE` contiene el texto canónico e íntegro de Apache License 2.0.
+- [x] `NOTICE` acredita a Power Elite Studio sin modificar la licencia.
+- [x] `TRADEMARKS.md` separa los derechos sobre el código de las marcas, nombres,
+  logotipos e identidad visual.
+- [x] README y CONTRIBUTING describen los permisos de uso, modificación,
+  redistribución, contribución y las obligaciones de atribución.
+- [x] Código de conducta, política de seguridad, plantillas de incidencias y pull
+  requests disponibles.
+- [x] Repositorio público con `main`, CI de Windows y CodeQL.
+- [x] Secret scanning, Push protection, Code scanning, alertas de dependencias y
+  Private vulnerability reporting habilitados.
+- [x] Topics, descripción y enlace oficial configurados.
+- [x] Binarios, builds, toolchain, artefactos y preferencias locales ignorados por
+  Git; ningún secreto ni archivo rastreado mayor de 1 MiB detectado en la auditoría.
 
-## Antes de cambiar la visibilidad en GitHub
+## Contrato de los paquetes oficiales
 
-- [ ] Decidir si se publica todo el historial o una rama limpia. El historial actual
-  contiene el correo del autor de los commits; usa un correo `noreply` o reescribe el
-  historial si no debe quedar público.
-- [ ] Confirmar el nombre y la organización propietarios del repositorio.
-- [ ] Revisar una última vez `git diff`, el historial y los archivos rastreados.
-- [ ] Crear la rama `main`, protección de rama y revisión obligatoria si habrá más
-  mantenedores.
-- [ ] Habilitar Secret scanning, Push protection, Code scanning y alertas de
-  dependencias en **Settings → Security**.
-- [ ] Habilitar **Private vulnerability reporting** para que `SECURITY.md` tenga un
-  canal privado real.
-- [ ] Definir Topics, descripción corta y enlace https://powerelite.studio/.
+- El ZIP portable y el instalador nacen del mismo commit y la misma versión.
+- Ambos incluyen `LICENSE.txt`, `NOTICE`, `TRADEMARKS.md` y la guía de uso.
+- `SHA256SUMS.txt` publica los hashes del ZIP y del instalador.
+- La edición portable incluye además hashes internos y `build-info.json`.
+- Los binarios sin firma digital se anuncian expresamente; nunca se oculta la posible
+  advertencia de SmartScreen.
+- La versión anterior de `D:\Aplicaciones\Elite Pen` se conserva como respaldo al
+  actualizar el portable de trabajo.
 
-## Primera Release pública
+## Control por cada Release
 
-- [x] Ejecutar toda la matriz local: unitarias, preferencias, rendimiento, interfaz,
-  transparencia, portable e instalador.
-- [ ] Publicar portable e instalador creados desde el mismo commit/tag.
-- [ ] Adjuntar un archivo `SHA256SUMS.txt` y comprobar los hashes después de subir.
-- [ ] Explicar que los binarios todavía no están firmados y cómo verificar el hash.
-- [ ] Crear tag `v2.7.0`, notas basadas en `CHANGELOG.md` y marcar la versión como
-  acceso anticipado si corresponde.
-- [ ] Probar la descarga en un Windows 10 o 11 limpio, sin toolchain ni preferencias.
+- [ ] Ejecutar unitarias, preferencias, rendimiento, interfaz y transparencia.
+- [ ] Inspeccionar visualmente Configuración > Ayuda y su acción de código fuente.
+- [ ] Validar inicio portable e instalación/desinstalación silenciosa aislada.
+- [ ] Confirmar versión, contenido de licencias y hashes del ZIP y del instalador.
+- [ ] Crear el tag desde `main`, publicar notas basadas en `CHANGELOG.md` y adjuntar
+  los tres activos generados por `scripts/build-release-assets.ps1`.
+- [ ] Descargar los activos publicados, recalcular SHA-256 y comprobar que GitHub
+  detecta `Apache-2.0` como licencia del repositorio.
 
-## Decisión posterior, no bloqueante
-
-La licencia actual permite ver el código, compilarlo sin cambios y usar Elite Pen,
-pero no permite forks ni redistribución. Si Power Elite Studio desea una comunidad
-de código abierto, debe elegir expresamente otra licencia (por ejemplo MIT o Apache
-2.0) y revisar antes las implicaciones de marca, patentes y contribuciones.
+Estos pasos se repiten para cada versión: las casillas no sustituyen la evidencia
+concreta registrada en [QA_REPORT.md](QA_REPORT.md) y en GitHub Actions.

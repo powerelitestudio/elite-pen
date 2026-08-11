@@ -31,7 +31,10 @@ New-Item -ItemType Directory -Force -Path $staging | Out-Null
 Copy-Item -LiteralPath (Join-Path $releaseDirectory 'Elite Pen.exe') -Destination $staging
 Copy-Item -LiteralPath (Join-Path $repoRoot 'packaging\README_PORTABLE.txt') `
     -Destination (Join-Path $staging 'LEEME.txt')
-Copy-Item -LiteralPath (Join-Path $repoRoot 'LICENSE.txt') -Destination $staging
+Copy-Item -LiteralPath (Join-Path $repoRoot 'LICENSE') `
+    -Destination (Join-Path $staging 'LICENSE.txt')
+Copy-Item -LiteralPath (Join-Path $repoRoot 'NOTICE') -Destination $staging
+Copy-Item -LiteralPath (Join-Path $repoRoot 'TRADEMARKS.md') -Destination $staging
 Set-Content -LiteralPath (Join-Path $staging 'portable.flag') `
     -Value 'Elite Pen portable distribution' -Encoding ascii -NoNewline
 

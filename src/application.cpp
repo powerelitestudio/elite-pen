@@ -804,6 +804,7 @@ private:
     HWND shortcuts_{};
     HWND help_{};
     HWND help_website_{};
+    HWND help_source_{};
     std::array<HWND, kVisibleShortcutRows> hotkey_buttons_{};
     std::array<HWND, kVisibleShortcutRows> hotkey_edit_buttons_{};
     HWND shortcut_scrollbar_{};
@@ -4040,7 +4041,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.7.0",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.7.1",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
@@ -4178,13 +4179,16 @@ bool SettingsWindow::initialize() {
                                     reinterpret_cast<HMENU>(4300),
                                     GetModuleHandleW(nullptr), nullptr);
     help_ = CreateWindowW(L"STATIC",
-        L"Ayuda de Elite Pen 2.7.0. Anotación, pizarra, captura y zoom para Windows. "
-        L"Desarrollado por Power Elite Studio.",
+        L"Ayuda de Elite Pen 2.7.1. Anotación, pizarra, captura y zoom para Windows. "
+        L"Código abierto bajo Apache License 2.0. Desarrollado por Power Elite Studio.",
         WS_CHILD | SS_OWNERDRAW, 24, 119, 540, 400, window_,
         reinterpret_cast<HMENU>(4105), GetModuleHandleW(nullptr), nullptr);
     help_website_ = CreateWindowW(L"BUTTON", L"Visitar powerelite.studio",
         WS_CHILD | WS_TABSTOP | BS_OWNERDRAW, 32, 465, 250, 38, window_,
         reinterpret_cast<HMENU>(4500), GetModuleHandleW(nullptr), nullptr);
+    help_source_ = CreateWindowW(L"BUTTON", L"Código fuente en GitHub",
+        WS_CHILD | WS_TABSTOP | BS_OWNERDRAW, 292, 465, 266, 38, window_,
+        reinterpret_cast<HMENU>(4501), GetModuleHandleW(nullptr), nullptr);
     close_ = CreateWindowW(L"BUTTON", L"Cerrar", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
                            BS_OWNERDRAW, 455, 542, 100, 32, window_,
                            reinterpret_cast<HMENU>(IDOK), GetModuleHandleW(nullptr), nullptr);
@@ -4197,6 +4201,7 @@ bool SettingsWindow::initialize() {
                        theme_label_, theme_dark_, theme_light_,
                        reset_position_,
                        shortcuts_, shortcut_scrollbar_, reset_hotkeys_, help_, help_website_,
+                       help_source_,
                        close_, chrome_close_}) {
         SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(body_font_), TRUE);
         SetWindowTheme(child, theme.light ? L"Explorer" : L"DarkMode_Explorer", nullptr);
@@ -4240,7 +4245,7 @@ void SettingsWindow::apply_theme() {
                        control_mode_label_, control_mode_, palette_size_label_, palette_size_,
                        palette_size_hint_, theme_label_,
                        theme_dark_, theme_light_, reset_position_, shortcuts_, shortcut_scrollbar_,
-                       reset_hotkeys_, help_, help_website_, close_, chrome_close_}) {
+                       reset_hotkeys_, help_, help_website_, help_source_, close_, chrome_close_}) {
         if (child) SetWindowTheme(child, native_theme, nullptr);
     }
     for (HWND child : hotkey_buttons_) if (child) SetWindowTheme(child, native_theme, nullptr);
@@ -4401,7 +4406,7 @@ void SettingsWindow::paint_help(HDC dc, RECT bounds) {
     SelectObject(dc, small_font_);
     SetTextColor(dc, theme_colorref(theme.text_muted));
     RECT version{bounds.left, bounds.top + 73, bounds.right, bounds.top + 94};
-    DrawTextW(dc, L"Version 2.7.0 · Windows 10 y 11 · x64", -1, &version,
+    DrawTextW(dc, L"Version 2.7.1 · Windows 10 y 11 · x64", -1, &version,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
 
     SelectObject(dc, body_font_);
@@ -4445,10 +4450,10 @@ void SettingsWindow::paint_help(HDC dc, RECT bounds) {
     SelectObject(dc, small_font_);
     SetTextColor(dc, theme_colorref(theme.text_muted));
     RECT privacy{bounds.left, bounds.top + 311, bounds.right, bounds.top + 332};
-    DrawTextW(dc, L"Sin cuenta · Sin telemetría · Configuración local", -1, &privacy,
+    DrawTextW(dc, L"Sin cuenta · Sin telemetría · Código abierto Apache 2.0", -1, &privacy,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
     RECT website_label{bounds.left, bounds.top + 326, bounds.right, bounds.top + 344};
-    DrawTextW(dc, L"Sitio oficial, novedades y demás productos", -1, &website_label,
+    DrawTextW(dc, L"Sitio oficial y repositorio público", -1, &website_label,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
     SelectObject(dc, previous_font);
 }
@@ -4468,6 +4473,7 @@ void SettingsWindow::show_tab(int tab) {
     ShowWindow(reset_hotkeys_, active_tab_ == 1 ? SW_SHOW : SW_HIDE);
     ShowWindow(help_, active_tab_ == 2 ? SW_SHOW : SW_HIDE);
     ShowWindow(help_website_, active_tab_ == 2 ? SW_SHOW : SW_HIDE);
+    ShowWindow(help_source_, active_tab_ == 2 ? SW_SHOW : SW_HIDE);
     refresh_shortcut_rows();
     InvalidateRect(tab_general_, nullptr, TRUE);
     InvalidateRect(tab_shortcuts_, nullptr, TRUE);
@@ -4668,6 +4674,17 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
                     MessageBoxW(window_, L"No se pudo abrir el navegador. Visita "
                                 L"https://powerelite.studio/", L"Elite Pen",
                                 MB_OK | MB_ICONINFORMATION);
+                }
+                return 0;
+            }
+            if (id == 4501 && HIWORD(wparam) == BN_CLICKED) {
+                const HINSTANCE result = ShellExecuteW(
+                    window_, L"open", L"https://github.com/powerelitestudio/elite-pen",
+                    nullptr, nullptr, SW_SHOWNORMAL);
+                if (reinterpret_cast<INT_PTR>(result) <= 32) {
+                    MessageBoxW(window_, L"No se pudo abrir el navegador. Visita "
+                                L"https://github.com/powerelitestudio/elite-pen",
+                                L"Elite Pen", MB_OK | MB_ICONINFORMATION);
                 }
                 return 0;
             }

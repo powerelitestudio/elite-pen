@@ -50,9 +50,10 @@ o el instalador a mano para una publicación oficial.
   persistentes sin una discusión y aprobación previas.
 - Preserva la compatibilidad x64 con Windows 10 y el modo portable sin instalación.
 
-Al enviar una contribución declaras que tienes derecho a aportarla y autorizas a
-Power Elite Studio a incorporarla y distribuirla bajo la licencia vigente de Elite
-Pen. Abrir un pull request no concede permiso para redistribuir forks o binarios.
+Al enviar una contribución declaras que tienes derecho a aportarla. Salvo que la
+marques expresamente como `Not a Contribution`, se ofrece para incorporarla a Elite
+Pen bajo Apache License 2.0, de acuerdo con la sección 5 de la licencia. Consulta
+[LICENSE](LICENSE), [NOTICE](NOTICE) y la [política de marcas](TRADEMARKS.md).
 
 ## Conducta
 

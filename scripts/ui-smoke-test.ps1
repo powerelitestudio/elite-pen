@@ -430,9 +430,10 @@ try {
         $shortcutGuide = [ElitePenUiNative]::GetDlgItem($settings, 4103)
         $helpPanel = [ElitePenUiNative]::GetDlgItem($settings, 4105)
         $helpWebsite = [ElitePenUiNative]::GetDlgItem($settings, 4500)
+        $helpSource = [ElitePenUiNative]::GetDlgItem($settings, 4501)
         Assert-Ui ($generalTab -ne [IntPtr]::Zero -and $shortcutsTab -ne [IntPtr]::Zero -and
                    $helpTab -ne [IntPtr]::Zero -and $helpPanel -ne [IntPtr]::Zero -and
-                   $helpWebsite -ne [IntPtr]::Zero -and
+                   $helpWebsite -ne [IntPtr]::Zero -and $helpSource -ne [IntPtr]::Zero -and
                    $shortcutGuide -ne [IntPtr]::Zero) 'Settings tabs or shortcut guide are missing.'
         $null = [ElitePenUiNative]::SendMessage($shortcutsTab, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
         Assert-Ui ([ElitePenUiNative]::IsWindowVisible($shortcutGuide)) 'Shortcuts tab did not reveal the complete guide.'
@@ -467,18 +468,22 @@ try {
         $null = [ElitePenUiNative]::SendMessage($helpTab, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
         Assert-Ui ([ElitePenUiNative]::IsWindowVisible($helpPanel) -and
                    [ElitePenUiNative]::IsWindowVisible($helpWebsite) -and
+                   [ElitePenUiNative]::IsWindowVisible($helpSource) -and
                    -not [ElitePenUiNative]::IsWindowVisible($shortcutGuide)) `
             'Help tab did not expose its product information and official website action.'
         $helpAccessibleText = [ElitePenUiNative]::WindowText($helpPanel)
-        Assert-Ui ($helpAccessibleText.Contains('Elite Pen 2.7.0') -and
+        Assert-Ui ($helpAccessibleText.Contains('Elite Pen 2.7.1') -and
+                   $helpAccessibleText.Contains('Apache License 2.0') -and
                    $helpAccessibleText.Contains('Power Elite Studio')) `
-            'Help tab is missing the application version or developer identity.'
+            'Help tab is missing the version, open-source license, or developer identity.'
         Start-Sleep -Milliseconds 120
         Save-WindowImage $settings 'settings-help.png'
         $null = [ElitePenUiNative]::SendMessage($generalTab, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
         Assert-Ui (-not [ElitePenUiNative]::IsWindowVisible($shortcutGuide)) 'General tab did not hide the shortcut guide.'
         Assert-Ui (-not [ElitePenUiNative]::IsWindowVisible($helpPanel)) `
             'General tab did not hide the Help content.'
+        Assert-Ui (-not [ElitePenUiNative]::IsWindowVisible($helpSource)) `
+            'General tab did not hide the source repository action.'
 
         $darkTheme = [ElitePenUiNative]::GetDlgItem($settings, 4012)
         $lightTheme = [ElitePenUiNative]::GetDlgItem($settings, 4013)
