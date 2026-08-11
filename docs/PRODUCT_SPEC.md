@@ -1,6 +1,7 @@
-# Elite Pen 2.7.0 — contrato de producto
+# Elite Pen 2.7.1 — contrato de producto
 
-Estado: versión 2.7.0 implementada y preparada para acceso anticipado público.
+Estado: versión 2.7.1 implementada como software de código abierto bajo Apache
+License 2.0 y preparada para distribución pública portable e instalada.
 
 ## 1. Identidad e interaccion principal
 
@@ -219,9 +220,9 @@ añade una fila independiente para Configuracion.
   producto: `Shift` Línea, `Ctrl` Rectángulo, `Tab` Elipse, `Ctrl+Shift` Flecha y
   `Shift+Tab` Flecha curva Bézier.
 - `Ayuda` identifica Elite Pen y su versión, resume su propósito y compatibilidad,
-  acredita a Power Elite Studio y abre https://powerelite.studio/ en el navegador
-  predeterminado. También comunica el estado de acceso anticipado y que las
-  preferencias son locales.
+  acredita a Power Elite Studio y abre tanto https://powerelite.studio/ como el
+  repositorio público en el navegador predeterminado. También comunica el estado de
+  acceso anticipado, la licencia Apache 2.0 y que no existe cuenta ni telemetría.
 - Los atajos, la escala y el estado contraído se guardan atómicamente en LocalAppData
   para la instalación o en `data/settings.ini` junto al ejecutable portable.
 

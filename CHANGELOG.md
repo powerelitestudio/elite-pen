@@ -1,5 +1,17 @@
 # Historial de cambios
 
+## 2.7.1 — 2026-08-10
+
+- Elite Pen pasa a ser software completamente abierto bajo Apache License 2.0.
+  El repositorio, el ZIP portable y el instalador incluyen la licencia canónica,
+  `NOTICE` y una política separada para las marcas de Power Elite Studio.
+- Ayuda identifica la licencia Apache 2.0 y añade un acceso directo al código fuente
+  público junto al sitio oficial.
+- README, guía de contribución, especificación, QA y checklist público documentan
+  de forma coherente los permisos, atribuciones y proceso de publicación abierta.
+- Los paquetes oficiales se sincronizan en la versión 2.7.1 y publican hashes
+  SHA-256 para el ejecutable portable, ZIP e instalador.
+
 ## 2.7.0 — 2026-08-10
 
 - Configuración incorpora una pestaña `Ayuda` con versión, propósito, compatibilidad,

@@ -2,12 +2,15 @@
 
 ![Marca de Elite Pen](assets/elite-pen-mark.svg)
 
+[![Licencia: Apache 2.0](https://img.shields.io/badge/licencia-Apache%202.0-7C5CFC.svg)](LICENSE)
+[![Windows CI](https://github.com/powerelitestudio/elite-pen/actions/workflows/ci.yml/badge.svg)](https://github.com/powerelitestudio/elite-pen/actions/workflows/ci.yml)
+
 Elite Pen es una herramienta nativa de anotación, pizarra, captura y ampliación de
 pantalla para Windows, desarrollada por [Power Elite Studio](https://powerelite.studio/).
 Permite explicar sobre cualquier aplicación sin convertir la presentación en una
 sucesión de ventanas y menús.
 
-> **Estado:** acceso anticipado. La versión 2.7.0 es funcional y está validada para
+> **Estado:** acceso anticipado. La versión 2.7.1 es funcional y está validada para
 > empezar a compartirse, pero el producto continúa en desarrollo activo. Los reportes
 > de errores y casos de compatibilidad son bienvenidos.
 
@@ -24,8 +27,8 @@ valida 5.000 trazos, cuadros en caché, dibujo activo, memoria y rutas de compat
 
 ## Descargar y ejecutar
 
-Cuando el repositorio esté público, los paquetes listos para usar se publican en
-**Releases**:
+Los paquetes oficiales listos para usar se publican en
+[GitHub Releases](https://github.com/powerelitestudio/elite-pen/releases):
 
 - `Elite Pen Portable`: descomprime la carpeta y ejecuta `Elite Pen.exe`.
 - `Elite Pen Setup`: instala por usuario, sin privilegios de administrador.
@@ -173,7 +176,12 @@ pasos que debe completar la primera publicación está en
 
 ## Licencia
 
-El código es **source-available**, no software de código abierto según la definición
-OSI. Puedes examinarlo, compilarlo sin modificaciones y usar gratuitamente los
-binarios oficiales o esa compilación local. La redistribución, modificación y venta
-requieren autorización escrita de Power Elite Studio. Consulta [LICENSE.txt](LICENSE.txt).
+Elite Pen es software de código abierto bajo la
+[Apache License 2.0](LICENSE). Puedes usar, estudiar, modificar y redistribuir el
+código o los binarios, incluso con fines comerciales, sujeto a los términos de esa
+licencia. Conserva también las atribuciones de [NOTICE](NOTICE).
+
+La licencia del software no concede derechos sobre las marcas `Elite Pen`,
+`Power Elite Studio`, sus logotipos ni su identidad visual. Consulta la
+[política de marcas](TRADEMARKS.md) para distinguir forks y distribuciones derivadas
+de las ediciones oficiales.
