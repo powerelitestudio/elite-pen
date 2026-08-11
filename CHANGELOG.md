@@ -1,5 +1,12 @@
 # Historial de cambios
 
+## 2.5.2 — 2026-08-10
+
+- El ojo central de Paleta vuelve a descansar directamente sobre la superficie:
+  se elimina el círculo violeta decorativo exterior para una lectura más limpia.
+- Se conservan sin cambios el párpado cerrado, la pupila, la visibilidad de
+  anotaciones y toda la zona de clic.
+
 ## 2.5.1 — 2026-08-10
 
 - Paleta adopta las mismas superficies limpias de Lineal: grafito/marfil de baja

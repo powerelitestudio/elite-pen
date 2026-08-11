@@ -1,6 +1,6 @@
-# Elite Pen 2.5.1 — contrato de producto
+# Elite Pen 2.5.2 — contrato de producto
 
-Estado: version 2.5.1 implementada.
+Estado: version 2.5.2 implementada.
 
 ## 1. Identidad e interaccion principal
 

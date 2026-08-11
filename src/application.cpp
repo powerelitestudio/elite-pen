@@ -2944,12 +2944,6 @@ void PaletteWindow::render() {
         }
     }
 
-    // The central action uses the same violet selection surface as Lineal.
-    context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(126.5F, 83), 25, 25),
-                         selected_surface.Get());
-    context->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(126.5F, 83), 25, 25),
-                         gold.Get(), 1.15F);
-
     // Eye: open means visible; closed means annotations are preserved but hidden.
     if (controller_.state().annotations_visible) {
         ComPtr<ID2D1PathGeometry> eye;
@@ -4045,7 +4039,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.5.1",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.5.2",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
