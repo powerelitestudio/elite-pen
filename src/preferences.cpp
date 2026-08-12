@@ -119,7 +119,8 @@ Preferences PreferencesStore::load() const {
         L"HotkeyColorPanelAlternate",
         L"HotkeyZoomFreeze", L"HotkeyZoomFullscreen", L"HotkeyZoomLens",
         L"HotkeyZoomDocked", L"HotkeyZoomCycleView", L"HotkeyZoomInvert",
-        L"HotkeyZoomOverview", L"HotkeyZoomIn", L"HotkeyZoomOut"
+        L"HotkeyZoomOverview", L"HotkeyZoomIn", L"HotkeyZoomOut",
+        L"HotkeyZoomEdit"
     }};
     for (std::size_t index = 0; index < hotkey_keys.size(); ++index) {
         result.hotkeys[index] = read_hotkey(path_, hotkey_keys[index],
@@ -177,7 +178,8 @@ bool PreferencesStore::save(const Preferences& preferences) const {
         "HotkeyColorPanelAlternate",
         "HotkeyZoomFreeze", "HotkeyZoomFullscreen", "HotkeyZoomLens",
         "HotkeyZoomDocked", "HotkeyZoomCycleView", "HotkeyZoomInvert",
-        "HotkeyZoomOverview", "HotkeyZoomIn", "HotkeyZoomOut"
+        "HotkeyZoomOverview", "HotkeyZoomIn", "HotkeyZoomOut",
+        "HotkeyZoomEdit"
     }};
     for (std::size_t index = 0; index < hotkey_keys.size(); ++index) {
         content << hotkey_keys[index] << '=' << preferences.hotkeys[index].modifiers

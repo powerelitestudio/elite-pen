@@ -1,5 +1,31 @@
 # Historial de cambios
 
+## 2.8.0 — 2026-08-11
+
+- `E` incorpora Zoom editable como flujo adicional a la congelación clásica con
+  `P`: una barra flotante alterna `MANO` para usar la aplicación ampliada y `LÁPIZ` para anotar sin
+  modificar las vistas `F`, `L`, `D`, inversión, vista general ni salida existente.
+- Las anotaciones de Zoom editable se guardan en coordenadas de la fuente ampliada.
+  Trazos, grosores, texto, figuras y borrado se desplazan y escalan junto al contenido
+  durante paneo o cambios de ampliación, incluso con monitores de coordenadas negativas.
+- Una caché GPU dispersa de bloques de 512 px actualiza sólo los bloques tocados;
+  navegar transforma únicamente los visibles. El contrato automatizado usa 5.000
+  trazos y limita de forma independiente población, primer cuadro, paneo y memoria.
+- La barra flotante, la paleta y la tinta conservan un orden topmost determinista;
+  `LÁPIZ` entra en anotación y `Espacio` siempre vuelve a Mano. En Mano, clics, rueda
+  y teclado se entregan a la aplicación real, por lo que se puede escribir o navegar
+  sin abandonar la ampliación.
+- Zoom editable admite Lápiz, Resaltador, Borrador, Texto en línea, todas las figuras,
+  Captura PNG/portapapeles, Limpiar, Deshacer y Rehacer con historial independiente.
+  Un texto todavía abierto se confirma en ese mismo documento antes de volver a Mano.
+- Las preferencias y la pestaña Atajos agregan la acción contextual configurable
+  `Zoom: editar`, con `E` como valor inicial y conservación portable/local.
+- QA añade transformaciones puras, persistencia del nuevo atajo, pruebas UI del flujo
+  completo, anclaje durante paneo/zoom, orden Z, captura y regresión integral de `P`.
+- La superficie de Zoom editable usa composición directa sin bitmap de redirección y
+  queda completamente oculta en Mano, evitando el rectángulo negro que ciertos
+  controladores mostraban al entrar con `E`.
+
 ## 2.7.1 — 2026-08-10
 
 - Elite Pen pasa a ser software completamente abierto bajo Apache License 2.0.

@@ -33,6 +33,20 @@ struct RectF {
     }
 };
 
+// Maps between the pixels presented by a zoom viewport and the desktop pixels
+// used as its source. Keeping this transform in the platform-independent core
+// makes anchored zoom annotations deterministic on negative-coordinate and
+// multi-monitor desktops as well as at fractional zoom factors.
+struct ZoomViewportTransform {
+    RectF source{};
+    float scale{1.0F};
+
+    [[nodiscard]] PointF view_to_source(PointF point) const noexcept;
+    [[nodiscard]] PointF source_to_view(PointF point) const noexcept;
+    [[nodiscard]] float view_to_source_length(float length) const noexcept;
+    [[nodiscard]] float source_to_view_length(float length) const noexcept;
+};
+
 struct Color {
     std::uint8_t r{};
     std::uint8_t g{};
@@ -79,6 +93,7 @@ struct Drawable {
     Tool kind{Tool::Pen};
     Color color{kBlack};
     float width{7.0F};
+    float reference_scale{1.0F};
     std::vector<PointF> points;
     std::wstring text;
 
@@ -105,10 +120,12 @@ struct ArrowHead {
     PointF right{};
 };
 
-[[nodiscard]] CubicBezier curved_arrow_bezier(PointF start, PointF end) noexcept;
+[[nodiscard]] CubicBezier curved_arrow_bezier(
+    PointF start, PointF end, float reference_scale = 1.0F) noexcept;
 [[nodiscard]] PointF cubic_bezier_point(const CubicBezier& curve, float t) noexcept;
 [[nodiscard]] ArrowHead arrow_head_points(PointF before, PointF end,
-                                          float width) noexcept;
+                                          float width,
+                                          float reference_scale = 1.0F) noexcept;
 [[nodiscard]] bool hit_test(const Drawable& item, PointF point, float tolerance = 3.0F) noexcept;
 [[nodiscard]] std::vector<PointF> simplify_path(const std::vector<PointF>& input,
                                                 float epsilon);

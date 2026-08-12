@@ -1,4 +1,4 @@
-ELITE PEN 2.7.1 — EDICION PORTABLE
+ELITE PEN 2.8.0 — EDICION PORTABLE
 ================================
 
 Elite Pen es la herramienta de anotacion, pizarra y ampliacion de pantalla de
@@ -64,13 +64,19 @@ I  Invertir colores
 Rueda, + y -  Cambiar ampliacion
 P o clic  Congelar o reanudar. Conserva la ampliacion visible, activa el lapiz y
           permite anotar sobre esa imagen.
-Espacio o M  Recorrer las tres vistas
+E  Zoom editable. MANO entrega clic, rueda y teclado a la aplicacion ampliada;
+   LAPIZ congela el cuadro exacto para anotar y Espacio vuelve a MANO.
+   En MANO usa + y - de la barra para ampliar y Ctrl+Shift+Z para salir.
+Espacio o M  Recorrer las tres vistas fuera de Zoom editable
 Esc, F4 o clic derecho  Salir del zoom
 
 Las anotaciones del zoom permanecen al reanudar. Papelera, Deshacer y Rehacer actuan
 solo sobre ellas mientras el zoom esta abierto.
 Al congelar, la paleta permanece por encima de la imagen para cambiar colores,
 grosores, texto y figuras o moverla sin abandonar el zoom.
+Zoom editable admite las mismas herramientas, captura e historial independiente;
+la tinta se conserva al volver a MANO y reaparece al entrar otra vez en LAPIZ.
+P conserva la congelacion clasica fuera de este flujo.
 
 Las capturas de region se guardan en "Imagenes\Elite Pen Captures" y tambien se
 copian al portapapeles. La tinta temporal y el halo de cursor se activan en
@@ -78,7 +84,7 @@ Configuracion.
 
 SOPORTE
 -------
-Producto de Power Elite Studio. Version 2.7.1.
+Producto de Power Elite Studio. Version 2.8.0.
 Sitio oficial: https://powerelite.studio/
 Codigo fuente: https://github.com/powerelitestudio/elite-pen
 

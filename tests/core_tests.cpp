@@ -242,6 +242,50 @@ void test_document_revision() {
           "document revision stays stable for no-op eraser misses");
 }
 
+void test_zoom_viewport_transform() {
+    const ZoomViewportTransform transform{{-1920.0F, 120.0F, -960.0F, 660.0F}, 2.5F};
+    const PointF source{-1712.5F, 307.5F};
+    const PointF view = transform.source_to_view(source);
+    check(std::abs(view.x - 518.75F) < 0.001F &&
+          std::abs(view.y - 468.75F) < 0.001F,
+          "zoom transform supports negative desktop coordinates");
+    const PointF round_trip = transform.view_to_source(view);
+    check(distance(round_trip, source) < 0.001F,
+          "zoom source and viewport transforms round trip");
+    check(std::abs(transform.view_to_source_length(10.0F) - 4.0F) < 0.001F &&
+          std::abs(transform.source_to_view_length(4.0F) - 10.0F) < 0.001F,
+          "zoom transform scales annotation widths consistently");
+
+    ZoomViewportTransform moved = transform;
+    moved.source.left += 80.0F;
+    moved.source.top -= 40.0F;
+    const PointF moved_view = moved.source_to_view(source);
+    check(std::abs(moved_view.x - (view.x - 200.0F)) < 0.001F &&
+          std::abs(moved_view.y - (view.y + 100.0F)) < 0.001F,
+          "anchored points move with the magnified source");
+
+    const ZoomViewportTransform invalid{{10.0F, 20.0F, 30.0F, 40.0F}, 0.0F};
+    const PointF safe = invalid.view_to_source({5.0F, 7.0F});
+    check(safe.x == 15.0F && safe.y == 27.0F,
+          "invalid zoom factors fail safely at one-to-one scale");
+
+    const auto full_curve = curved_arrow_bezier({0, 0}, {400, 0});
+    const auto source_curve = curved_arrow_bezier({0, 0}, {200, 0}, 2.0F);
+    check(distance(full_curve.control1,
+                   {source_curve.control1.x * 2.0F,
+                    source_curve.control1.y * 2.0F}) < 0.001F &&
+          distance(full_curve.control2,
+                   {source_curve.control2.x * 2.0F,
+                    source_curve.control2.y * 2.0F}) < 0.001F,
+          "curved arrow controls preserve their creation geometry in source space");
+    const auto full_head = arrow_head_points({0, 0}, {400, 0}, 4.0F);
+    const auto source_head = arrow_head_points({0, 0}, {200, 0}, 2.0F, 2.0F);
+    check(distance(full_head.left,
+                   {source_head.left.x * 2.0F,
+                    source_head.left.y * 2.0F}) < 0.001F,
+          "arrow head limits preserve their creation geometry in source space");
+}
+
 void test_history_limit() {
     Document document(2);
     document.add(line({0, 0}, {1, 1}));
@@ -264,6 +308,7 @@ int main() {
     test_modifier_gestures();
     test_history_limit();
     test_document_revision();
+    test_zoom_viewport_transform();
     if (failures == 0) {
         std::cout << "Elite Pen core: all tests passed\n";
         return EXIT_SUCCESS;

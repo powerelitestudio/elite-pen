@@ -10,7 +10,7 @@ pantalla para Windows, desarrollada por [Power Elite Studio](https://powerelite.
 Permite explicar sobre cualquier aplicación sin convertir la presentación en una
 sucesión de ventanas y menús.
 
-> **Estado:** acceso anticipado. La versión 2.7.1 es funcional y está validada para
+> **Estado:** acceso anticipado. La versión 2.8.0 es funcional y está validada para
 > empezar a compartirse, pero el producto continúa en desarrollo activo. Los reportes
 > de errores y casos de compatibilidad son bienvenidos.
 
@@ -23,7 +23,8 @@ El motor conserva la tinta terminada en una superficie GPU y solo rasteriza el
 objeto recién añadido. El historial mueve los trazos sin duplicarlos, el borrador
 usa distancias al cuadrado y el simplificador de trazos es iterativo. El zoom evita
 reconfigurar su fuente cuando el puntero permanece quieto. El benchmark automatizado
-valida 5.000 trazos, cuadros en caché, dibujo activo, memoria y rutas de compatibilidad.
+valida 5.000 trazos, cuadros en caché, dibujo activo, paneo del Zoom editable,
+memoria y rutas de compatibilidad.
 
 ## Descargar y ejecutar
 
@@ -48,6 +49,8 @@ oficial y compara el SHA-256 publicado con cada versión.
 - Usar pizarras blanca y negra instantaneas.
 - Ampliar la pantalla en vista completa, lente o acoplada y seguir el puntero.
 - Congelar el zoom, anotar sobre la imagen fija y reanudar sin perder esa tinta.
+- Entrar con `E` en Zoom editable, usar normalmente la aplicación ampliada en Mano y
+  congelar con Lápiz para anotar sin perder el contexto.
 - Hibernar toda la interfaz en una unidad mínima que no estorba.
 - Usar tinta temporal y un halo de cursor para presentaciones.
 - Mantener una respuesta fluida en equipos de 2017 con graficos integrados.
@@ -103,6 +106,7 @@ comparten estado, paneles, atajos, tema, escala y posición guardada.
 | Rehacer | Menu/historial | `Ctrl+Shift+Y` |
 | Limpiar | Papelera | `Ctrl+Shift+E` |
 | Zoom | Herramientas | `Ctrl+Shift+Z` |
+| Zoom editable | Barra flotante de zoom | `E` dentro del zoom |
 | Contraer/expandir | Control bajo el ojo | `Ctrl+Shift+D` |
 | Salir de modo/zoom | — | `Esc` |
 
@@ -136,6 +140,17 @@ zoom usa historial propio: permanece al reanudar y la papelera la limpia sin toc
 las anotaciones normales. Captura funciona también sobre esta imagen fija: aplana la
 ampliación y la tinta visible en un PNG, copia el mismo resultado al portapapeles y
 respeta la preferencia que incluye o excluye la interfaz de Elite Pen.
+
+`E` activa adicionalmente `Zoom editable` sin sustituir el flujo anterior. La barra
+flotante permite cambiar entre `MANO`, que entrega clics, rueda y teclado a la
+aplicación real mientras conserva la ampliación, y `LÁPIZ`, que congela el cuadro
+ampliado exacto para usar lápiz, colores, grosores, texto, figuras, borrador, captura e
+historial. `Espacio` vuelve de forma segura a `MANO`. La tinta queda guardada en
+coordenadas de la fuente y reaparece al entrar otra vez en `LÁPIZ`; durante `MANO` la
+superficie de anotación permanece oculta para no cubrir ni bloquear la aplicación.
+Como las teclas simples pertenecen a la aplicación en `MANO`, la ampliación se ajusta
+con `+` y `−` de la barra y se sale con su cierre o con `Ctrl+Shift+Z`. `P` conserva la
+congelación clásica fuera de este flujo.
 
 Configuración permite elegir Paleta o Lineal y escalar toda la unidad al 80 %,
 100 %, 125 % o 150 %; el

@@ -49,6 +49,9 @@ int main() {
     const Preferences fresh = store.load();
     check(fresh.theme == AppTheme::Light,
           "fresh installations start with the light appearance");
+    check(fresh.hotkeys[static_cast<std::size_t>(HotkeyAction::ZoomEdit)] ==
+              HotkeyBinding{0, 'E'},
+          "zoom edit ships with the contextual E shortcut");
 
     std::filesystem::create_directories(data, error);
     {
@@ -90,6 +93,9 @@ int main() {
     check(migrated.hotkeys[static_cast<std::size_t>(HotkeyAction::Whiteboard)] ==
               HotkeyBinding{MOD_CONTROL | MOD_ALT, 'X'},
           "migration preserves genuinely customized shortcuts");
+    check(migrated.hotkeys[static_cast<std::size_t>(HotkeyAction::ZoomEdit)] ==
+              HotkeyBinding{0, 'E'},
+          "legacy settings gain editable zoom without shifting saved actions");
 
     Preferences expected;
     expected.theme = AppTheme::Light;
@@ -117,6 +123,8 @@ int main() {
     expected.hotkeys[static_cast<std::size_t>(HotkeyAction::ZoomFreeze)] =
         {MOD_ALT, 'P'};
     expected.hotkeys[static_cast<std::size_t>(HotkeyAction::ZoomIn)] = {};
+    expected.hotkeys[static_cast<std::size_t>(HotkeyAction::ZoomEdit)] =
+        {MOD_ALT, 'E'};
 
     check(store.save(expected), "preferences save atomically");
     const Preferences actual = store.load();

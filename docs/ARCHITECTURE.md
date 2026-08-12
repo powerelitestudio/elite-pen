@@ -13,8 +13,8 @@
   único enrutador de comandos para ambas presentaciones.
 - `capture`: seleccion de region, captura GDI con respaldo DXGI Desktop Duplication,
   transferencia al portapapeles y codificacion PNG mediante Windows Imaging Component.
-- `zoom`: control Magnifier nativo para el flujo vivo y una superficie
-  DirectComposition separada para congelación, entrada y anotaciones contextuales.
+- `zoom`: control Magnifier nativo, superficie DirectComposition de tinta, documento
+  contextual para congelación y documento fuente/caché dispersa para Zoom editable.
 
 ## Flujo de datos
 
@@ -32,6 +32,14 @@ a la superficie `ZoomInk`; ésta recibe ratón, lápiz y tacto y conserva un `Do
 independiente. Al reanudar, la superficie vuelve a ser transparente, mantiene sus
 vectores visibles y el control nativo continúa siguiendo el puntero. No se realizan
 capturas continuas de CPU durante el zoom vivo.
+
+Al pulsar `E`, `ZoomInk` cambia a un documento independiente en coordenadas de la
+fuente ampliada. En `MANO` la superficie de tinta se oculta, la raíz Magnifier deja
+pasar ratón y teclado a la aplicación real y el origen continúa siguiendo el puntero;
+en `LÁPIZ` copia una sola vez el cuadro ampliado, conserva origen
+y factor mientras recibe gestos y libera esa instantánea al volver a navegar. La
+vista transforma bloques GPU ya rasterizados en vez de reconstruir geometría durante
+el paneo. La congelación `P` continúa usando su documento y su instantánea originales.
 
 ## Decisiones
 
@@ -66,9 +74,11 @@ formato y no requieren registro, servicio ni permisos de administrador.
 
 ### ADR-006: documento contextual de zoom
 
-La tinta de una sesión de zoom no entra en el documento del escritorio. Esta frontera
-permite que Limpiar, Deshacer y Rehacer sean contextuales, evita transformar coordenadas
-ampliadas al escritorio y garantiza que reanudar no mueva las anotaciones ya realizadas.
+La tinta de una sesión de zoom no entra en el documento del escritorio. La congelación
+`P` conserva coordenadas de viewport, porque su imagen no se desplaza; Zoom editable
+conserva un segundo documento en coordenadas de fuente, porque su contenido sí navega.
+Esta frontera hace contextuales Limpiar, Deshacer y Rehacer, mantiene compatibles las
+sesiones anteriores y evita que una operación de un modo contamine el otro.
 
 ### ADR-007: atajos declarativos y registro transaccional
 
@@ -83,3 +93,22 @@ La interfaz nativa conserva C++/Win32 y DirectComposition. Un contrato único de
 tokens traduce el sistema visual de Elite Slides a colores Direct2D y GDI para los
 temas Oscuro y Claro. La preferencia `Theme` vive en el mismo INI portable o local;
 el cambio invalida todas las superficies y renueva el chrome nativo sin reiniciar.
+
+### ADR-009: anotaciones ancladas y caché dispersa en Zoom editable
+
+`ZoomViewportTransform` define de manera pura las conversiones entre viewport y
+fuente, incluidos origen negativo, escala fraccionaria y longitudes. Los objetos se
+guardan en la fuente y se rasterizan en bitmaps Direct2D de 512 × 512 px identificados
+por coordenadas enteras con signo. La estructura solo crea los bloques tocados: evita
+un bitmap del escritorio virtual completo y limita el atlas a 160 bloques (~160 MiB)
+con respaldo vectorial si se alcanza el máximo. Append actualiza el nuevo objeto;
+Clear libera bloques; Undo, Redo y borrado
+reconstruyen una sola vez. Un cuadro de navegación filtra bloques visibles y ejecuta
+solo `DrawBitmap` con la transformación actual.
+
+La máquina de estados es explícita: `Off`, `Navigate`, `Annotate`. Solo `Annotate`
+retira `WS_EX_TRANSPARENT`, muestra `ZoomInk` y captura gestos; `Navigate` deshabilita
+el capturador de clic, oculta la tinta, hace transparentes a entrada la raíz y el hijo
+Magnifier y devuelve el foco a la última aplicación externa. La barra se excluye del
+filtro de Magnifier y de capturas, y el orden topmost se recompone como Magnifier,
+tinta, barra y paleta.

@@ -48,6 +48,10 @@ public static class ElitePenUiNative {
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassName(IntPtr window, StringBuilder value, int count);
     [DllImport("user32.dll")] public static extern bool EnumWindows(WindowCallback callback, IntPtr data);
     [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr window);
+    [DllImport("user32.dll")] public static extern bool IsWindowEnabled(IntPtr window);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(
+        IntPtr window, out uint processId);
     [DllImport("user32.dll")] public static extern IntPtr SendMessage(IntPtr window, uint message, IntPtr wparam, IntPtr lparam);
     [DllImport("user32.dll")] public static extern bool PostMessage(IntPtr window, uint message, IntPtr wparam, IntPtr lparam);
     [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr window, int id);
@@ -157,9 +161,15 @@ function Save-WindowImage([IntPtr]$Window, [string]$Name) {
     $bitmap = New-Object System.Drawing.Bitmap($width, $height)
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
     try {
-        $graphics.CopyFromScreen($bounds.Left, $bounds.Top, 0, 0, $bitmap.Size)
-        $bitmap.Save((Join-Path $script:captureDirectory $Name),
-                     [System.Drawing.Imaging.ImageFormat]::Png)
+        try {
+            $graphics.CopyFromScreen($bounds.Left, $bounds.Top, 0, 0, $bitmap.Size)
+            $bitmap.Save((Join-Path $script:captureDirectory $Name),
+                         [System.Drawing.Imaging.ImageFormat]::Png)
+        } catch {
+            # A locked or disconnected Windows desktop can reject diagnostic
+            # screenshots even though the UI automation remains available.
+            Write-Warning "Optional UI screenshot '$Name' was unavailable: $($_.Exception.Message)"
+        }
     } finally {
         $graphics.Dispose()
         $bitmap.Dispose()
@@ -177,6 +187,7 @@ function Wait-Window([string]$ClassName, [int]$TimeoutMilliseconds = 5000) {
         'ElitePen.Zoom' { 'Zoom — Elite Pen' }
         'ElitePen.ZoomInk' { 'Anotaciones de zoom — Elite Pen' }
         'ElitePen.ZoomTarget' { 'Objetivo de lupa — Elite Pen' }
+        'ElitePen.ZoomEditToolbar' { 'Zoom editable — Navegar — Elite Pen' }
         default { $null }
     }
     $elapsed = 0
@@ -444,8 +455,9 @@ try {
                    $shortcutAccessibleText.Contains('Ctrl Rectángulo') -and
                    $shortcutAccessibleText.Contains('Tab Elipse') -and
                    $shortcutAccessibleText.Contains('Ctrl+Shift Flecha') -and
-                   $shortcutAccessibleText.Contains('Shift+Tab Flecha curva')) `
-            'Shortcut guide does not document all five pencil gestures.'
+                   $shortcutAccessibleText.Contains('Shift+Tab Flecha curva') -and
+                   $shortcutAccessibleText.Contains('E Zoom editable')) `
+            'Shortcut guide does not document pencil gestures and editable zoom.'
         $firstHotkey = [ElitePenUiNative]::GetDlgItem($settings, 4200)
         $lastHotkey = [ElitePenUiNative]::GetDlgItem($settings, 4205)
         $firstHotkeyEditor = [ElitePenUiNative]::GetDlgItem($settings, 4400)
@@ -463,8 +475,9 @@ try {
                    [ElitePenUiNative]::IsWindowVisible($shortcutScrollbar)) `
             'Scrollable shortcut rows or their pencil editors are missing from Settings.'
         $null = [ElitePenUiNative]::SendMessage($settings, 0x0115, [IntPtr]7, $shortcutScrollbar)
-        Assert-Ui ([ElitePenUiNative]::IsWindowVisible($firstHotkeyEditor)) `
-            'Shortcut list did not remain usable after scrolling to zoom controls.'
+        Assert-Ui ([ElitePenUiNative]::IsWindowVisible($firstHotkeyEditor) -and
+                   [ElitePenUiNative]::WindowText($lastHotkey) -eq 'E') `
+            'Shortcut list did not expose the configurable E action for editable zoom.'
         $null = [ElitePenUiNative]::SendMessage($helpTab, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
         Assert-Ui ([ElitePenUiNative]::IsWindowVisible($helpPanel) -and
                    [ElitePenUiNative]::IsWindowVisible($helpWebsite) -and
@@ -472,7 +485,7 @@ try {
                    -not [ElitePenUiNative]::IsWindowVisible($shortcutGuide)) `
             'Help tab did not expose its product information and official website action.'
         $helpAccessibleText = [ElitePenUiNative]::WindowText($helpPanel)
-        Assert-Ui ($helpAccessibleText.Contains('Elite Pen 2.7.1') -and
+        Assert-Ui ($helpAccessibleText.Contains('Elite Pen 2.8.0') -and
                    $helpAccessibleText.Contains('Apache License 2.0') -and
                    $helpAccessibleText.Contains('Power Elite Studio')) `
             'Help tab is missing the version, open-source license, or developer identity.'
@@ -825,6 +838,249 @@ try {
         $magnifier = [ElitePenUiNative]::FindWindowEx(
             $zoom, [IntPtr]::Zero, 'Magnifier', 'Elite Pen Magnifier')
         Assert-Ui ($magnifier -ne [IntPtr]::Zero) 'Native Magnifier child is missing.'
+
+        # E adds a non-destructive editable zoom workflow. Its document is
+        # stored in source-space, while P and the existing F/L/D behavior remain
+        # independent and are exercised again below.
+        $null = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x0100, [IntPtr][char]'E', [IntPtr]::Zero)
+        Start-Sleep -Milliseconds 120
+        $editToolbar = Wait-Window 'ElitePen.ZoomEditToolbar' 1000
+        $editState = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8072, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        $editInkStyle = [ElitePenUiNative]::GetWindowLong($zoomInk, -20)
+        $editZoomStyle = [ElitePenUiNative]::GetWindowLong($zoom, -20)
+        $editMagnifierStyle = [ElitePenUiNative]::GetWindowLong($magnifier, -20)
+        $editForeground = [ElitePenUiNative]::GetForegroundWindow()
+        [uint32]$editForegroundProcess = 0
+        $null = [ElitePenUiNative]::GetWindowThreadProcessId(
+            $editForeground, [ref]$editForegroundProcess)
+        Assert-Ui ($editState -eq 1 -and $editToolbar -ne [IntPtr]::Zero -and
+                   [ElitePenUiNative]::IsWindowVisible($editToolbar) -and
+                   -not [ElitePenUiNative]::IsWindowVisible($zoomInk) -and
+                   -not [ElitePenUiNative]::IsWindowEnabled($magnifier) -and
+                   (($editZoomStyle -band 0x20) -ne 0) -and
+                   (($editZoomStyle -band 0x08000000) -ne 0) -and
+                   (($editMagnifierStyle -band 0x20) -ne 0) -and
+                   $editForegroundProcess -ne [uint32]$process.Id -and
+                   (($editInkStyle -band 0x20) -ne 0) -and
+                   (($editInkStyle -band 0x00200000) -ne 0) -and
+                   (($editInkStyle -band 0x00080000) -eq 0)) `
+            ("E did not enter interactive MANO with a hidden ink surface and input " +
+             "pass-through (state=$editState; toolbar=$editToolbar; " +
+             "toolbarVisible=$([ElitePenUiNative]::IsWindowVisible($editToolbar)); " +
+             "inkVisible=$([ElitePenUiNative]::IsWindowVisible($zoomInk)); " +
+             "magnifierEnabled=$([ElitePenUiNative]::IsWindowEnabled($magnifier)); " +
+             "foregroundProcess=$editForegroundProcess; eliteProcess=$($process.Id); " +
+             "zoomStyle=$editZoomStyle; magnifierStyle=$editMagnifierStyle; " +
+             "inkStyle=$editInkStyle).")
+        Assert-Ui ([ElitePenUiNative]::WindowText($editToolbar).Contains('Navegar') -and
+                   [ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.ZoomEditToolbar') -and
+                   [ElitePenUiNative]::IsAboveClass($editToolbar, 'ElitePen.Zoom')) `
+            'Editable zoom toolbar is not accessible in the expected topmost order.'
+
+        $editState = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8074, [IntPtr]2, [IntPtr]::Zero).ToInt64()
+        Start-Sleep -Milliseconds 80
+        $editInkStyle = [ElitePenUiNative]::GetWindowLong($zoomInk, -20)
+        $editZoomStyle = [ElitePenUiNative]::GetWindowLong($zoom, -20)
+        $editSnapshot = [ElitePenUiNative]::SendMessage(
+            $zoomInk, 0x8064, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        Assert-Ui ($editState -eq 2 -and (($editInkStyle -band 0x20) -eq 0) -and
+                   (($editZoomStyle -band 0x20) -eq 0) -and
+                   [ElitePenUiNative]::IsWindowEnabled($magnifier) -and
+                   [ElitePenUiNative]::IsWindowVisible($zoomInk) -and
+                   $editSnapshot -eq 1 -and
+                   [ElitePenUiNative]::WindowText($editToolbar).Contains('Anotar')) `
+            'Editable zoom did not preserve the enlarged frame and expose annotation input.'
+
+        $null = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x0100, [IntPtr]0x20, [IntPtr]::Zero)
+        Start-Sleep -Milliseconds 60
+        $spaceState = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8072, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        $spaceStyle = [ElitePenUiNative]::GetWindowLong($zoomInk, -20)
+        $spaceZoomStyle = [ElitePenUiNative]::GetWindowLong($zoom, -20)
+        Assert-Ui ($spaceState -eq 1 -and (($spaceStyle -band 0x20) -ne 0) -and
+                   (($spaceZoomStyle -band 0x20) -ne 0) -and
+                   -not [ElitePenUiNative]::IsWindowEnabled($magnifier) -and
+                   -not [ElitePenUiNative]::IsWindowVisible($zoomInk)) `
+            'Space did not return editable zoom safely to MANO navigation.'
+        $editState = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8074, [IntPtr]2, [IntPtr]::Zero).ToInt64()
+        Assert-Ui ($editState -eq 2) `
+            'Editable zoom could not return to annotation after the Space regression check.'
+
+        Select-Tool $palette 1
+        $editStart = [IntPtr]((220 -shl 16) -bor 300)
+        $editFinish = [IntPtr]((300 -shl 16) -bor 450)
+        $null = [ElitePenUiNative]::SendMessage($zoomInk, 0x0201, [IntPtr]1, $editStart)
+        $null = [ElitePenUiNative]::SendMessage($zoomInk, 0x0200, [IntPtr]1, $editFinish)
+        $null = [ElitePenUiNative]::SendMessage($zoomInk, 0x0202, [IntPtr]0, $editFinish)
+        $editItems = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8073, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        $firstViewX = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8076, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        $firstViewY = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8077, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        Assert-Ui ($editItems -eq 1 -and [Math]::Abs($firstViewX - 300) -le 2 -and
+                   [Math]::Abs($firstViewY - 220) -le 2) `
+            'Editable zoom did not store its first pen stroke in source coordinates.'
+
+        Select-Tool $palette 5
+        $shapeStart = [IntPtr]((350 -shl 16) -bor 520)
+        $shapeFinish = [IntPtr]((440 -shl 16) -bor 680)
+        $null = [ElitePenUiNative]::SendMessage($zoomInk, 0x0201, [IntPtr]1, $shapeStart)
+        $null = [ElitePenUiNative]::SendMessage($zoomInk, 0x0200, [IntPtr]1, $shapeFinish)
+        $null = [ElitePenUiNative]::SendMessage($zoomInk, 0x0202, [IntPtr]0, $shapeFinish)
+        Select-Tool $palette 9
+        Click-Window $zoomInk 760 360
+        $editText = Wait-Window 'ElitePen.TextInput' 1000
+        if ($editText -ne [IntPtr]::Zero) {
+            foreach ($character in 'Texto E'.ToCharArray()) {
+                $null = [ElitePenUiNative]::SendMessage(
+                    $editText, 0x0102, [IntPtr][int]$character, [IntPtr]::Zero)
+            }
+            $null = [ElitePenUiNative]::SendMessage(
+                $editText, 0x805D, [IntPtr]::Zero, [IntPtr]::Zero)
+        }
+        $editItems = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8073, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        Assert-Ui ($editText -ne [IntPtr]::Zero -and $editItems -eq 3) `
+            'Editable zoom did not support geometry and inline text in one document.'
+
+        Select-Tool $palette 9
+        Click-Window $zoomInk 820 410
+        $pendingEditText = Wait-Window 'ElitePen.TextInput' 1000
+        if ($pendingEditText -ne [IntPtr]::Zero) {
+            foreach ($character in 'Texto al navegar'.ToCharArray()) {
+                $null = [ElitePenUiNative]::SendMessage(
+                    $pendingEditText, 0x0102, [IntPtr][int]$character, [IntPtr]::Zero)
+            }
+        }
+        $navigateState = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8074, [IntPtr]1, [IntPtr]::Zero).ToInt64()
+        $itemsAfterNavigate = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8073, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        Assert-Ui ($pendingEditText -ne [IntPtr]::Zero -and
+                   $navigateState -eq 1 -and $itemsAfterNavigate -eq 4 -and
+                   -not [ElitePenUiNative]::IsWindowVisible($pendingEditText)) `
+            'Returning to MANO did not commit pending text to the editable document.'
+        $null = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8074, [IntPtr]2, [IntPtr]::Zero)
+
+        $null = [ElitePenUiNative]::SendMessage(
+            $palette, 0x0312, [IntPtr]4, [IntPtr]::Zero)
+        $afterEditUndo = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8073, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        $null = [ElitePenUiNative]::SendMessage(
+            $palette, 0x0312, [IntPtr]5, [IntPtr]::Zero)
+        $afterEditRedo = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8073, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        Assert-Ui ($afterEditUndo -eq 3 -and $afterEditRedo -eq 4) `
+            'Undo and redo did not remain scoped to editable zoom.'
+
+        $capturesBeforeEdit = (Get-ChildItem -LiteralPath $captureDirectory `
+            -Filter '*.png' -File).Count
+        Select-Tool $palette 10
+        $editCaptureStart = [IntPtr]((180 -shl 16) -bor 240)
+        $editCaptureFinish = [IntPtr]((320 -shl 16) -bor 460)
+        $null = [ElitePenUiNative]::SendMessage(
+            $zoomInk, 0x0201, [IntPtr]1, $editCaptureStart)
+        $null = [ElitePenUiNative]::SendMessage(
+            $zoomInk, 0x0200, [IntPtr]1, $editCaptureFinish)
+        $null = [ElitePenUiNative]::SendMessage(
+            $zoomInk, 0x0202, [IntPtr]0, $editCaptureFinish)
+        Start-Sleep -Milliseconds 300
+        $editCaptures = @(Get-ChildItem -LiteralPath $captureDirectory `
+            -Filter '*.png' -File | Sort-Object LastWriteTimeUtc)
+        $editCaptureValid = $false
+        if ($editCaptures.Count -eq $capturesBeforeEdit + 1) {
+            Add-Type -AssemblyName System.Drawing
+            $editBitmap = [System.Drawing.Bitmap]::FromFile($editCaptures[-1].FullName)
+            try {
+                $editCaptureValid = $editBitmap.Width -eq 220 -and
+                    $editBitmap.Height -eq 140
+            } finally {
+                $editBitmap.Dispose()
+            }
+        }
+        Assert-Ui ($editCaptureValid -and
+                   [ElitePenUiNative]::IsWindowVisible($palette) -and
+                   [ElitePenUiNative]::IsWindowVisible($editToolbar)) `
+            'Editable zoom capture did not flatten the selected 220 x 140 view or restore its controls.'
+
+        $null = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8074, [IntPtr]1, [IntPtr]::Zero)
+        $anchorBeforeX = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8076, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        $anchorBeforeY = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8077, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        $null = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8078, [IntPtr]75, [IntPtr]45)
+        Start-Sleep -Milliseconds 80
+        $anchorAfterPanX = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8076, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        $anchorAfterPanY = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8077, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        if ($anchorBeforeX -eq $anchorAfterPanX -and
+            $anchorBeforeY -eq $anchorAfterPanY) {
+            $null = [ElitePenUiNative]::SendMessage(
+                $zoom, 0x8078, [IntPtr](-75), [IntPtr](-45))
+            $anchorAfterPanX = [ElitePenUiNative]::SendMessage(
+                $zoom, 0x8076, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+            $anchorAfterPanY = [ElitePenUiNative]::SendMessage(
+                $zoom, 0x8077, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        }
+        $editToolbarBounds = New-Object ElitePenUiNative+RECT
+        $null = [ElitePenUiNative]::GetWindowRect(
+            $editToolbar, [ref]$editToolbarBounds)
+        $editToolbarWidth = $editToolbarBounds.Right - $editToolbarBounds.Left
+        $editToolbarHeight = $editToolbarBounds.Bottom - $editToolbarBounds.Top
+        $factorBeforeToolbar = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8079, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        Click-Window $editToolbar ([Math]::Floor($editToolbarWidth * 0.34)) `
+            ([Math]::Floor($editToolbarHeight * 0.50))
+        $factorAfterToolbar = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8079, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        $anchorAfterZoomX = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8076, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        $anchorAfterZoomY = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8077, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        Assert-Ui (($anchorBeforeX -ne $anchorAfterPanX -or
+                    $anchorBeforeY -ne $anchorAfterPanY) -and
+                   $factorAfterToolbar -gt $factorBeforeToolbar) `
+            ("Source-anchored annotations did not transform during pan and zoom " +
+             "(before=$anchorBeforeX,$anchorBeforeY; " +
+             "pan=$anchorAfterPanX,$anchorAfterPanY; " +
+             "zoom=$anchorAfterZoomX,$anchorAfterZoomY; " +
+             "factor=$factorBeforeToolbar->$factorAfterToolbar).")
+
+        $null = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8074, [IntPtr]2, [IntPtr]::Zero)
+        $null = [ElitePenUiNative]::SendMessage(
+            $palette, 0x0312, [IntPtr]6, [IntPtr]::Zero)
+        $clearedEditItems = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8073, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        $null = [ElitePenUiNative]::SendMessage(
+            $palette, 0x0312, [IntPtr]4, [IntPtr]::Zero)
+        $restoredEditItems = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8073, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        Assert-Ui ($clearedEditItems -eq 0 -and $restoredEditItems -eq 4) `
+            'Clear and undo did not preserve editable zoom history independently.'
+
+        $null = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8074, [IntPtr]::Zero, [IntPtr]::Zero)
+        Start-Sleep -Milliseconds 80
+        $editState = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8072, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        $classicZoomStyle = [ElitePenUiNative]::GetWindowLong($zoom, -20)
+        Assert-Ui ($editState -eq 0 -and
+                   (($classicZoomStyle -band 0x20) -eq 0) -and
+                   [ElitePenUiNative]::IsWindowEnabled($magnifier) -and
+                   -not [ElitePenUiNative]::IsWindowVisible($editToolbar)) `
+            'Closing editable zoom did not restore the original live zoom workflow.'
+
         if ($magnifier -ne [IntPtr]::Zero) {
             $clickPoint = New-Object ElitePenUiNative+POINT
             $clickPoint.X = $full.Left + [Math]::Floor(($full.Right - $full.Left) * 0.58)
