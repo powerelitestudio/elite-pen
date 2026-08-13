@@ -12,6 +12,7 @@
 #include <magnification.h>
 #include <shellapi.h>
 #include <shlobj.h>
+#include <tlhelp32.h>
 #include <uxtheme.h>
 #include <wincodec.h>
 #include <windowsx.h>
@@ -27,6 +28,7 @@
 #include <optional>
 #include <string>
 #include <sstream>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -60,6 +62,14 @@ constexpr UINT kQaQueryZoomGeometryWidthMessage = WM_APP + 110;
 constexpr UINT kQaToggleZoomFreezeMessage = WM_APP + 111;
 constexpr UINT kQaQueryControlModeMessage = WM_APP + 112;
 constexpr UINT kQaSetControlModeMessage = WM_APP + 113;
+constexpr UINT kQaQueryZoomEditStateMessage = WM_APP + 114;
+constexpr UINT kQaQueryZoomEditDocumentCountMessage = WM_APP + 115;
+constexpr UINT kQaSetZoomEditStateMessage = WM_APP + 116;
+constexpr UINT kQaPopulateZoomEditDocumentMessage = WM_APP + 117;
+constexpr UINT kQaQueryZoomEditFirstViewXMessage = WM_APP + 118;
+constexpr UINT kQaQueryZoomEditFirstViewYMessage = WM_APP + 119;
+constexpr UINT kQaNudgeZoomEditSourceMessage = WM_APP + 120;
+constexpr UINT kQaQueryZoomFactorMessage = WM_APP + 121;
 constexpr UINT_PTR kTrayId = 1;
 constexpr std::array<float, 4> kPaletteScales{0.48F, 0.60F, 0.75F, 0.90F};
 constexpr std::array<float, 5> kThicknessSteps{2.0F, 4.0F, 7.0F, 12.0F, 20.0F};
@@ -100,6 +110,28 @@ const UiTheme& ui_theme(AppTheme theme) noexcept {
 
 const UiTheme& current_ui_theme() noexcept {
     return ui_theme(g_ui_theme);
+}
+
+bool process_is_running(const wchar_t* executable_name) {
+    const HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) return false;
+    PROCESSENTRY32W entry{};
+    entry.dwSize = sizeof(entry);
+    bool found = false;
+    if (Process32FirstW(snapshot, &entry)) {
+        do {
+            if (_wcsicmp(entry.szExeFile, executable_name) == 0) {
+                found = true;
+                break;
+            }
+        } while (Process32NextW(snapshot, &entry));
+    }
+    CloseHandle(snapshot);
+    return found;
+}
+
+bool obs_is_running() {
+    return process_is_running(L"obs64.exe") || process_is_running(L"obs32.exe");
 }
 
 D2D1_COLOR_F theme_color(std::uint32_t rgb, float alpha = 1.0F) noexcept {
@@ -458,6 +490,7 @@ HCURSOR create_zoom_lens_cursor(UINT dpi) {
 }
 
 enum class ZoomView : int { Fullscreen = 0, Lens = 1, Docked = 2 };
+enum class ZoomEditState : int { Off = 0, Navigate = 1, Annotate = 2 };
 
 Tool current_gesture_tool(Tool selected) noexcept {
     return gesture_tool(
@@ -549,7 +582,8 @@ constexpr std::array<HotkeyInfo, kHotkeyActionCount> kHotkeyInfo{{
     {L"Zoom: invertir", L"Invierte o restaura colores"},
     {L"Zoom: vision general", L"Alterna ampliacion 1x"},
     {L"Zoom: acercar", L"Aumenta el nivel de zoom"},
-    {L"Zoom: alejar", L"Reduce el nivel de zoom"}
+    {L"Zoom: alejar", L"Reduce el nivel de zoom"},
+    {L"Zoom: editar", L"Navega y anota sobre contenido ampliado"}
 }};
 
 constexpr std::size_t kVisibleShortcutRows = 6;
@@ -572,6 +606,62 @@ private:
     float offset_x_{};
     float offset_y_{};
     std::size_t item_count_{};
+};
+
+struct WorldTileKey {
+    int x{};
+    int y{};
+
+    constexpr bool operator==(const WorldTileKey&) const noexcept = default;
+};
+
+struct WorldTileKeyHash {
+    std::size_t operator()(WorldTileKey key) const noexcept {
+        const auto x = static_cast<std::uint32_t>(key.x);
+        const auto y = static_cast<std::uint32_t>(key.y);
+        return static_cast<std::size_t>(
+            (static_cast<std::uint64_t>(x) << 32U) ^
+            static_cast<std::uint64_t>(y));
+    }
+};
+
+// Sparse source-space cache for editable zoom annotations. Each drawable is
+// rasterized once into 512 px GPU tiles; panning and zooming only transform the
+// visible tiles, so navigation cost does not grow with the document history.
+class WorldDocumentRenderCache {
+public:
+    bool update(GraphicsDevice& graphics, Surface& surface,
+                const Document& document);
+    void draw(ID2D1DeviceContext* context,
+              const ZoomViewportTransform& transform) const;
+    void reset() noexcept;
+
+private:
+    static constexpr int kTileSize = 512;
+    // A target tile occupies approximately 1 MiB in BGRA8. Capping the sparse
+    // atlas prevents a long multi-monitor session from exhausting shared GPU
+    // memory on older PCs; rendering safely falls back to visible vectors.
+    static constexpr std::size_t kMaxTileCount = 160;
+    using TileMap = std::unordered_map<WorldTileKey, ComPtr<ID2D1Bitmap1>,
+                                       WorldTileKeyHash>;
+
+    bool rebuild(GraphicsDevice& graphics, ID2D1DeviceContext* context,
+                 const Document& document);
+    bool append(GraphicsDevice& graphics, ID2D1DeviceContext* context,
+                const Drawable& drawable);
+    bool ensure_tile(ID2D1DeviceContext* context, WorldTileKey key,
+                     ID2D1Bitmap1** bitmap);
+    static int tile_coordinate(float value) noexcept;
+    static RectF tile_bounds(WorldTileKey key) noexcept;
+
+    TileMap tiles_;
+    std::uint64_t revision_{std::numeric_limits<std::uint64_t>::max()};
+    std::uint64_t surface_generation_{};
+    std::size_t item_count_{};
+    std::uint64_t capacity_failed_revision_{
+        std::numeric_limits<std::uint64_t>::max()};
+    std::uint64_t capacity_failed_generation_{};
+    bool capacity_exhausted_{};
 };
 
 class WindowBase {
@@ -831,6 +921,10 @@ public:
     bool initialize(GraphicsDevice& graphics);
     bool freeze(RECT bounds, HWND magnifier);
     void show_live(RECT bounds);
+    bool show_edit(RECT bounds, RECT source, float factor, bool annotating,
+                   HWND magnifier);
+    void update_edit_view(RECT bounds, RECT source, float factor);
+    void set_edit_annotating(bool annotating);
     void hide();
     void set_bounds(RECT bounds);
     void set_frozen(bool frozen);
@@ -838,9 +932,19 @@ public:
     void clear_annotations();
     bool undo();
     bool redo();
-    [[nodiscard]] bool empty() const noexcept { return document_.empty(); }
-    [[nodiscard]] std::size_t item_count() const noexcept { return document_.items().size(); }
+    [[nodiscard]] bool empty() const noexcept {
+        return edit_mode_ ? edit_document_.empty() : document_.empty();
+    }
+    [[nodiscard]] std::size_t item_count() const noexcept {
+        return edit_mode_ ? edit_document_.items().size() : document_.items().size();
+    }
     [[nodiscard]] bool frozen() const noexcept { return frozen_; }
+    [[nodiscard]] bool edit_mode() const noexcept { return edit_mode_; }
+    [[nodiscard]] bool accepts_annotations() const noexcept {
+        return frozen_ || (edit_mode_ && edit_annotating_);
+    }
+    void populate_edit_stress_document(std::size_t count);
+    [[nodiscard]] std::optional<PointF> first_edit_view_point() const noexcept;
     void commit_text_screen(PointF position, Color color, float thickness,
                             std::wstring text);
     void cancel_gesture();
@@ -851,6 +955,9 @@ protected:
 
 private:
     PointF local_point(LPARAM lparam) const noexcept;
+    PointF annotation_point(PointF local) const noexcept;
+    PointF view_point(PointF annotation) const noexcept;
+    float annotation_length(float view_length) const noexcept;
     std::optional<PointF> pointer_local_point(WPARAM wparam) const noexcept;
     void refresh_pencil_cursor();
     void begin_gesture(PointF point, float pressure = 1.0F);
@@ -860,10 +967,14 @@ private:
     bool capture_composite(PointF first, PointF second);
 
     Document document_;
+    Document edit_document_;
     std::optional<Drawable> preview_;
     ComPtr<ID2D1Bitmap1> snapshot_;
     RECT bounds_{};
     bool frozen_{};
+    bool edit_mode_{};
+    bool edit_annotating_{};
+    ZoomViewportTransform edit_transform_{};
     bool drawing_{};
     bool erasing_{};
     bool pointer_active_{};
@@ -871,6 +982,7 @@ private:
     UINT32 pointer_id_{};
     HCURSOR pencil_cursor_{};
     DocumentRenderCache document_cache_;
+    WorldDocumentRenderCache edit_document_cache_;
 };
 
 class ZoomTargetWindow final : public WindowBase {
@@ -889,6 +1001,36 @@ protected:
     void render() override;
 };
 
+class ZoomWindow;
+
+class ZoomEditToolbarWindow final : public WindowBase {
+public:
+    ZoomEditToolbarWindow(Controller& controller, ZoomWindow& owner)
+        : WindowBase(controller), owner_(owner) {}
+    bool initialize(GraphicsDevice& graphics);
+    void show_for(RECT zoom_bounds, float factor, ZoomEditState state);
+    void hide() { ShowWindow(window_, SW_HIDE); }
+    void bring_to_front();
+    [[nodiscard]] bool visible() const noexcept {
+        return IsWindowVisible(window_) != FALSE;
+    }
+    [[nodiscard]] bool contains_screen_point(POINT point) const noexcept;
+
+protected:
+    LRESULT handle_message(UINT message, WPARAM wparam, LPARAM lparam) override;
+    void render() override;
+
+private:
+    enum class Command { None, ZoomOut, ZoomIn, Navigate, Annotate, Close };
+    [[nodiscard]] Command command_at(POINT client) const noexcept;
+    void execute(Command command);
+
+    ZoomWindow& owner_;
+    float factor_{2.0F};
+    ZoomEditState state_{ZoomEditState::Navigate};
+    Command hovered_{Command::None};
+};
+
 class ZoomWindow final : public WindowBase {
 public:
     explicit ZoomWindow(Controller& controller) : WindowBase(controller) {}
@@ -899,6 +1041,9 @@ public:
     void hide_zoom();
     void apply_theme();
     bool toggle_freeze();
+    void toggle_edit_mode();
+    void set_edit_state(ZoomEditState state);
+    void adjust_zoom(float delta);
     void execute_action(HotkeyAction action);
     void bring_to_front();
     void invalidate_ink();
@@ -910,6 +1055,16 @@ public:
     [[nodiscard]] bool active() const noexcept { return active_; }
     [[nodiscard]] bool frozen() const noexcept {
         return ink_ && ink_->frozen();
+    }
+    [[nodiscard]] bool edit_active() const noexcept {
+        return edit_state_ != ZoomEditState::Off;
+    }
+    [[nodiscard]] bool accepts_annotations() const noexcept {
+        return ink_ && ink_->accepts_annotations();
+    }
+    [[nodiscard]] bool toolbar_contains(POINT point) const noexcept {
+        return edit_toolbar_ && edit_toolbar_->visible() &&
+               edit_toolbar_->contains_screen_point(point);
     }
     [[nodiscard]] bool annotations_empty() const noexcept {
         return !ink_ || ink_->empty();
@@ -929,6 +1084,11 @@ private:
         UINT_PTR subclass_id, DWORD_PTR reference_data);
     void refresh_source();
     void update_lens_cursor(bool active);
+    void remember_foreground_target();
+    bool start_recordable_output();
+    void stop_recordable_output();
+    void update_recordable_output();
+    void set_edit_passthrough(bool enabled);
     bool install_click_hook();
     void uninstall_click_hook();
     void apply_color_effect();
@@ -952,12 +1112,20 @@ private:
     HWND magnifier_{};
     std::unique_ptr<ZoomInkWindow> ink_;
     std::unique_ptr<ZoomTargetWindow> target_;
+    std::unique_ptr<ZoomEditToolbarWindow> edit_toolbar_;
     RECT monitor_rect_{};
     RECT zoom_rect_{};
     RECT source_rect_{};
+    HTHUMBNAIL recordable_thumbnail_{};
+    SIZE recordable_source_size_{};
+    RECT recordable_source_bounds_{};
+    bool recordable_output_{};
     bool initialized_{};
     bool active_{};
     bool overview_{};
+    ZoomEditState edit_state_{ZoomEditState::Off};
+    POINT edit_anchor_{};
+    HWND foreground_before_zoom_{};
     HHOOK click_hook_{};
     bool click_freeze_pending_{};
     HCURSOR lens_cursor_{};
@@ -1019,6 +1187,8 @@ public:
     void close_panels();
     void stop_transient_mode();
     void begin_text(PointF position);
+    void commit_pending_text();
+    void cancel_pending_text();
     void commit_text(PointF position, Color color, float thickness, std::wstring text);
     void commit_drawable(Drawable drawable);
     void update_transient_ink();
@@ -1401,8 +1571,8 @@ struct DrawableRenderResources {
 };
 
 void draw_arrow_head(ID2D1DeviceContext* context, ID2D1Brush* brush, PointF before,
-                     PointF end, float width) {
-    const auto head = arrow_head_points(before, end, width);
+                     PointF end, float width, float reference_scale = 1.0F) {
+    const auto head = arrow_head_points(before, end, width, reference_scale);
     context->DrawLine(D2D1::Point2F(end.x, end.y),
                       D2D1::Point2F(head.left.x, head.left.y), brush, width);
     context->DrawLine(D2D1::Point2F(end.x, end.y),
@@ -1412,14 +1582,19 @@ void draw_arrow_head(ID2D1DeviceContext* context, ID2D1Brush* brush, PointF befo
 void draw_drawable(GraphicsDevice& graphics, ID2D1DeviceContext* context,
                    DrawableRenderResources& resources, const Drawable& drawable,
                    float offset_x, float offset_y,
-                   float opacity = 1.0F) {
+                   float opacity = 1.0F, float scale = 1.0F,
+                   bool source_space = false) {
     if (drawable.points.empty()) return;
+    scale = std::max(scale, 0.001F);
+    const float render_width = drawable.width * scale;
+    const float render_reference_scale = drawable.reference_scale / scale;
     const float alpha = drawable.kind == Tool::Highlighter ? 0.34F * opacity : opacity;
     resources.brush->SetColor(d2d_color(drawable.color, alpha));
     ID2D1SolidColorBrush* brush = resources.brush.Get();
 
-    const auto local = [offset_x, offset_y](PointF point) {
-        return D2D1::Point2F(point.x - offset_x, point.y - offset_y);
+    const auto local = [offset_x, offset_y, scale](PointF point) {
+        return D2D1::Point2F((point.x - offset_x) * scale,
+                             (point.y - offset_y) * scale);
     };
 
     if ((drawable.kind == Tool::Rectangle || drawable.kind == Tool::Screenshot) &&
@@ -1432,7 +1607,7 @@ void draw_drawable(GraphicsDevice& graphics, ID2D1DeviceContext* context,
             if (resources.screenshot_shade)
                 context->FillRectangle(rectangle, resources.screenshot_shade.Get());
         }
-        context->DrawRectangle(rectangle, brush, drawable.width, resources.stroke_style.Get());
+        context->DrawRectangle(rectangle, brush, render_width, resources.stroke_style.Get());
         return;
     }
     if (drawable.kind == Tool::Ellipse && drawable.points.size() >= 2) {
@@ -1445,23 +1620,30 @@ void draw_drawable(GraphicsDevice& graphics, ID2D1DeviceContext* context,
         context->DrawEllipse(D2D1::Ellipse(D2D1::Point2F((left + right) * 0.5F,
                                                          (top + bottom) * 0.5F),
                                            (right - left) * 0.5F, (bottom - top) * 0.5F),
-                             brush, drawable.width, resources.stroke_style.Get());
+                             brush, render_width, resources.stroke_style.Get());
         return;
     }
     if (drawable.kind == Tool::Text) {
-        const float font_size = std::clamp(drawable.width * 3.4F, 16.0F, 72.0F);
+        const float font_size = std::clamp(
+            drawable.width * 3.4F * scale,
+            source_space ? 1.0F : 16.0F, 256.0F);
         if (auto* format = resources.text_format(graphics, font_size)) {
             const auto origin = local(drawable.points.front());
+            const auto extent = drawable.points.size() >= 2
+                ? local(drawable.points[1])
+                : D2D1::Point2F(origin.x + 600.0F * scale,
+                                origin.y + 400.0F * scale);
             context->DrawTextW(drawable.text.c_str(), static_cast<UINT32>(drawable.text.size()),
                                format, D2D1::RectF(origin.x, origin.y,
-                                                  origin.x + 600.0F,
-                                                  origin.y + 400.0F), brush);
+                                                  extent.x, extent.y), brush);
         }
         return;
     }
 
     if (drawable.kind == Tool::CurvedArrow && drawable.points.size() >= 2) {
-        const auto curve = curved_arrow_bezier(drawable.points.front(), drawable.points.back());
+        const auto curve = curved_arrow_bezier(
+            drawable.points.front(), drawable.points.back(),
+            drawable.reference_scale);
         ComPtr<ID2D1PathGeometry> geometry;
         graphics.d2d_factory()->CreatePathGeometry(geometry.GetAddressOf());
         if (!geometry) return;
@@ -1472,22 +1654,21 @@ void draw_drawable(GraphicsDevice& graphics, ID2D1DeviceContext* context,
                                              local(curve.end)));
         sink->EndFigure(D2D1_FIGURE_END_OPEN);
         sink->Close();
-        context->DrawGeometry(geometry.Get(), brush, drawable.width,
+        context->DrawGeometry(geometry.Get(), brush, render_width,
                               resources.stroke_style.Get());
-        PointF tangent = curve.control2;
-        PointF end = curve.end;
-        tangent.x -= offset_x;
-        tangent.y -= offset_y;
-        end.x -= offset_x;
-        end.y -= offset_y;
-        draw_arrow_head(context, brush, tangent, end, drawable.width);
+        const auto tangent_local = local(curve.control2);
+        const auto end_local = local(curve.end);
+        draw_arrow_head(context, brush,
+                        {tangent_local.x, tangent_local.y},
+                        {end_local.x, end_local.y}, render_width,
+                        render_reference_scale);
         return;
     }
 
     if (drawable.points.size() == 1) {
         const auto point = local(drawable.points.front());
-        context->FillEllipse(D2D1::Ellipse(point, drawable.width * 0.5F,
-                                           drawable.width * 0.5F), brush);
+        context->FillEllipse(D2D1::Ellipse(point, render_width * 0.5F,
+                                           render_width * 0.5F), brush);
         return;
     }
 
@@ -1519,17 +1700,25 @@ void draw_drawable(GraphicsDevice& graphics, ID2D1DeviceContext* context,
     }
     sink->EndFigure(D2D1_FIGURE_END_OPEN);
     sink->Close();
-    context->DrawGeometry(geometry.Get(), brush, drawable.width,
+    context->DrawGeometry(geometry.Get(), brush, render_width,
                           resources.stroke_style.Get());
     if (drawable.kind == Tool::Arrow && drawable.points.size() >= 2) {
-        PointF before = drawable.points[drawable.points.size() - 2];
-        PointF end = drawable.points.back();
-        before.x -= offset_x;
-        before.y -= offset_y;
-        end.x -= offset_x;
-        end.y -= offset_y;
-        draw_arrow_head(context, brush, before, end, drawable.width);
+        const auto before_local = local(drawable.points[drawable.points.size() - 2]);
+        const auto end_local = local(drawable.points.back());
+        draw_arrow_head(context, brush,
+                        {before_local.x, before_local.y},
+                        {end_local.x, end_local.y}, render_width,
+                        render_reference_scale);
     }
+}
+
+RectF drawable_render_bounds(const Drawable& drawable) noexcept {
+    RectF bounds = drawable.bounds();
+    if (drawable.kind == Tool::Text && drawable.points.size() == 1) {
+        bounds.right = std::max(bounds.right, drawable.points.front().x + 600.0F);
+        bounds.bottom = std::max(bounds.bottom, drawable.points.front().y + 400.0F);
+    }
+    return bounds;
 }
 
 bool DocumentRenderCache::update(GraphicsDevice& graphics, Surface& surface,
@@ -1630,6 +1819,214 @@ void DocumentRenderCache::reset() noexcept {
     offset_x_ = 0.0F;
     offset_y_ = 0.0F;
     item_count_ = 0;
+}
+
+int WorldDocumentRenderCache::tile_coordinate(float value) noexcept {
+    if (!std::isfinite(value)) return 0;
+    const double coordinate = std::floor(
+        static_cast<double>(value) / static_cast<double>(kTileSize));
+    return static_cast<int>(std::clamp(
+        coordinate, static_cast<double>(std::numeric_limits<int>::min()),
+        static_cast<double>(std::numeric_limits<int>::max())));
+}
+
+RectF WorldDocumentRenderCache::tile_bounds(WorldTileKey key) noexcept {
+    const float left = static_cast<float>(key.x) * static_cast<float>(kTileSize);
+    const float top = static_cast<float>(key.y) * static_cast<float>(kTileSize);
+    return {left, top, left + static_cast<float>(kTileSize),
+            top + static_cast<float>(kTileSize)};
+}
+
+bool WorldDocumentRenderCache::ensure_tile(ID2D1DeviceContext* context,
+                                            WorldTileKey key,
+                                            ID2D1Bitmap1** bitmap) {
+    if (!context || !bitmap) return false;
+    const auto found = tiles_.find(key);
+    if (found != tiles_.end()) {
+        *bitmap = found->second.Get();
+        return true;
+    }
+    if (tiles_.size() >= kMaxTileCount) {
+        capacity_exhausted_ = true;
+        return false;
+    }
+    const auto properties = D2D1::BitmapProperties1(
+        D2D1_BITMAP_OPTIONS_TARGET,
+        D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,
+                          D2D1_ALPHA_MODE_PREMULTIPLIED),
+        96.0F, 96.0F);
+    ComPtr<ID2D1Bitmap1> created;
+    const HRESULT result = context->CreateBitmap(
+        D2D1::SizeU(static_cast<UINT>(kTileSize),
+                    static_cast<UINT>(kTileSize)),
+        nullptr, 0, properties, created.GetAddressOf());
+    if (FAILED(result) || !created) return false;
+    auto [iterator, inserted] = tiles_.emplace(key, std::move(created));
+    if (!inserted) return false;
+    *bitmap = iterator->second.Get();
+    return true;
+}
+
+bool WorldDocumentRenderCache::append(GraphicsDevice& graphics,
+                                      ID2D1DeviceContext* context,
+                                      const Drawable& drawable) {
+    const RectF bounds = drawable_render_bounds(drawable);
+    const int first_x = tile_coordinate(bounds.left);
+    const int last_x = tile_coordinate(bounds.right);
+    const int first_y = tile_coordinate(bounds.top);
+    const int last_y = tile_coordinate(bounds.bottom);
+    ComPtr<ID2D1Image> original_target;
+    context->GetTarget(original_target.GetAddressOf());
+    if (!original_target) return false;
+    bool success = true;
+    for (int y = first_y; y <= last_y && success; ++y) {
+        for (int x = first_x; x <= last_x; ++x) {
+            const WorldTileKey key{x, y};
+            const bool existed = tiles_.contains(key);
+            ID2D1Bitmap1* tile{};
+            if (!ensure_tile(context, key, &tile) || !tile) {
+                success = false;
+                break;
+            }
+            context->SetTarget(tile);
+            context->BeginDraw();
+            context->SetTransform(D2D1::Matrix3x2F::Identity());
+            if (!existed) context->Clear(D2D1::ColorF(0, 0.0F));
+            DrawableRenderResources resources;
+            if (!resources.initialize(graphics, context)) {
+                success = false;
+            } else {
+                const RectF tile_rect = tile_bounds(key);
+                draw_drawable(graphics, context, resources, drawable,
+                              tile_rect.left, tile_rect.top,
+                              1.0F, 1.0F, true);
+            }
+            const HRESULT result = context->EndDraw();
+            if (FAILED(result)) success = false;
+        }
+    }
+    context->SetTarget(original_target.Get());
+    return success;
+}
+
+bool WorldDocumentRenderCache::rebuild(GraphicsDevice& graphics,
+                                       ID2D1DeviceContext* context,
+                                       const Document& document) {
+    tiles_.clear();
+    capacity_exhausted_ = false;
+    for (const auto& drawable : document.items()) {
+        const RectF bounds = drawable_render_bounds(drawable);
+        const int first_x = tile_coordinate(bounds.left);
+        const int last_x = tile_coordinate(bounds.right);
+        const int first_y = tile_coordinate(bounds.top);
+        const int last_y = tile_coordinate(bounds.bottom);
+        for (int y = first_y; y <= last_y; ++y) {
+            for (int x = first_x; x <= last_x; ++x) {
+                ID2D1Bitmap1* unused{};
+                if (!ensure_tile(context, {x, y}, &unused)) return false;
+            }
+        }
+    }
+    ComPtr<ID2D1Image> original_target;
+    context->GetTarget(original_target.GetAddressOf());
+    if (!original_target) return false;
+    bool success = true;
+    for (auto& [key, bitmap] : tiles_) {
+        context->SetTarget(bitmap.Get());
+        context->BeginDraw();
+        context->SetTransform(D2D1::Matrix3x2F::Identity());
+        context->Clear(D2D1::ColorF(0, 0.0F));
+        DrawableRenderResources resources;
+        if (!document.empty() && !resources.initialize(graphics, context)) {
+            success = false;
+        } else {
+            const RectF tile_rect = tile_bounds(key);
+            for (const auto& drawable : document.items()) {
+                if (drawable_render_bounds(drawable).intersects(tile_rect)) {
+                    draw_drawable(graphics, context, resources, drawable,
+                                  tile_rect.left, tile_rect.top,
+                                  1.0F, 1.0F, true);
+                }
+            }
+        }
+        const HRESULT result = context->EndDraw();
+        if (FAILED(result)) success = false;
+        if (!success) break;
+    }
+    context->SetTarget(original_target.Get());
+    if (!success) tiles_.clear();
+    return success;
+}
+
+bool WorldDocumentRenderCache::update(GraphicsDevice& graphics, Surface& surface,
+                                      const Document& document) {
+    auto* context = surface.context();
+    if (!context) return false;
+    if (surface_generation_ != surface.generation()) reset();
+    if (capacity_failed_revision_ == document.revision() &&
+        capacity_failed_generation_ == surface.generation()) return false;
+    if (revision_ == document.revision()) return true;
+
+    bool updated = false;
+    const bool consecutive = revision_ != std::numeric_limits<std::uint64_t>::max() &&
+                             document.revision() == revision_ + 1;
+    if (consecutive && document.last_change_kind() == DocumentChangeKind::Append &&
+        document.last_change_index() == item_count_ &&
+        document.items().size() == item_count_ + 1) {
+        updated = append(graphics, context, document.items().back());
+    } else if (consecutive &&
+               document.last_change_kind() == DocumentChangeKind::Clear &&
+               document.empty()) {
+        tiles_.clear();
+        updated = true;
+    }
+    if (!updated) updated = rebuild(graphics, context, document);
+    if (!updated) {
+        if (capacity_exhausted_) {
+            // Do not allocate and discard the same oversized atlas every frame.
+            // A document revision or device/surface generation change retries it.
+            tiles_.clear();
+            capacity_failed_revision_ = document.revision();
+            capacity_failed_generation_ = surface.generation();
+            surface_generation_ = surface.generation();
+        }
+        return false;
+    }
+    revision_ = document.revision();
+    surface_generation_ = surface.generation();
+    item_count_ = document.items().size();
+    capacity_failed_revision_ = std::numeric_limits<std::uint64_t>::max();
+    capacity_failed_generation_ = 0;
+    capacity_exhausted_ = false;
+    return true;
+}
+
+void WorldDocumentRenderCache::draw(
+        ID2D1DeviceContext* context,
+        const ZoomViewportTransform& transform) const {
+    if (!context) return;
+    for (const auto& [key, bitmap] : tiles_) {
+        const RectF world = tile_bounds(key);
+        if (!world.intersects(transform.source)) continue;
+        const auto top_left = transform.source_to_view({world.left, world.top});
+        const auto bottom_right = transform.source_to_view({world.right, world.bottom});
+        context->DrawBitmap(
+            bitmap.Get(),
+            D2D1::RectF(top_left.x, top_left.y, bottom_right.x, bottom_right.y),
+            1.0F, D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
+            D2D1::RectF(0.0F, 0.0F, static_cast<float>(kTileSize),
+                        static_cast<float>(kTileSize)));
+    }
+}
+
+void WorldDocumentRenderCache::reset() noexcept {
+    tiles_.clear();
+    revision_ = std::numeric_limits<std::uint64_t>::max();
+    surface_generation_ = 0;
+    item_count_ = 0;
+    capacity_failed_revision_ = std::numeric_limits<std::uint64_t>::max();
+    capacity_failed_generation_ = 0;
+    capacity_exhausted_ = false;
 }
 
 bool WindowBase::create(const wchar_t* class_name, const wchar_t* title, DWORD ex_style,
@@ -2276,6 +2673,16 @@ void PaletteWindow::install_tooltips() {
 }
 
 void PaletteWindow::install_hotkeys() {
+    // UI automation can run alongside a normal or recently terminated copy.
+    // It invokes the same commands directly and must not steal the user's
+    // machine-wide shortcuts merely to exercise unrelated interaction paths.
+    wchar_t qa_instance[2]{};
+    if (GetEnvironmentVariableW(L"ELITE_PEN_QA_INSTANCE_ID", qa_instance,
+                                static_cast<DWORD>(std::size(qa_instance))) > 0) {
+        registered_hotkeys_ = controller_.preferences().hotkeys;
+        hotkeys_registered_ = true;
+        return;
+    }
     if (!apply_hotkeys(controller_.preferences().hotkeys)) {
         controller_.preferences().hotkeys = kDefaultHotkeys;
         apply_hotkeys(kDefaultHotkeys);
@@ -4041,7 +4448,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.7.1",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.8.0",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
@@ -4156,7 +4563,8 @@ bool SettingsWindow::initialize() {
                                     GetModuleHandleW(nullptr), nullptr);
     shortcuts_ = CreateWindowW(L"STATIC",
         L"Atajos de Elite Pen. Gestos: Shift Línea; Ctrl Rectángulo; Tab Elipse; "
-        L"Ctrl+Shift Flecha; Shift+Tab Flecha curva.",
+        L"Ctrl+Shift Flecha; Shift+Tab Flecha curva. Zoom: E Zoom editable; "
+        L"Mano usa la app ampliada; Lápiz congela y anota; Espacio vuelve a Mano.",
         WS_CHILD | SS_OWNERDRAW, 24, 119, 540, 400, window_,
         reinterpret_cast<HMENU>(4103), GetModuleHandleW(nullptr), nullptr);
     for (std::size_t index = 0; index < hotkey_buttons_.size(); ++index) {
@@ -4179,7 +4587,7 @@ bool SettingsWindow::initialize() {
                                     reinterpret_cast<HMENU>(4300),
                                     GetModuleHandleW(nullptr), nullptr);
     help_ = CreateWindowW(L"STATIC",
-        L"Ayuda de Elite Pen 2.7.1. Anotación, pizarra, captura y zoom para Windows. "
+        L"Ayuda de Elite Pen 2.8.0. Anotación, pizarra, captura y zoom para Windows. "
         L"Código abierto bajo Apache License 2.0. Desarrollado por Power Elite Studio.",
         WS_CHILD | SS_OWNERDRAW, 24, 119, 540, 400, window_,
         reinterpret_cast<HMENU>(4105), GetModuleHandleW(nullptr), nullptr);
@@ -4358,14 +4766,15 @@ void SettingsWindow::paint_shortcuts(HDC dc, RECT bounds) {
     DrawTextW(dc, L"GUIA RAPIDA DEL ZOOM", -1, &context_heading,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
     SelectObject(dc, small_font_);
-    constexpr std::array<HotkeyInfo, 4> contextual{{
+    constexpr std::array<HotkeyInfo, 5> contextual{{
         {L"P / clic", L"Congelar o reanudar · Rueda / + / - ampliar"},
+        {L"E", L"Zoom editable · Mano usa la app · Lapiz anota"},
         {L"F / L / D", L"Vistas · I invertir · 0 vista general"},
         {L"Espacio / M", L"Recorrer vistas · Esc / F4 / clic der. salir"},
         {L"Texto", L"Ctrl+Enter insertar · Ctrl+V pegar · Esc cancelar"}
     }};
     for (std::size_t index = 0; index < contextual.size(); ++index) {
-        const int y = bounds.top + 324 + static_cast<int>(index) * 14;
+        const int y = bounds.top + 322 + static_cast<int>(index) * 14;
         SetTextColor(dc, theme_colorref(theme.text));
         RECT key{bounds.left, y, bounds.left + 92, y + 16};
         DrawTextW(dc, contextual[index].title, -1, &key,
@@ -4406,7 +4815,7 @@ void SettingsWindow::paint_help(HDC dc, RECT bounds) {
     SelectObject(dc, small_font_);
     SetTextColor(dc, theme_colorref(theme.text_muted));
     RECT version{bounds.left, bounds.top + 73, bounds.right, bounds.top + 94};
-    DrawTextW(dc, L"Version 2.7.1 · Windows 10 y 11 · x64", -1, &version,
+    DrawTextW(dc, L"Version 2.8.0 · Windows 10 y 11 · x64", -1, &version,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
 
     SelectObject(dc, body_font_);
@@ -4420,7 +4829,7 @@ void SettingsWindow::paint_help(HDC dc, RECT bounds) {
     SelectObject(dc, small_font_);
     constexpr std::array<const wchar_t*, 3> capabilities{{
         L"• Paleta de pintor y barra lineal con controles rápidos",
-        L"• Zoom vivo, lente, imagen congelada y anotaciones independientes",
+        L"• Zoom vivo, congelado y editable con anotaciones ancladas",
         L"• Edición portable o instalable; preferencias guardadas localmente"
     }};
     for (std::size_t index = 0; index < capabilities.size(); ++index) {
@@ -5118,17 +5527,22 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
 }
 
 bool ZoomInkWindow::initialize(GraphicsDevice& graphics) {
+    // DirectComposition owns the premultiplied alpha for this full-screen
+    // surface. WS_EX_LAYERED can make a transparent swap chain appear as an
+    // opaque black rectangle over Magnifier on some Windows 10/11 drivers.
+    // NOREDIRECTIONBITMAP is the same proven composition contract used by the
+    // palette and keeps both Navigate transparency and frozen snapshots intact.
     constexpr DWORD ex_style = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE |
-                               WS_EX_LAYERED | WS_EX_TRANSPARENT;
+                               WS_EX_NOREDIRECTIONBITMAP | WS_EX_TRANSPARENT;
     const RECT initial{0, 0, 1, 1};
     if (!create(L"ElitePen.ZoomInk", L"Anotaciones de zoom — Elite Pen",
-                ex_style, WS_POPUP, initial)) return false;
-    SetLayeredWindowAttributes(window_, 0, 255, LWA_ALPHA);
+                 ex_style, WS_POPUP, initial)) return false;
     if (!initialize_surface(graphics)) return false;
     refresh_pencil_cursor();
-#ifndef ELITE_PEN_DEBUG
-    SetWindowDisplayAffinity(window_, WDA_EXCLUDEFROMCAPTURE);
-#endif
+    // Zoom annotations are presentation content, not private chrome. Keeping
+    // this full-screen surface capturable is essential for OBS and other course
+    // recorders; excluding it makes Windows emit a solid black rectangle.
+    SetWindowDisplayAffinity(window_, WDA_NONE);
     return true;
 }
 
@@ -5148,11 +5562,79 @@ void ZoomInkWindow::set_bounds(RECT bounds) {
 }
 
 void ZoomInkWindow::show_live(RECT bounds) {
+    edit_mode_ = false;
+    edit_annotating_ = false;
     set_bounds(bounds);
     set_frozen(false);
     snapshot_has_content_ = false;
     render();
     ShowWindow(window_, SW_SHOWNOACTIVATE);
+}
+
+bool ZoomInkWindow::show_edit(RECT bounds, RECT source, float factor,
+                              bool annotating, HWND magnifier) {
+    cancel_gesture();
+    frozen_ = false;
+    snapshot_.Reset();
+    snapshot_has_content_ = false;
+    edit_mode_ = true;
+    set_bounds(bounds);
+    update_edit_view(bounds, source, factor);
+    if (annotating) {
+        UpdateWindow(magnifier);
+        DwmFlush();
+        if (!capture_snapshot(magnifier, bounds)) {
+            set_edit_annotating(false);
+            return false;
+        }
+    }
+    set_edit_annotating(annotating);
+    if (annotating) {
+        render();
+        ShowWindow(window_, SW_SHOW);
+    } else {
+        // MANO is a real interactive magnifier, not an annotation overlay. Keep
+        // the source-space document in memory, but remove this composition
+        // surface entirely so it cannot obscure the app being magnified.
+        ShowWindow(window_, SW_HIDE);
+    }
+    if (annotating) {
+        SetForegroundWindow(window_);
+        SetFocus(window_);
+    }
+    return true;
+}
+
+void ZoomInkWindow::update_edit_view(RECT bounds, RECT source, float factor) {
+    if (!edit_mode_) return;
+    if (!EqualRect(&bounds_, &bounds)) set_bounds(bounds);
+    edit_transform_.source = {
+        static_cast<float>(source.left), static_cast<float>(source.top),
+        static_cast<float>(source.right), static_cast<float>(source.bottom)};
+    edit_transform_.scale = std::clamp(factor, 1.0F, 8.0F);
+    invalidate();
+}
+
+void ZoomInkWindow::set_edit_annotating(bool annotating) {
+    if (!edit_mode_) return;
+    cancel_gesture();
+    edit_annotating_ = annotating;
+    if (!annotating) {
+        snapshot_.Reset();
+        snapshot_has_content_ = false;
+        ShowWindow(window_, SW_HIDE);
+    }
+    LONG_PTR style = GetWindowLongPtrW(window_, GWL_EXSTYLE);
+    if (annotating) {
+        style &= ~static_cast<LONG_PTR>(WS_EX_TRANSPARENT | WS_EX_NOACTIVATE);
+    } else {
+        style |= WS_EX_TRANSPARENT | WS_EX_NOACTIVATE;
+    }
+    SetWindowLongPtrW(window_, GWL_EXSTYLE, style);
+    SetWindowPos(window_, nullptr, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                 SWP_FRAMECHANGED);
+    invalidate();
 }
 
 void ZoomInkWindow::hide() {
@@ -5162,14 +5644,22 @@ void ZoomInkWindow::hide() {
     snapshot_has_content_ = false;
     preview_.reset();
     document_ = Document{};
+    edit_document_ = Document{};
     document_cache_.reset();
+    edit_document_cache_.reset();
+    edit_mode_ = false;
+    edit_annotating_ = false;
     ShowWindow(window_, SW_HIDE);
 }
 
 void ZoomInkWindow::set_frozen(bool frozen) {
     frozen_ = frozen;
+    if (frozen) {
+        edit_mode_ = false;
+        edit_annotating_ = false;
+    }
     LONG_PTR style = GetWindowLongPtrW(window_, GWL_EXSTYLE);
-    if (frozen_) {
+    if (frozen_ || (edit_mode_ && edit_annotating_)) {
         style &= ~static_cast<LONG_PTR>(WS_EX_TRANSPARENT | WS_EX_NOACTIVATE);
     } else {
         cancel_gesture();
@@ -5352,18 +5842,32 @@ bool ZoomInkWindow::capture_composite(PointF first, PointF second) {
             D2D1::RectF(static_cast<float>(left), static_cast<float>(top),
                         static_cast<float>(right), static_cast<float>(bottom)));
         if (controller_.state().annotations_visible) {
+            const Document& active_document = edit_mode_ ? edit_document_ : document_;
+            const float render_scale = edit_mode_ ? edit_transform_.scale : 1.0F;
+            const float offset_x = edit_mode_
+                ? edit_transform_.source.left +
+                    static_cast<float>(left) / render_scale
+                : static_cast<float>(left);
+            const float offset_y = edit_mode_
+                ? edit_transform_.source.top +
+                    static_cast<float>(top) / render_scale
+                : static_cast<float>(top);
+            const RectF viewport{
+                offset_x, offset_y,
+                offset_x + static_cast<float>(width) / render_scale,
+                offset_y + static_cast<float>(height) / render_scale};
             DrawableRenderResources resources;
-            if (!document_.empty() &&
+            if (!active_document.empty() &&
                 !resources.initialize(controller_.graphics(), context.Get())) {
                 result = E_FAIL;
             } else {
-                const RectF viewport{static_cast<float>(left), static_cast<float>(top),
-                                     static_cast<float>(right), static_cast<float>(bottom)};
-                for (const auto& drawable : document_.items()) {
-                    if (drawable.bounds().intersects(viewport)) {
+                for (const auto& drawable : active_document.items()) {
+                    const RectF bounds = edit_mode_
+                        ? drawable_render_bounds(drawable) : drawable.bounds();
+                    if (bounds.intersects(viewport)) {
                         draw_drawable(controller_.graphics(), context.Get(), resources,
-                                      drawable, static_cast<float>(left),
-                                      static_cast<float>(top));
+                                      drawable, offset_x, offset_y, 1.0F,
+                                      render_scale, edit_mode_);
                     }
                 }
             }
@@ -5421,17 +5925,20 @@ bool ZoomInkWindow::freeze(RECT bounds, HWND magnifier) {
 
 void ZoomInkWindow::clear_annotations() {
     cancel_gesture();
-    if (document_.clear()) invalidate();
+    Document& active = edit_mode_ ? edit_document_ : document_;
+    if (active.clear()) invalidate();
 }
 
 bool ZoomInkWindow::undo() {
-    const bool changed = document_.undo();
+    Document& active = edit_mode_ ? edit_document_ : document_;
+    const bool changed = active.undo();
     if (changed) invalidate();
     return changed;
 }
 
 bool ZoomInkWindow::redo() {
-    const bool changed = document_.redo();
+    Document& active = edit_mode_ ? edit_document_ : document_;
+    const bool changed = active.redo();
     if (changed) invalidate();
     return changed;
 }
@@ -5444,16 +5951,42 @@ void ZoomInkWindow::commit_text_screen(PointF position, Color color, float thick
     Drawable drawable;
     drawable.kind = Tool::Text;
     drawable.color = color;
-    drawable.width = thickness;
-    drawable.points.push_back({static_cast<float>(point.x), static_cast<float>(point.y)});
+    if (edit_mode_) {
+        const float view_font_size = std::clamp(
+            thickness * 3.4F, 16.0F, 72.0F);
+        drawable.width = annotation_length(view_font_size) / 3.4F;
+    } else {
+        drawable.width = thickness;
+    }
+    const PointF local{static_cast<float>(point.x), static_cast<float>(point.y)};
+    const PointF origin = annotation_point(local);
+    drawable.points.push_back(origin);
+    if (edit_mode_) {
+        drawable.points.push_back({
+            origin.x + annotation_length(600.0F),
+            origin.y + annotation_length(400.0F)});
+    }
     drawable.text = std::move(text);
-    document_.add(std::move(drawable));
+    (edit_mode_ ? edit_document_ : document_).add(std::move(drawable));
     invalidate();
 }
 
 PointF ZoomInkWindow::local_point(LPARAM lparam) const noexcept {
     return {static_cast<float>(GET_X_LPARAM(lparam)),
             static_cast<float>(GET_Y_LPARAM(lparam))};
+}
+
+PointF ZoomInkWindow::annotation_point(PointF local) const noexcept {
+    return edit_mode_ ? edit_transform_.view_to_source(local) : local;
+}
+
+PointF ZoomInkWindow::view_point(PointF annotation) const noexcept {
+    return edit_mode_ ? edit_transform_.source_to_view(annotation) : annotation;
+}
+
+float ZoomInkWindow::annotation_length(float view_length) const noexcept {
+    return edit_mode_ ? edit_transform_.view_to_source_length(view_length)
+                      : view_length;
 }
 
 std::optional<PointF> ZoomInkWindow::pointer_local_point(WPARAM wparam) const noexcept {
@@ -5464,16 +5997,18 @@ std::optional<PointF> ZoomInkWindow::pointer_local_point(WPARAM wparam) const no
 }
 
 void ZoomInkWindow::begin_gesture(PointF point, float pressure) {
-    if (!frozen_) return;
+    if (!accepts_annotations()) return;
     PointF screen_point{point.x + static_cast<float>(bounds_.left),
                         point.y + static_cast<float>(bounds_.top)};
     if (controller_.route_palette_command(screen_point)) return;
+    point = annotation_point(point);
+    Document& active = edit_mode_ ? edit_document_ : document_;
     const Tool tool = current_gesture_tool(controller_.state().tool);
     if (tool == Tool::Eraser) {
-        document_.begin_compound();
+        active.begin_compound();
         erasing_ = true;
-        if (document_.erase_at(point,
-                std::max(12.0F, controller_.state().thickness * 2.5F))) invalidate();
+        if (active.erase_at(point, annotation_length(
+                std::max(12.0F, controller_.state().thickness * 2.5F)))) invalidate();
         drawing_ = true;
         SetCapture(window_);
         return;
@@ -5486,8 +6021,9 @@ void ZoomInkWindow::begin_gesture(PointF point, float pressure) {
     Drawable drawable;
     drawable.kind = tool;
     drawable.color = controller_.state().color;
-    drawable.width = controller_.state().effective_width() *
-        std::clamp(pressure, 0.35F, 1.45F);
+    drawable.reference_scale = edit_mode_ ? edit_transform_.scale : 1.0F;
+    drawable.width = annotation_length(controller_.state().effective_width() *
+        std::clamp(pressure, 0.35F, 1.45F));
     drawable.points.push_back(point);
     if (tool == Tool::Line || tool == Tool::Rectangle || tool == Tool::Ellipse ||
         tool == Tool::Arrow || tool == Tool::CurvedArrow || tool == Tool::Screenshot)
@@ -5500,9 +6036,12 @@ void ZoomInkWindow::begin_gesture(PointF point, float pressure) {
 
 void ZoomInkWindow::update_gesture(PointF point, WPARAM keys) {
     if (!drawing_) return;
+    point = annotation_point(point);
+    Document& active = edit_mode_ ? edit_document_ : document_;
     if (erasing_) {
-        if ((keys & MK_LBUTTON) != 0 && document_.erase_at(
-                point, std::max(12.0F, controller_.state().thickness * 2.5F))) invalidate();
+        if ((keys & MK_LBUTTON) != 0 && active.erase_at(
+                point, annotation_length(std::max(
+                    12.0F, controller_.state().thickness * 2.5F)))) invalidate();
         return;
     }
     if (!preview_) return;
@@ -5520,7 +6059,7 @@ void ZoomInkWindow::update_gesture(PointF point, WPARAM keys) {
             point.y = origin.y + std::copysign(size, dy == 0 ? 1.0F : dy);
         }
         preview_->points.back() = point;
-    } else if (distance(preview_->points.back(), point) >= 1.0F) {
+    } else if (distance(preview_->points.back(), point) >= annotation_length(1.0F)) {
         if (preview_->points.size() >= 8192) {
             std::vector<PointF> reduced;
             reduced.reserve(preview_->points.size() / 2 + 1);
@@ -5543,7 +6082,7 @@ void ZoomInkWindow::finish_gesture(PointF point, WPARAM keys) {
     if (GetCapture() == window_) ReleaseCapture();
     if (erasing_) {
         erasing_ = false;
-        document_.end_compound();
+        (edit_mode_ ? edit_document_ : document_).end_compound();
         controller_.update_overlay_interaction();
         invalidate();
         return;
@@ -5552,10 +6091,12 @@ void ZoomInkWindow::finish_gesture(PointF point, WPARAM keys) {
     Drawable completed = std::move(*preview_);
     preview_.reset();
     if (completed.kind == Tool::Screenshot && completed.points.size() >= 2) {
+        const PointF first_view = view_point(completed.points.front());
+        const PointF second_view = view_point(completed.points.back());
         invalidate();
         UpdateWindow(window_);
         if (controller_.preferences().exclude_palette_from_capture) {
-            capture_composite(completed.points.front(), completed.points.back());
+            capture_composite(first_view, second_view);
         } else {
             // When the user explicitly asks to include Elite Pen itself, capture
             // the presented composition so the palette and panels are preserved.
@@ -5569,10 +6110,10 @@ void ZoomInkWindow::finish_gesture(PointF point, WPARAM keys) {
             controller_.restack_palette();
             DwmFlush();
             controller_.capture_region(
-                {completed.points.front().x + static_cast<float>(bounds_.left),
-                 completed.points.front().y + static_cast<float>(bounds_.top)},
-                {completed.points.back().x + static_cast<float>(bounds_.left),
-                 completed.points.back().y + static_cast<float>(bounds_.top)},
+                {first_view.x + static_cast<float>(bounds_.left),
+                 first_view.y + static_cast<float>(bounds_.top)},
+                {second_view.x + static_cast<float>(bounds_.left),
+                 second_view.y + static_cast<float>(bounds_.top)},
                 false);
             if (had_affinity) SetWindowDisplayAffinity(window_, previous_affinity);
         }
@@ -5586,10 +6127,11 @@ void ZoomInkWindow::finish_gesture(PointF point, WPARAM keys) {
         completed.points = simplify_path(completed.points,
             std::clamp(completed.width * 0.08F, 0.5F, 2.0F));
     }
-    if (completed.points.size() >= 2 &&
-        distance(completed.points.front(), completed.points.back()) < 2.0F)
+    if (completed.points.size() >= 2 && distance(
+            completed.points.front(), completed.points.back()) <
+            annotation_length(2.0F))
         completed.points.resize(1);
-    document_.add(std::move(completed));
+    (edit_mode_ ? edit_document_ : document_).add(std::move(completed));
     controller_.update_overlay_interaction();
     invalidate();
 }
@@ -5600,21 +6142,56 @@ void ZoomInkWindow::cancel_gesture() {
     erasing_ = false;
     pointer_active_ = false;
     if (GetCapture() == window_) ReleaseCapture();
-    document_.end_compound();
+    (edit_mode_ ? edit_document_ : document_).end_compound();
     preview_.reset();
     invalidate();
+}
+
+void ZoomInkWindow::populate_edit_stress_document(std::size_t count) {
+    edit_document_ = Document{};
+    edit_document_cache_.reset();
+    preview_.reset();
+    const float origin_x = edit_transform_.source.left;
+    const float origin_y = edit_transform_.source.top;
+    for (std::size_t stroke = 0; stroke < count; ++stroke) {
+        Drawable drawable;
+        drawable.kind = stroke % 7U == 0U ? Tool::Highlighter : Tool::Pen;
+        drawable.color = stroke % 5U == 0U ? kPurple : kBlue;
+        drawable.width = drawable.kind == Tool::Highlighter ? 5.5F : 2.0F;
+        drawable.points.reserve(24);
+        const float base_x = origin_x + 20.0F +
+            static_cast<float>(stroke % 100U) * 5.5F;
+        const float base_y = origin_y + 20.0F +
+            static_cast<float>((stroke / 100U) % 55U) * 4.5F;
+        for (std::size_t sample = 0; sample < 24U; ++sample) {
+            drawable.points.push_back({
+                base_x + static_cast<float>(sample) * 3.5F,
+                base_y + std::sin(static_cast<float>(sample) * 0.62F) * 4.5F});
+        }
+        edit_document_.add(std::move(drawable));
+    }
+    invalidate();
+}
+
+std::optional<PointF> ZoomInkWindow::first_edit_view_point() const noexcept {
+    if (edit_document_.empty() || edit_document_.items().front().points.empty())
+        return std::nullopt;
+    return edit_transform_.source_to_view(
+        edit_document_.items().front().points.front());
 }
 
 LRESULT ZoomInkWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
     switch (message) {
         case kQaQueryZoomDocumentCountMessage:
-            return static_cast<LRESULT>(document_.items().size());
+            return static_cast<LRESULT>(item_count());
+        case kQaQueryZoomEditDocumentCountMessage:
+            return static_cast<LRESULT>(edit_document_.items().size());
         case kQaQueryZoomSnapshotMessage:
             return snapshot_ && snapshot_has_content_ ? 1 : 0;
         case WM_MOUSEACTIVATE:
             return MA_NOACTIVATE;
         case WM_NCHITTEST: {
-            if (!frozen_) return HTTRANSPARENT;
+            if (!accepts_annotations()) return HTTRANSPARENT;
             const POINT screen_point{GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
             if (controller_.palette() &&
                 controller_.palette()->contains_screen_point(screen_point)) {
@@ -5647,6 +6224,20 @@ LRESULT ZoomInkWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
         case WM_LBUTTONUP:
             if (!pointer_active_) finish_gesture(local_point(lparam), wparam);
             return 0;
+        case WM_MOUSEWHEEL:
+            if (edit_mode_) {
+                if ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0 &&
+                    (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0) {
+                    controller_.adjust_thickness_step(
+                        GET_WHEEL_DELTA_WPARAM(wparam) > 0 ? 1 : -1);
+                } else {
+                    controller_.execute_hotkey(
+                        GET_WHEEL_DELTA_WPARAM(wparam) > 0
+                            ? HotkeyAction::ZoomIn : HotkeyAction::ZoomOut);
+                }
+                return 0;
+            }
+            break;
         case WM_POINTERDOWN: {
             const UINT32 pointer_id = GET_POINTERID_WPARAM(wparam);
             POINTER_INPUT_TYPE type{};
@@ -5687,11 +6278,13 @@ LRESULT ZoomInkWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
         case WM_POINTERCAPTURECHANGED:
             pointer_active_ = false;
             pointer_id_ = 0;
-            if (drawing_ && preview_) finish_gesture(preview_->points.back(), 0);
+            if (drawing_ && preview_) finish_gesture(
+                view_point(preview_->points.back()), 0);
             else if (erasing_) cancel_gesture();
             return 0;
         case WM_CAPTURECHANGED:
-            if (drawing_ && preview_) finish_gesture(preview_->points.back(), 0);
+            if (drawing_ && preview_) finish_gesture(
+                view_point(preview_->points.back()), 0);
             else if (erasing_) cancel_gesture();
             return 0;
         case WM_KEYDOWN:
@@ -5720,11 +6313,15 @@ void ZoomInkWindow::render() {
     const bool annotations_visible = controller_.state().annotations_visible;
     const RectF viewport{0.0F, 0.0F, static_cast<float>(surface_.width()),
                          static_cast<float>(surface_.height())};
-    const bool cache_ready = !annotations_visible || document_cache_.update(
-        controller_.graphics(), surface_, document_, 0.0F, 0.0F, viewport);
+    const bool cache_ready = !annotations_visible ||
+        (edit_mode_
+            ? edit_document_cache_.update(
+                controller_.graphics(), surface_, edit_document_)
+            : document_cache_.update(controller_.graphics(), surface_, document_,
+                                     0.0F, 0.0F, viewport));
     auto* context = surface_.begin_draw(D2D1::ColorF(0, 0.0F));
     if (!context) return;
-    if (frozen_ && snapshot_) {
+    if ((frozen_ || (edit_mode_ && edit_annotating_)) && snapshot_) {
         const auto destination = D2D1::RectF(0, 0, static_cast<float>(surface_.width()),
                                              static_cast<float>(surface_.height()));
         context->DrawBitmap(snapshot_.Get(), destination, 1.0F,
@@ -5732,14 +6329,26 @@ void ZoomInkWindow::render() {
     }
     if (annotations_visible) {
         if (cache_ready) {
-            document_cache_.draw(context);
+            if (edit_mode_) edit_document_cache_.draw(context, edit_transform_);
+            else document_cache_.draw(context);
         } else {
             DrawableRenderResources fallback;
             if (fallback.initialize(controller_.graphics(), context)) {
-                for (const auto& drawable : document_.items()) {
-                    if (drawable.bounds().intersects(viewport)) {
+                const Document& active_document = edit_mode_
+                    ? edit_document_ : document_;
+                const RectF active_viewport = edit_mode_
+                    ? edit_transform_.source : viewport;
+                for (const auto& drawable : active_document.items()) {
+                    const RectF bounds = edit_mode_
+                        ? drawable_render_bounds(drawable) : drawable.bounds();
+                    if (bounds.intersects(active_viewport)) {
                         draw_drawable(controller_.graphics(), context, fallback,
-                                      drawable, 0, 0);
+                                      drawable,
+                                      edit_mode_ ? edit_transform_.source.left : 0.0F,
+                                      edit_mode_ ? edit_transform_.source.top : 0.0F,
+                                      1.0F,
+                                      edit_mode_ ? edit_transform_.scale : 1.0F,
+                                      edit_mode_);
                     }
                 }
             }
@@ -5748,7 +6357,11 @@ void ZoomInkWindow::render() {
             DrawableRenderResources live;
             if (live.initialize(controller_.graphics(), context)) {
                 draw_drawable(controller_.graphics(), context, live, *preview_,
-                              0, 0, 0.82F);
+                              edit_mode_ ? edit_transform_.source.left : 0.0F,
+                              edit_mode_ ? edit_transform_.source.top : 0.0F,
+                              0.82F,
+                              edit_mode_ ? edit_transform_.scale : 1.0F,
+                              edit_mode_);
             }
         }
     }
@@ -5786,7 +6399,9 @@ bool ZoomTargetWindow::initialize(GraphicsDevice& graphics) {
                 ex_style, WS_POPUP, initial)) return false;
     SetLayeredWindowAttributes(window_, 0, 255, LWA_ALPHA);
     if (!initialize_surface(graphics)) return false;
-    SetWindowDisplayAffinity(window_, WDA_EXCLUDEFROMCAPTURE);
+    // The lens target must remain visible in recordings. Excluding even a small
+    // layered window can produce a black capture artifact on Windows 10.
+    SetWindowDisplayAffinity(window_, WDA_NONE);
     return true;
 }
 
@@ -5859,6 +6474,230 @@ void ZoomTargetWindow::render() {
     if (!surface_.end_draw(error)) controller_.report_runtime_error(error);
 }
 
+bool ZoomEditToolbarWindow::initialize(GraphicsDevice& graphics) {
+    constexpr DWORD ex_style = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE |
+                               WS_EX_LAYERED;
+    const RECT initial{0, 0, 430, 58};
+    if (!create(L"ElitePen.ZoomEditToolbar",
+                L"Zoom editable — Navegar — Elite Pen",
+                ex_style, WS_POPUP, initial)) return false;
+    SetLayeredWindowAttributes(window_, 0, 255, LWA_ALPHA);
+    if (!initialize_surface(graphics)) return false;
+    SetWindowDisplayAffinity(window_, WDA_NONE);
+    return true;
+}
+
+void ZoomEditToolbarWindow::show_for(RECT zoom_bounds, float factor,
+                                     ZoomEditState state) {
+    factor_ = factor;
+    state_ = state;
+    const float dpi_scale = static_cast<float>(GetDpiForWindow(window_)) / 96.0F;
+    const int available = std::max(280L, zoom_bounds.right - zoom_bounds.left - 16L);
+    const int width = std::min(
+        static_cast<int>(std::lround(430.0F * dpi_scale)), available);
+    const int height = static_cast<int>(std::lround(58.0F * dpi_scale));
+    int left = zoom_bounds.left +
+        ((zoom_bounds.right - zoom_bounds.left) - width) / 2;
+    int top = zoom_bounds.top + static_cast<int>(std::lround(14.0F * dpi_scale));
+    RECT candidate{left, top, left + width, top + height};
+    if (controller_.palette() &&
+        IsWindowVisible(controller_.palette()->hwnd()) != FALSE) {
+        RECT palette{};
+        GetWindowRect(controller_.palette()->hwnd(), &palette);
+        RECT overlap{};
+        if (IntersectRect(&overlap, &candidate, &palette)) {
+            top = zoom_bounds.bottom - height -
+                static_cast<int>(std::lround(14.0F * dpi_scale));
+        }
+    }
+    SetWindowPos(window_, HWND_TOPMOST, left, top, width, height,
+                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    SetWindowTextW(window_, state_ == ZoomEditState::Annotate
+        ? L"Zoom editable — Anotar — Elite Pen"
+        : L"Zoom editable — Navegar — Elite Pen");
+    invalidate();
+}
+
+void ZoomEditToolbarWindow::bring_to_front() {
+    if (!visible()) return;
+    SetWindowPos(window_, HWND_TOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+}
+
+bool ZoomEditToolbarWindow::contains_screen_point(POINT point) const noexcept {
+    RECT bounds{};
+    return window_ && GetWindowRect(window_, &bounds) &&
+           PtInRect(&bounds, point) != FALSE;
+}
+
+ZoomEditToolbarWindow::Command ZoomEditToolbarWindow::command_at(
+        POINT client) const noexcept {
+    RECT bounds{};
+    GetClientRect(window_, &bounds);
+    const float width = static_cast<float>(std::max(1L, bounds.right));
+    const float x = static_cast<float>(client.x) / width;
+    if (x < 0.105F) return Command::ZoomOut;
+    if (x < 0.285F) return Command::None;
+    if (x < 0.390F) return Command::ZoomIn;
+    if (x < 0.625F) return Command::Navigate;
+    if (x < 0.875F) return Command::Annotate;
+    return Command::Close;
+}
+
+void ZoomEditToolbarWindow::execute(Command command) {
+    switch (command) {
+        case Command::ZoomOut: owner_.adjust_zoom(-0.25F); break;
+        case Command::ZoomIn: owner_.adjust_zoom(0.25F); break;
+        case Command::Navigate: owner_.set_edit_state(ZoomEditState::Navigate); break;
+        case Command::Annotate: owner_.set_edit_state(ZoomEditState::Annotate); break;
+        case Command::Close: owner_.toggle_edit_mode(); break;
+        case Command::None: break;
+    }
+}
+
+LRESULT ZoomEditToolbarWindow::handle_message(UINT message, WPARAM wparam,
+                                               LPARAM lparam) {
+    switch (message) {
+        case WM_MOUSEACTIVATE: return MA_NOACTIVATE;
+        case WM_NCHITTEST: return HTCLIENT;
+        case WM_SETCURSOR:
+            SetCursor(LoadCursorW(nullptr, IDC_HAND));
+            return TRUE;
+        case WM_MOUSEMOVE: {
+            TRACKMOUSEEVENT tracking{sizeof(tracking), TME_LEAVE, window_, 0};
+            TrackMouseEvent(&tracking);
+            const Command next = command_at(
+                {GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)});
+            if (next != hovered_) {
+                hovered_ = next;
+                invalidate();
+            }
+            return 0;
+        }
+        case WM_MOUSELEAVE:
+            hovered_ = Command::None;
+            invalidate();
+            return 0;
+        case WM_LBUTTONUP:
+            execute(command_at({GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)}));
+            return 0;
+        case WM_MOUSEWHEEL:
+            owner_.adjust_zoom(GET_WHEEL_DELTA_WPARAM(wparam) > 0 ? 0.25F : -0.25F);
+            return 0;
+        case WM_KEYDOWN:
+            if (wparam == VK_ESCAPE) {
+                owner_.toggle_edit_mode();
+                return 0;
+            }
+            break;
+        default: break;
+    }
+    return WindowBase::handle_message(message, wparam, lparam);
+}
+
+void ZoomEditToolbarWindow::render() {
+    auto* context = surface_.begin_draw(D2D1::ColorF(0, 0.0F));
+    if (!context) return;
+    const float width = static_cast<float>(surface_.width());
+    const float height = static_cast<float>(surface_.height());
+    const auto& theme = current_ui_theme();
+    ComPtr<ID2D1SolidColorBrush> shadow;
+    ComPtr<ID2D1SolidColorBrush> panel;
+    ComPtr<ID2D1SolidColorBrush> border;
+    ComPtr<ID2D1SolidColorBrush> text;
+    ComPtr<ID2D1SolidColorBrush> soft;
+    ComPtr<ID2D1SolidColorBrush> accent;
+    ComPtr<ID2D1SolidColorBrush> active;
+    ComPtr<ID2D1SolidColorBrush> hover;
+    context->CreateSolidColorBrush(theme_color(theme.shadow, 0.34F), shadow.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.surface_1, 0.96F), panel.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.line, 0.78F), border.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.text), text.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.text_soft), soft.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.violet), accent.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.violet, 0.18F), active.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.violet, 0.10F), hover.GetAddressOf());
+    const auto outer = D2D1::RoundedRect(D2D1::RectF(3.0F, 4.0F, width - 3.0F,
+                                                     height - 2.0F),
+                                         (height - 6.0F) * 0.5F,
+                                         (height - 6.0F) * 0.5F);
+    context->FillRoundedRectangle(
+        D2D1::RoundedRect(D2D1::RectF(5.0F, 7.0F, width - 1.0F, height),
+                          (height - 7.0F) * 0.5F, (height - 7.0F) * 0.5F),
+        shadow.Get());
+    context->FillRoundedRectangle(outer, panel.Get());
+    context->DrawRoundedRectangle(outer, border.Get(), 1.0F);
+
+    const auto command_rect = [width, height](Command command) {
+        float left{};
+        float right{};
+        switch (command) {
+            case Command::ZoomOut: left = 0.018F; right = 0.105F; break;
+            case Command::ZoomIn: left = 0.292F; right = 0.385F; break;
+            case Command::Navigate: left = 0.402F; right = 0.617F; break;
+            case Command::Annotate: left = 0.632F; right = 0.865F; break;
+            case Command::Close: left = 0.888F; right = 0.978F; break;
+            case Command::None: return D2D1::RectF();
+        }
+        return D2D1::RectF(width * left, 9.0F, width * right, height - 7.0F);
+    };
+    for (const Command command : {Command::ZoomOut, Command::ZoomIn,
+             Command::Navigate, Command::Annotate, Command::Close}) {
+        const bool selected =
+            (command == Command::Navigate && state_ == ZoomEditState::Navigate) ||
+            (command == Command::Annotate && state_ == ZoomEditState::Annotate);
+        if (selected || hovered_ == command) {
+            const auto rectangle = command_rect(command);
+            context->FillRoundedRectangle(D2D1::RoundedRect(
+                rectangle, (height - 16.0F) * 0.5F, (height - 16.0F) * 0.5F),
+                selected ? active.Get() : hover.Get());
+        }
+    }
+
+    ComPtr<IDWriteTextFormat> regular;
+    ComPtr<IDWriteTextFormat> compact;
+    controller_.graphics().dwrite()->CreateTextFormat(
+        L"Segoe UI Variable Display", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
+        DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+        std::clamp(height * 0.28F, 12.0F, 17.0F), L"es-CO",
+        regular.GetAddressOf());
+    controller_.graphics().dwrite()->CreateTextFormat(
+        L"Segoe UI Variable Text", nullptr, DWRITE_FONT_WEIGHT_SEMI_BOLD,
+        DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+        std::clamp(height * 0.21F, 10.0F, 13.0F), L"es-CO",
+        compact.GetAddressOf());
+    if (regular) {
+        regular->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        regular->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        context->DrawTextW(L"−", 1, regular.Get(), command_rect(Command::ZoomOut),
+                           soft.Get());
+        context->DrawTextW(L"+", 1, regular.Get(), command_rect(Command::ZoomIn),
+                           soft.Get());
+        context->DrawTextW(L"×", 1, regular.Get(), command_rect(Command::Close),
+                           soft.Get());
+    }
+    if (compact) {
+        compact->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        compact->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        wchar_t percentage[16]{};
+        swprintf_s(percentage, L"%d%%", static_cast<int>(std::lround(factor_ * 100.0F)));
+        context->DrawTextW(percentage, static_cast<UINT32>(wcslen(percentage)),
+                           compact.Get(), D2D1::RectF(width * 0.105F, 8.0F,
+                                                     width * 0.285F, height - 6.0F),
+                           text.Get());
+        context->DrawTextW(L"MANO", 4, compact.Get(), command_rect(Command::Navigate),
+                           state_ == ZoomEditState::Navigate ? accent.Get() : soft.Get());
+        context->DrawTextW(L"LÁPIZ", 5, compact.Get(), command_rect(Command::Annotate),
+                           state_ == ZoomEditState::Annotate ? accent.Get() : soft.Get());
+    }
+    context->DrawLine(D2D1::Point2F(width * 0.395F, 16.0F),
+                      D2D1::Point2F(width * 0.395F, height - 14.0F), border.Get(), 1.0F);
+    context->DrawLine(D2D1::Point2F(width * 0.878F, 16.0F),
+                      D2D1::Point2F(width * 0.878F, height - 14.0F), border.Get(), 1.0F);
+    std::wstring error;
+    if (!surface_.end_draw(error)) controller_.report_runtime_error(error);
+}
+
 bool ZoomWindow::load_magnification() {
     if (magnification_module_) return true;
     magnification_module_ = LoadLibraryW(L"Magnification.dll");
@@ -5883,11 +6722,13 @@ ZoomWindow* ZoomWindow::click_hook_owner_ = nullptr;
 LRESULT CALLBACK ZoomWindow::click_hook_proc(int code, WPARAM wparam, LPARAM lparam) {
     ZoomWindow* zoom = click_hook_owner_;
     if (code == HC_ACTION && zoom && zoom->active_ && !zoom->frozen() &&
+        zoom->edit_state_ != ZoomEditState::Navigate &&
         (wparam == WM_LBUTTONDOWN || wparam == WM_LBUTTONUP)) {
         const auto* information = reinterpret_cast<const MSLLHOOKSTRUCT*>(lparam);
         if (information && wparam == WM_LBUTTONDOWN) {
             PaletteWindow* palette = zoom->controller_.palette();
             if ((!palette || !palette->contains_screen_point(information->pt)) &&
+                !zoom->toolbar_contains(information->pt) &&
                 !zoom->click_freeze_pending_) {
                 zoom->click_freeze_pending_ = true;
                 return 1;
@@ -5919,12 +6760,164 @@ void ZoomWindow::uninstall_click_hook() {
     if (click_hook_owner_ == this) click_hook_owner_ = nullptr;
 }
 
+void ZoomWindow::remember_foreground_target() {
+    HWND candidate = GetForegroundWindow();
+    if (!candidate || !IsWindow(candidate)) return;
+    if (const HWND root = GetAncestor(candidate, GA_ROOT)) candidate = root;
+    DWORD process_id{};
+    GetWindowThreadProcessId(candidate, &process_id);
+    if (process_id != GetCurrentProcessId()) foreground_before_zoom_ = candidate;
+}
+
+bool ZoomWindow::start_recordable_output() {
+    stop_recordable_output();
+    // Windows' Magnification control is composed after both OBS monitor-capture
+    // paths and is therefore recorded as black. While OBS is present, display a
+    // live DWM thumbnail of the focused application instead. WGC records this
+    // normal desktop composition while the native magnifier remains the fallback
+    // for ordinary use and unsupported windows.
+    if (!obs_is_running()) return false;
+    if (!window_ || !foreground_before_zoom_ ||
+        !IsWindow(foreground_before_zoom_) ||
+        !IsWindowVisible(foreground_before_zoom_) ||
+        IsIconic(foreground_before_zoom_)) {
+        return false;
+    }
+    BOOL cloaked = FALSE;
+    if (SUCCEEDED(DwmGetWindowAttribute(
+            foreground_before_zoom_, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) &&
+        cloaked) {
+        return false;
+    }
+    if (FAILED(DwmRegisterThumbnail(
+            window_, foreground_before_zoom_, &recordable_thumbnail_)) ||
+        !recordable_thumbnail_) {
+        recordable_thumbnail_ = nullptr;
+        return false;
+    }
+    if (FAILED(DwmQueryThumbnailSourceSize(
+            recordable_thumbnail_, &recordable_source_size_)) ||
+        recordable_source_size_.cx <= 0 || recordable_source_size_.cy <= 0 ||
+        !GetWindowRect(foreground_before_zoom_, &recordable_source_bounds_)) {
+        stop_recordable_output();
+        return false;
+    }
+    recordable_output_ = true;
+    ShowWindow(magnifier_, SW_HIDE);
+    return true;
+}
+
+void ZoomWindow::stop_recordable_output() {
+    recordable_output_ = false;
+    if (recordable_thumbnail_) {
+        DwmUnregisterThumbnail(recordable_thumbnail_);
+        recordable_thumbnail_ = nullptr;
+    }
+    recordable_source_size_ = {};
+    recordable_source_bounds_ = {};
+    if (magnifier_) ShowWindow(magnifier_, SW_SHOWNA);
+}
+
+void ZoomWindow::update_recordable_output() {
+    if (!recordable_output_ || !recordable_thumbnail_) return;
+    RECT current_bounds{};
+    if (!IsWindow(foreground_before_zoom_) ||
+        !GetWindowRect(foreground_before_zoom_, &current_bounds)) {
+        stop_recordable_output();
+        return;
+    }
+    recordable_source_bounds_ = current_bounds;
+    const int window_width = std::max(
+        1L, recordable_source_bounds_.right - recordable_source_bounds_.left);
+    const int window_height = std::max(
+        1L, recordable_source_bounds_.bottom - recordable_source_bounds_.top);
+    const double scale_x = static_cast<double>(recordable_source_size_.cx) /
+                           static_cast<double>(window_width);
+    const double scale_y = static_cast<double>(recordable_source_size_.cy) /
+                           static_cast<double>(window_height);
+    RECT source{
+        static_cast<LONG>(std::lround(
+            static_cast<double>(source_rect_.left - recordable_source_bounds_.left) *
+            scale_x)),
+        static_cast<LONG>(std::lround(
+            static_cast<double>(source_rect_.top - recordable_source_bounds_.top) *
+            scale_y)),
+        static_cast<LONG>(std::lround(
+            static_cast<double>(source_rect_.right - recordable_source_bounds_.left) *
+            scale_x)),
+        static_cast<LONG>(std::lround(
+            static_cast<double>(source_rect_.bottom - recordable_source_bounds_.top) *
+            scale_y))};
+    const LONG desired_width = std::clamp(
+        source.right - source.left, 1L, recordable_source_size_.cx);
+    const LONG desired_height = std::clamp(
+        source.bottom - source.top, 1L, recordable_source_size_.cy);
+    source.left = std::clamp(
+        source.left, 0L, recordable_source_size_.cx - desired_width);
+    source.top = std::clamp(
+        source.top, 0L, recordable_source_size_.cy - desired_height);
+    source.right = source.left + desired_width;
+    source.bottom = source.top + desired_height;
+
+    const RECT destination{
+        0, 0,
+        std::max(1L, zoom_rect_.right - zoom_rect_.left),
+        std::max(1L, zoom_rect_.bottom - zoom_rect_.top)};
+    DWM_THUMBNAIL_PROPERTIES properties{};
+    properties.dwFlags = DWM_TNP_RECTDESTINATION | DWM_TNP_RECTSOURCE |
+                         DWM_TNP_VISIBLE | DWM_TNP_OPACITY |
+                         DWM_TNP_SOURCECLIENTAREAONLY;
+    properties.rcDestination = destination;
+    properties.rcSource = source;
+    properties.opacity = 255;
+    properties.fVisible = TRUE;
+    properties.fSourceClientAreaOnly = FALSE;
+    if (FAILED(DwmUpdateThumbnailProperties(recordable_thumbnail_, &properties)))
+    {
+        stop_recordable_output();
+        source_initialized_ = false;
+    }
+}
+
+void ZoomWindow::set_edit_passthrough(bool enabled) {
+    if (!window_ || !magnifier_) return;
+    auto update_style = [enabled](HWND target) {
+        LONG_PTR style = GetWindowLongPtrW(target, GWL_EXSTYLE);
+        if (enabled) {
+            style |= WS_EX_TRANSPARENT | WS_EX_NOACTIVATE;
+        } else {
+            style &= ~static_cast<LONG_PTR>(WS_EX_TRANSPARENT | WS_EX_NOACTIVATE);
+        }
+        SetWindowLongPtrW(target, GWL_EXSTYLE, style);
+        SetWindowPos(target, nullptr, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE |
+                     SWP_FRAMECHANGED);
+    };
+
+    // A disabled Magnifier child is skipped by hit testing while it continues
+    // to render. The transparent root then exposes the real application below.
+    EnableWindow(magnifier_, enabled ? FALSE : TRUE);
+    update_style(magnifier_);
+    update_style(window_);
+
+    if (enabled && foreground_before_zoom_ &&
+        IsWindow(foreground_before_zoom_) &&
+        IsWindowVisible(foreground_before_zoom_)) {
+        SetForegroundWindow(foreground_before_zoom_);
+    }
+}
+
 LRESULT CALLBACK ZoomWindow::magnifier_subclass(
         HWND window, UINT message, WPARAM wparam, LPARAM lparam,
         UINT_PTR subclass_id, DWORD_PTR reference_data) {
     auto* zoom = reinterpret_cast<ZoomWindow*>(reference_data);
+    if (zoom && zoom->edit_state_ == ZoomEditState::Navigate &&
+        message == WM_NCHITTEST) {
+        return HTTRANSPARENT;
+    }
     if (zoom && (message == WM_LBUTTONDOWN || message == WM_LBUTTONDBLCLK) &&
-        zoom->active_ && !zoom->frozen()) {
+        zoom->active_ && !zoom->frozen() &&
+        zoom->edit_state_ != ZoomEditState::Navigate) {
         SetFocus(zoom->window_);
         zoom->toggle_freeze();
         return 0;
@@ -5935,6 +6928,7 @@ LRESULT CALLBACK ZoomWindow::magnifier_subclass(
 }
 
 ZoomWindow::~ZoomWindow() {
+    stop_recordable_output();
     uninstall_click_hook();
     if (magnifier_)
         RemoveWindowSubclass(magnifier_, magnifier_subclass, 1);
@@ -5961,9 +6955,11 @@ bool ZoomWindow::initialize(GraphicsDevice& graphics) {
     if (!ink_->initialize(graphics)) return false;
     target_ = std::make_unique<ZoomTargetWindow>(controller_);
     if (!target_->initialize(graphics)) return false;
-#ifndef ELITE_PEN_DEBUG
-    SetWindowDisplayAffinity(window_, WDA_EXCLUDEFROMCAPTURE);
-#endif
+    edit_toolbar_ = std::make_unique<ZoomEditToolbarWindow>(controller_, *this);
+    if (!edit_toolbar_->initialize(graphics)) return false;
+    // Zoom presentation is intentionally capturable. Native Magnifier remains
+    // the general fallback; an OBS-aware DWM path is selected at activation.
+    SetWindowDisplayAffinity(window_, WDA_NONE);
     return true;
 }
 
@@ -5977,14 +6973,21 @@ bool ZoomWindow::show_zoom() {
     GetMonitorInfoW(monitor, &info);
     monitor_rect_ = info.rcMonitor;
     tool_before_zoom_ = controller_.state().tool;
+    foreground_before_zoom_ = nullptr;
+    remember_foreground_target();
+    start_recordable_output();
+    set_edit_passthrough(false);
     if (mag_set_filter_) {
         std::vector<HWND> excluded{window_};
         if (target_) excluded.push_back(target_->hwnd());
+        if (edit_toolbar_) excluded.push_back(edit_toolbar_->hwnd());
         if (controller_.palette()) excluded.push_back(controller_.palette()->hwnd());
         mag_set_filter_(magnifier_, MW_FILTERMODE_EXCLUDE,
                         static_cast<int>(excluded.size()), excluded.data());
     }
     active_ = true;
+    edit_state_ = ZoomEditState::Off;
+    if (edit_toolbar_) edit_toolbar_->hide();
     overview_ = false;
     source_initialized_ = false;
     install_click_hook();
@@ -6000,14 +7003,19 @@ bool ZoomWindow::show_zoom() {
 
 void ZoomWindow::hide_zoom() {
     if (!active_) return;
+    controller_.cancel_pending_text();
+    set_edit_passthrough(false);
     active_ = false;
     source_initialized_ = false;
     uninstall_click_hook();
     KillTimer(window_, 1);
     update_lens_cursor(false);
     if (target_) target_->hide();
+    if (edit_toolbar_) edit_toolbar_->hide();
+    edit_state_ = ZoomEditState::Off;
     if (ink_) ink_->hide();
     ShowWindow(window_, SW_HIDE);
+    stop_recordable_output();
     controller_.state().tool = tool_before_zoom_;
     controller_.update_overlay_interaction();
     controller_.invalidate_all();
@@ -6015,6 +7023,17 @@ void ZoomWindow::hide_zoom() {
 
 bool ZoomWindow::toggle_freeze() {
     if (!active_ || !ink_) return false;
+    controller_.commit_pending_text();
+    if (edit_active()) {
+        set_edit_passthrough(false);
+        edit_state_ = ZoomEditState::Off;
+        if (edit_toolbar_) edit_toolbar_->hide();
+        ink_->show_live(zoom_rect_);
+        source_initialized_ = false;
+        install_click_hook();
+        SetTimer(window_, 1, 16, nullptr);
+        refresh_source();
+    }
     if (ink_->frozen()) {
         ink_->show_live(zoom_rect_);
         source_initialized_ = false;
@@ -6045,6 +7064,123 @@ bool ZoomWindow::toggle_freeze() {
     return true;
 }
 
+void ZoomWindow::toggle_edit_mode() {
+    if (!active_ || !ink_) return;
+    if (edit_active()) {
+        controller_.commit_pending_text();
+        set_edit_passthrough(false);
+        edit_state_ = ZoomEditState::Off;
+        if (edit_toolbar_) edit_toolbar_->hide();
+        ink_->show_live(zoom_rect_);
+        source_initialized_ = false;
+        install_click_hook();
+        SetTimer(window_, 1, 16, nullptr);
+        refresh_source();
+        controller_.update_overlay_interaction();
+        SetForegroundWindow(window_);
+        SetFocus(window_);
+        return;
+    }
+    if (ink_->frozen()) {
+        if (!toggle_freeze()) return;
+    }
+    refresh_source();
+    edit_state_ = ZoomEditState::Navigate;
+    uninstall_click_hook();
+    SetTimer(window_, 1, 16, nullptr);
+    ink_->show_edit(zoom_rect_, source_rect_,
+                    overview_ ? 1.0F : controller_.state().zoom_factor,
+                    false, magnifier_);
+    if (edit_toolbar_) edit_toolbar_->show_for(
+        zoom_rect_, overview_ ? 1.0F : controller_.state().zoom_factor,
+        edit_state_);
+    controller_.update_overlay_interaction();
+    set_edit_passthrough(true);
+}
+
+void ZoomWindow::set_edit_state(ZoomEditState state) {
+    if (!active_ || !ink_ || state == ZoomEditState::Off) {
+        if (state == ZoomEditState::Off && edit_active()) toggle_edit_mode();
+        return;
+    }
+    if (!edit_active()) {
+        toggle_edit_mode();
+        if (!edit_active()) return;
+    }
+    if (state == ZoomEditState::Annotate) {
+        remember_foreground_target();
+        set_edit_passthrough(false);
+        refresh_source();
+        edit_anchor_ = {
+            source_rect_.left + (source_rect_.right - source_rect_.left) / 2,
+            source_rect_.top + (source_rect_.bottom - source_rect_.top) / 2};
+        edit_state_ = state;
+        uninstall_click_hook();
+        KillTimer(window_, 1);
+        update_lens_cursor(false);
+        if (target_) target_->hide();
+        // Capture only the magnified content. Explicitly hiding the toolbar
+        // also protects older Windows 10 builds where display-affinity
+        // exclusion can be unavailable or ignored by a screen DC.
+        if (edit_toolbar_) edit_toolbar_->hide();
+        if (!ink_->show_edit(
+                zoom_rect_, source_rect_,
+                overview_ ? 1.0F : controller_.state().zoom_factor,
+                true, magnifier_)) {
+            edit_state_ = ZoomEditState::Navigate;
+            uninstall_click_hook();
+            SetTimer(window_, 1, 16, nullptr);
+            source_initialized_ = false;
+            refresh_source();
+            set_edit_passthrough(true);
+            if (controller_.palette()) controller_.palette()->show_notification(
+                L"No se pudo congelar Zoom editable",
+                L"Windows no entregó el cuadro ampliado. Puedes seguir navegando.");
+        }
+        if (controller_.state().tool == Tool::Interact ||
+            controller_.state().tool == Tool::Zoom) {
+            if (edit_state_ != ZoomEditState::Annotate) {
+                if (edit_toolbar_) edit_toolbar_->show_for(
+                    zoom_rect_, overview_ ? 1.0F : controller_.state().zoom_factor,
+                    edit_state_);
+                controller_.update_overlay_interaction();
+                return;
+            }
+            controller_.set_tool(Tool::Pen);
+        }
+    } else {
+        // Text is an in-place annotation. Finish it while the source-space
+        // document is still the active destination, before returning to MANO.
+        controller_.commit_pending_text();
+        edit_state_ = state;
+        ink_->set_edit_annotating(false);
+        source_initialized_ = false;
+        uninstall_click_hook();
+        SetTimer(window_, 1, 16, nullptr);
+        refresh_source();
+        set_edit_passthrough(true);
+    }
+    if (edit_toolbar_) edit_toolbar_->show_for(
+        zoom_rect_, overview_ ? 1.0F : controller_.state().zoom_factor,
+        edit_state_);
+    controller_.update_overlay_interaction();
+}
+
+void ZoomWindow::adjust_zoom(float delta) {
+    if (!active_) return;
+    if (edit_state_ == ZoomEditState::Annotate)
+        set_edit_state(ZoomEditState::Navigate);
+    controller_.state().zoom_factor = std::clamp(
+        controller_.state().zoom_factor + delta, 1.25F, 8.0F);
+    overview_ = false;
+    source_initialized_ = false;
+    refresh_source();
+    controller_.preferences().zoom_factor = controller_.state().zoom_factor;
+    controller_.save_preferences();
+    if (edit_toolbar_ && edit_active()) edit_toolbar_->show_for(
+        zoom_rect_, controller_.state().zoom_factor, edit_state_);
+}
+
 void ZoomWindow::execute_action(HotkeyAction action) {
     if (!active_) return;
     switch (action) {
@@ -6052,25 +7188,39 @@ void ZoomWindow::execute_action(HotkeyAction action) {
             toggle_freeze();
             break;
         case HotkeyAction::ZoomFullscreen:
+            if (edit_state_ == ZoomEditState::Annotate)
+                set_edit_state(ZoomEditState::Navigate);
             controller_.preferences().zoom_view = static_cast<int>(ZoomView::Fullscreen);
             controller_.save_preferences();
             refresh_source();
             controller_.update_overlay_interaction();
             break;
         case HotkeyAction::ZoomLens:
+            if (edit_state_ == ZoomEditState::Annotate)
+                set_edit_state(ZoomEditState::Navigate);
             controller_.preferences().zoom_view = static_cast<int>(ZoomView::Lens);
             controller_.save_preferences();
             refresh_source();
             controller_.update_overlay_interaction();
             break;
         case HotkeyAction::ZoomDocked:
+            if (edit_state_ == ZoomEditState::Annotate)
+                set_edit_state(ZoomEditState::Navigate);
             controller_.preferences().zoom_view = static_cast<int>(ZoomView::Docked);
             controller_.save_preferences();
             refresh_source();
             controller_.update_overlay_interaction();
             break;
         case HotkeyAction::ZoomCycleView:
-            cycle_view();
+            if (edit_active()) {
+                // Space is the quick, non-destructive way back to MANO. Entering
+                // annotation remains an intentional click or LAPIZ command so a
+                // navigation keystroke can never freeze the view by accident.
+                if (edit_state_ == ZoomEditState::Annotate)
+                    set_edit_state(ZoomEditState::Navigate);
+            } else {
+                cycle_view();
+            }
             break;
         case HotkeyAction::ZoomInvert:
             controller_.preferences().zoom_invert = !controller_.preferences().zoom_invert;
@@ -6078,18 +7228,19 @@ void ZoomWindow::execute_action(HotkeyAction action) {
             apply_color_effect();
             break;
         case HotkeyAction::ZoomOverview:
+            if (edit_state_ == ZoomEditState::Annotate)
+                set_edit_state(ZoomEditState::Navigate);
             overview_ = !overview_;
             refresh_source();
             break;
         case HotkeyAction::ZoomIn:
-            controller_.state().zoom_factor = std::min(
-                8.0F, controller_.state().zoom_factor + 0.25F);
-            refresh_source();
+            adjust_zoom(0.25F);
             break;
         case HotkeyAction::ZoomOut:
-            controller_.state().zoom_factor = std::max(
-                1.25F, controller_.state().zoom_factor - 0.25F);
-            refresh_source();
+            adjust_zoom(-0.25F);
+            break;
+        case HotkeyAction::ZoomEdit:
+            toggle_edit_mode();
             break;
         default:
             break;
@@ -6105,6 +7256,7 @@ void ZoomWindow::bring_to_front() {
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     if (ink_) ink_->bring_to_front();
     if (target_) target_->bring_to_front();
+    if (edit_toolbar_) edit_toolbar_->bring_to_front();
     if (controller_.palette() && IsWindowVisible(controller_.palette()->hwnd())) {
         SetWindowPos(controller_.palette()->hwnd(), HWND_TOPMOST, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -6125,7 +7277,7 @@ bool ZoomWindow::redo() { return ink_ && ink_->redo(); }
 
 void ZoomWindow::commit_text_screen(PointF position, Color color, float thickness,
                                     std::wstring text) {
-    if (ink_ && ink_->frozen())
+    if (ink_ && ink_->accepts_annotations())
         ink_->commit_text_screen(position, color, thickness, std::move(text));
 }
 
@@ -6191,12 +7343,16 @@ void ZoomWindow::apply_theme() {
     if (restore_cursor) update_lens_cursor(true);
     if (ink_) ink_->invalidate();
     if (target_) target_->invalidate();
+    if (edit_toolbar_) edit_toolbar_->invalidate();
 }
 
 void ZoomWindow::refresh_source() {
     if (!active_ || (ink_ && ink_->frozen())) return;
+    const bool edit_locked = edit_state_ == ZoomEditState::Annotate;
     POINT cursor{};
-    if (!GetCursorPos(&cursor)) {
+    if (edit_locked) {
+        cursor = edit_anchor_;
+    } else if (!GetCursorPos(&cursor)) {
         if (source_initialized_) {
             cursor = last_source_cursor_;
         } else {
@@ -6219,11 +7375,11 @@ void ZoomWindow::refresh_source() {
     info.cbSize = sizeof(info);
     GetMonitorInfoW(monitor, &info);
     monitor_rect_ = info.rcMonitor;
-    update_lens_cursor(view == ZoomView::Lens);
+    update_lens_cursor(view == ZoomView::Lens && !edit_locked);
     const int monitor_width = monitor_rect_.right - monitor_rect_.left;
     const int monitor_height = monitor_rect_.bottom - monitor_rect_.top;
-    RECT zoom_rect = monitor_rect_;
-    if (view == ZoomView::Lens) {
+    RECT zoom_rect = edit_locked ? zoom_rect_ : monitor_rect_;
+    if (!edit_locked && view == ZoomView::Lens) {
         const int lens_width = std::min(640, std::max(320, monitor_width / 2));
         const int lens_height = std::min(420, std::max(220, monitor_height / 3));
         int left = cursor.x + 36;
@@ -6235,7 +7391,7 @@ void ZoomWindow::refresh_source() {
         top = std::clamp(top, static_cast<int>(monitor_rect_.top),
                          static_cast<int>(monitor_rect_.bottom) - lens_height);
         zoom_rect = {left, top, left + lens_width, top + lens_height};
-    } else if (view == ZoomView::Docked) {
+    } else if (!edit_locked && view == ZoomView::Docked) {
         const int dock_height = std::min(360, std::max(220, monitor_height / 3));
         zoom_rect.bottom = zoom_rect.top + dock_height;
     }
@@ -6255,7 +7411,8 @@ void ZoomWindow::refresh_source() {
                      SWP_NOZORDER | SWP_SHOWWINDOW);
     }
 
-    if (!source_initialized_ || factor != last_source_factor_) {
+    if (!recordable_output_ &&
+        (!source_initialized_ || factor != last_source_factor_)) {
         MAGTRANSFORM transform{{{factor, 0, 0}, {0, factor, 0}, {0, 0, 1}}};
         mag_set_transform_(magnifier_, &transform);
     }
@@ -6270,12 +7427,21 @@ void ZoomWindow::refresh_source() {
     top = std::clamp(top, static_cast<int>(monitor_rect_.top),
                      static_cast<int>(monitor_rect_.bottom) - source_height);
     source_rect_ = RECT{left, top, left + source_width, top + source_height};
-    mag_set_source_(magnifier_, source_rect_);
-    InvalidateRect(magnifier_, nullptr, TRUE);
-    if (geometry_changed && ink_ && IsWindowVisible(ink_->hwnd()))
-        ink_->set_bounds(zoom_rect_);
+    if (recordable_output_) {
+        update_recordable_output();
+    } else {
+        mag_set_source_(magnifier_, source_rect_);
+        InvalidateRect(magnifier_, nullptr, TRUE);
+    }
+    if (ink_ && IsWindowVisible(ink_->hwnd())) {
+        if (edit_active()) {
+            ink_->update_edit_view(zoom_rect_, source_rect_, factor);
+        } else if (geometry_changed) {
+            ink_->set_bounds(zoom_rect_);
+        }
+    }
     if (target_) {
-        if (view == ZoomView::Lens) {
+        if (view == ZoomView::Lens && !edit_locked) {
             // The source rectangle can be clamped at monitor edges. Its center,
             // not the unclamped pointer, is the pixel represented at the center
             // of the magnified output.
@@ -6291,11 +7457,16 @@ void ZoomWindow::refresh_source() {
     last_source_factor_ = factor;
     last_source_view_ = static_cast<int>(view);
     last_source_overview_ = overview_;
+    if (edit_toolbar_ && edit_active())
+        edit_toolbar_->show_for(zoom_rect_, factor, edit_state_);
     if (geometry_changed) bring_to_front();
 }
 
 LRESULT ZoomWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
     switch (message) {
+        case WM_NCHITTEST:
+            if (edit_state_ == ZoomEditState::Navigate) return HTTRANSPARENT;
+            break;
         case kQaQueryZoomFrozenMessage:
             return frozen() ? 1 : 0;
         case kQaQueryZoomSourceFocusXMessage:
@@ -6306,11 +7477,67 @@ LRESULT ZoomWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
             return controller_.preferences().zoom_view;
         case kQaQueryZoomGeometryWidthMessage:
             return zoom_rect_.right - zoom_rect_.left;
+        case kQaQueryZoomFactorMessage:
+            return static_cast<LRESULT>(std::lround(
+                controller_.state().zoom_factor * 100.0F));
+        case kQaQueryZoomEditStateMessage:
+            return static_cast<LRESULT>(edit_state_);
+        case kQaQueryZoomEditDocumentCountMessage:
+            return ink_ ? static_cast<LRESULT>(ink_->item_count()) : 0;
+        case kQaSetZoomEditStateMessage:
+            if (wparam == 0) {
+                if (edit_active()) toggle_edit_mode();
+            } else {
+                set_edit_state(wparam == 2 ? ZoomEditState::Annotate
+                                           : ZoomEditState::Navigate);
+            }
+            return static_cast<LRESULT>(edit_state_);
+        case kQaPopulateZoomEditDocumentMessage:
+            if (ink_ && edit_active()) {
+                ink_->populate_edit_stress_document(
+                    std::clamp<std::size_t>(static_cast<std::size_t>(wparam),
+                                            1U, 20000U));
+                return static_cast<LRESULT>(ink_->item_count());
+            }
+            return 0;
         case kQaToggleZoomFreezeMessage:
             return toggle_freeze() ? 1 : 0;
         case kZoomClickFreezeMessage:
             click_freeze_pending_ = false;
-            if (active_ && !frozen()) toggle_freeze();
+            if (active_ && !frozen() &&
+                edit_state_ != ZoomEditState::Navigate) toggle_freeze();
+            return 0;
+        case kQaQueryZoomEditFirstViewXMessage:
+            if (ink_) {
+                if (const auto point = ink_->first_edit_view_point())
+                    return static_cast<LRESULT>(std::lround(point->x));
+            }
+            return std::numeric_limits<LRESULT>::min();
+        case kQaQueryZoomEditFirstViewYMessage:
+            if (ink_) {
+                if (const auto point = ink_->first_edit_view_point())
+                    return static_cast<LRESULT>(std::lround(point->y));
+            }
+            return std::numeric_limits<LRESULT>::min();
+        case kQaNudgeZoomEditSourceMessage:
+            if (ink_ && edit_active()) {
+                const int width = source_rect_.right - source_rect_.left;
+                const int height = source_rect_.bottom - source_rect_.top;
+                int left = source_rect_.left + static_cast<int>(wparam);
+                int top = source_rect_.top + static_cast<int>(lparam);
+                left = std::clamp(left, static_cast<int>(monitor_rect_.left),
+                                  static_cast<int>(monitor_rect_.right) - width);
+                top = std::clamp(top, static_cast<int>(monitor_rect_.top),
+                                 static_cast<int>(monitor_rect_.bottom) - height);
+                source_rect_ = {left, top, left + width, top + height};
+                // QA isolates Elite Pen's added source-space render cost. The
+                // native Magnifier update is already exercised by refresh_source
+                // and must not be charged again to the annotation cache budget.
+                ink_->update_edit_view(
+                    zoom_rect_, source_rect_,
+                    overview_ ? 1.0F : controller_.state().zoom_factor);
+                return 1;
+            }
             return 0;
         case WM_TIMER: refresh_source(); return 0;
         case WM_DISPLAYCHANGE:
@@ -6324,14 +7551,12 @@ LRESULT ZoomWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
                     GET_WHEEL_DELTA_WPARAM(wparam) > 0 ? 1 : -1);
                 return 0;
             }
-            const float direction = GET_WHEEL_DELTA_WPARAM(wparam) > 0 ? 0.25F : -0.25F;
-            controller_.state().zoom_factor = std::clamp(
-                controller_.state().zoom_factor + direction, 1.25F, 8.0F);
-            refresh_source();
+            adjust_zoom(GET_WHEEL_DELTA_WPARAM(wparam) > 0 ? 0.25F : -0.25F);
             return 0;
         }
         case WM_PARENTNOTIFY:
-            if (LOWORD(wparam) == WM_LBUTTONDOWN && !frozen()) {
+            if (LOWORD(wparam) == WM_LBUTTONDOWN && !frozen() &&
+                edit_state_ != ZoomEditState::Navigate) {
                 toggle_freeze();
                 return 0;
             }
@@ -6778,9 +8003,17 @@ void Controller::begin_text(PointF position) {
     if (text_input_) text_input_->show_at(position, state_.color, state_.thickness);
 }
 
+void Controller::commit_pending_text() {
+    if (text_input_ && text_input_->active()) text_input_->commit();
+}
+
+void Controller::cancel_pending_text() {
+    if (text_input_ && text_input_->active()) text_input_->cancel();
+}
+
 void Controller::commit_text(PointF position, Color color, float thickness,
                              std::wstring text) {
-    if (zoom_ && zoom_->active() && zoom_->frozen()) {
+    if (zoom_ && zoom_->active() && zoom_->accepts_annotations()) {
         zoom_->commit_text_screen(position, color, thickness, std::move(text));
         return;
     }
@@ -7189,8 +8422,26 @@ Application::Application() : impl_(std::make_unique<Impl>()) {}
 Application::~Application() = default;
 
 int Application::run() {
+    std::wstring instance_name = L"Local\\PowerEliteStudio.ElitePen.Singleton.v1";
+    wchar_t qa_instance[96]{};
+    const DWORD qa_length = GetEnvironmentVariableW(
+        L"ELITE_PEN_QA_INSTANCE_ID", qa_instance,
+        static_cast<DWORD>(std::size(qa_instance)));
+    if (qa_length > 0 &&
+        qa_length < static_cast<DWORD>(std::size(qa_instance))) {
+        instance_name += L".";
+        for (DWORD index = 0; index < qa_length; ++index) {
+            const wchar_t value = qa_instance[index];
+            if ((value >= L'a' && value <= L'z') ||
+                (value >= L'A' && value <= L'Z') ||
+                (value >= L'0' && value <= L'9') || value == L'-' ||
+                value == L'_') {
+                instance_name.push_back(value);
+            }
+        }
+    }
     impl_->instance_mutex = CreateMutexW(nullptr, TRUE,
-        L"Local\\PowerEliteStudio.ElitePen.Singleton.v1");
+                                         instance_name.c_str());
     if (!impl_->instance_mutex || GetLastError() == ERROR_ALREADY_EXISTS) {
         HWND palette = FindWindowW(L"ElitePen.Palette", nullptr);
         if (palette) {

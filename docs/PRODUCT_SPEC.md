@@ -1,6 +1,6 @@
-# Elite Pen 2.7.1 — contrato de producto
+# Elite Pen 2.8.0 — contrato de producto
 
-Estado: versión 2.7.1 implementada como software de código abierto bajo Apache
+Estado: versión 2.8.0 implementada como software de código abierto bajo Apache
 License 2.0 y preparada para distribución pública portable e instalada.
 
 ## 1. Identidad e interaccion principal
@@ -148,6 +148,9 @@ añade una fila independiente para Configuracion.
   menos de 350 MiB de memoria de trabajo.
 - El zoom no repite operaciones nativas si puntero, vista, aumento y modo general no
   han cambiado. Las vistas con geometría fija solo actualizan la región fuente.
+- Zoom editable conserva una caché dispersa en coordenadas de la fuente; navegar no
+  vuelve a recorrer ni rasterizar el historial vectorial. El benchmark de 5.000
+  objetos exige menos de 8 ms de costo medio por cuadro de paneo para la capa añadida.
 
 ## 4. Pizarra y zoom
 
@@ -155,14 +158,19 @@ añade una fila independiente para Configuracion.
   y se activan sin recrear el documento. Al entrar en pizarra negra con color negro,
   Elite Pen cambia a amarillo para conservar contraste. Tras cada trazo o borrado,
   la paleta se recompone sobre el lienzo y continúa visible y seleccionable.
-- Zoom usa la capacidad nativa de Windows en proceso x64. La ventana de control se
-  excluye de la captura cuando el sistema lo permite para evitar recursion visual.
+- Zoom usa la capacidad nativa de Windows en proceso x64. Al detectar OBS y una
+  ventana enfocada compatible, usa una composición DWM viva con el mismo origen y
+  factor para que Windows Graphics Capture grabe la ampliación. Magnifier permanece
+  como respaldo general; la tinta y el resto de superficies usan `WDA_NONE`.
+- En OBS sobre Windows 10 se requiere `Captura de pantalla > Windows 10 (1903 y
+  posteriores)`. DXGI Desktop Duplication puede reemplazar por negro tanto el
+  control Magnifier como la composición DWM en portátiles con gráficos híbridos.
 - El zoom vivo presenta directamente la salida de Magnifier, sin interponer la capa
   de tinta transparente antes de congelar. Esto evita superficies negras o sin
   inicializar al entrar con `Ctrl+Shift+Z`.
-- La congelación copia la salida ampliada ya compuesta en pantalla, retirando durante
-  ese instante la afinidad que la excluye de capturas. Una imagen completamente vacía
-  se rechaza y el zoom continúa vivo en vez de mostrar una pizarra negra falsa.
+- La congelación copia la salida ampliada ya compuesta en pantalla. Una imagen
+  completamente vacía se rechaza y el zoom continúa vivo en vez de mostrar una
+  pizarra negra falsa.
 - `P` o clic congela la salida ampliada en una superficie GPU independiente y activa Lapiz.
   Sobre ella funcionan Lapiz, Resaltador, Borrador, Texto, Linea, Rectangulo, Elipse,
   Flecha y Flecha curva. `P` reanuda el zoom vivo sin perder esas anotaciones.
@@ -184,6 +192,34 @@ añade una fila independiente para Configuracion.
   al cruzar de monitor.
 - `Esc` sale del zoom y también abandona las pizarras blanca o negra, conservando las
   anotaciones vectoriales.
+
+### Zoom editable
+
+- `E` activa un flujo adicional y reversible; no sustituye `P` ni cambia `F`, `L`,
+  `D`, `I`, `0`, rueda, `+`/`-` o la salida existente.
+- Una barra flotante excluida de la fuente ampliada presenta `MANO`, `LÁPIZ`, nivel,
+  acercar, alejar y cerrar. La paleta queda por encima de barra, tinta y Magnifier.
+- `MANO` mantiene el seguimiento del puntero y entrega ratón, rueda y teclado a la
+  aplicación real. Así se puede pulsar una barra de direcciones, escribir o desplazar
+  contenido sin salir del zoom; las teclas simples tampoco se reservan para Elite Pen.
+- `LÁPIZ` fija temporalmente el centro, conserva el cuadro ampliado exacto de ese
+  instante y recibe entrada de anotación. `MANO` o `Espacio` descartan esa instantánea,
+  ocultan la superficie de tinta y devuelven el foco a la aplicación subyacente. El
+  nivel se controla desde `+`/`−` de la barra y `Ctrl+Shift+Z` sale desde Mano.
+- El documento editable usa coordenadas de píxeles de la fuente, no del viewport.
+  Cada punto y grosor se convierte mediante origen y factor del zoom; al panear o
+  ampliar se aplica la transformación inversa, manteniendo la tinta unida al objeto
+  observado en escritorios con coordenadas positivas o negativas.
+- Lápiz, Resaltador, Borrador, Texto, Línea, Rectángulo, Elipse, Flecha, Flecha curva,
+  Captura, Limpiar, Deshacer y Rehacer operan en ese documento independiente. La
+  captura aplana la vista ampliada y las anotaciones visibles en PNG y portapapeles.
+- Las anotaciones permanecen en el documento al volver a Mano y reaparecen al entrar
+  otra vez en Lápiz. La tinta terminada se rasteriza en bloques GPU dispersos de 512 × 512 píxeles de
+  fuente. Añadir actualiza solo los bloques tocados; paneo y ampliación transforman
+  únicamente los bloques visibles. Limpiar vacía la caché y operaciones que retiren
+  o reordenen objetos la reconstruyen una sola vez. El atlas se limita a 160 bloques
+  (aproximadamente 160 MiB BGRA8); si una sesión extrema lo supera, se degrada de
+  forma segura a renderizado vectorial visible sin seguir reservando memoria.
 
 ## 5. Rendimiento y compatibilidad
 

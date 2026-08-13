@@ -5,6 +5,37 @@
 
 namespace elite_pen {
 
+namespace {
+
+constexpr float kMinimumZoomScale = 0.001F;
+
+float safe_zoom_scale(float scale) noexcept {
+    return std::isfinite(scale) && scale >= kMinimumZoomScale
+        ? scale : 1.0F;
+}
+
+}  // namespace
+
+PointF ZoomViewportTransform::view_to_source(PointF point) const noexcept {
+    const float factor = safe_zoom_scale(scale);
+    return {source.left + point.x / factor,
+            source.top + point.y / factor};
+}
+
+PointF ZoomViewportTransform::source_to_view(PointF point) const noexcept {
+    const float factor = safe_zoom_scale(scale);
+    return {(point.x - source.left) * factor,
+            (point.y - source.top) * factor};
+}
+
+float ZoomViewportTransform::view_to_source_length(float length) const noexcept {
+    return length / safe_zoom_scale(scale);
+}
+
+float ZoomViewportTransform::source_to_view_length(float length) const noexcept {
+    return length * safe_zoom_scale(scale);
+}
+
 const wchar_t* tool_name(Tool tool) noexcept {
     switch (tool) {
         case Tool::Interact: return L"Interactuar";
@@ -57,7 +88,8 @@ float distance_to_segment(PointF p, PointF a, PointF b) noexcept {
     return distance(p, {a.x + t * dx, a.y + t * dy});
 }
 
-CubicBezier curved_arrow_bezier(PointF start, PointF end) noexcept {
+CubicBezier curved_arrow_bezier(PointF start, PointF end,
+                                float reference_scale) noexcept {
     const float dx = end.x - start.x;
     const float dy = end.y - start.y;
     const float length = std::hypot(dx, dy);
@@ -65,7 +97,8 @@ CubicBezier curved_arrow_bezier(PointF start, PointF end) noexcept {
         return {start, start, end, end};
     }
     const PointF normal{-dy / length, dx / length};
-    const float bend = std::min(length * 0.28F, 110.0F);
+    const float bend = std::min(
+        length * 0.28F, 110.0F / safe_zoom_scale(reference_scale));
     return {
         start,
         {start.x + dx * 0.30F + normal.x * bend,
@@ -89,9 +122,12 @@ PointF cubic_bezier_point(const CubicBezier& curve, float t) noexcept {
     };
 }
 
-ArrowHead arrow_head_points(PointF before, PointF end, float width) noexcept {
+ArrowHead arrow_head_points(PointF before, PointF end, float width,
+                            float reference_scale) noexcept {
     const float angle = std::atan2(end.y - before.y, end.x - before.x);
-    const float size = std::clamp(width * 3.2F, 12.0F, 38.0F);
+    const float scale = safe_zoom_scale(reference_scale);
+    const float size = std::clamp(
+        width * 3.2F, 12.0F / scale, 38.0F / scale);
     constexpr float spread = 0.62F;
     return {
         {end.x - size * std::cos(angle - spread),
@@ -112,7 +148,8 @@ RectF Drawable::bounds() const noexcept {
         result.bottom = std::max(result.bottom, point.y);
     }
     if (kind == Tool::CurvedArrow && points.size() >= 2) {
-        const auto curve = curved_arrow_bezier(points.front(), points.back());
+        const auto curve = curved_arrow_bezier(
+            points.front(), points.back(), reference_scale);
         for (const PointF point : {curve.control1, curve.control2}) {
             result.left = std::min(result.left, point.x);
             result.top = std::min(result.top, point.y);
@@ -122,9 +159,11 @@ RectF Drawable::bounds() const noexcept {
     }
     if ((kind == Tool::Arrow || kind == Tool::CurvedArrow) && points.size() >= 2) {
         const PointF before = kind == Tool::CurvedArrow
-            ? curved_arrow_bezier(points.front(), points.back()).control2
+            ? curved_arrow_bezier(
+                points.front(), points.back(), reference_scale).control2
             : points[points.size() - 2];
-        const auto head = arrow_head_points(before, points.back(), width);
+        const auto head = arrow_head_points(
+            before, points.back(), width, reference_scale);
         for (const PointF point : {head.left, head.right}) {
             result.left = std::min(result.left, point.x);
             result.top = std::min(result.top, point.y);
@@ -137,7 +176,7 @@ RectF Drawable::bounds() const noexcept {
     result.top -= padding;
     result.right += padding;
     result.bottom += padding;
-    if (kind == Tool::Text) {
+    if (kind == Tool::Text && points.size() == 1) {
         result.right = std::max(result.right, result.left + 400.0F);
         result.bottom = std::max(result.bottom, result.top + width * 6.0F);
     }
@@ -185,7 +224,8 @@ bool path_hit(const Drawable& item, PointF point, float tolerance) noexcept {
 
 bool curved_arrow_hit(const Drawable& item, PointF point, float tolerance) noexcept {
     if (item.points.size() < 2) return false;
-    const auto curve = curved_arrow_bezier(item.points.front(), item.points.back());
+    const auto curve = curved_arrow_bezier(
+        item.points.front(), item.points.back(), item.reference_scale);
     const float radius = tolerance + item.width * 0.5F;
     const float radius_squared = radius * radius;
     PointF previous = curve.start;
@@ -202,7 +242,8 @@ bool curved_arrow_hit(const Drawable& item, PointF point, float tolerance) noexc
         previous = current;
     }
     if (curve_hit) return true;
-    const auto head = arrow_head_points(curve.control2, curve.end, item.width);
+    const auto head = arrow_head_points(
+        curve.control2, curve.end, item.width, item.reference_scale);
     return squared_distance_to_segment(point, curve.end, head.left) <= radius_squared ||
            squared_distance_to_segment(point, curve.end, head.right) <= radius_squared;
 }
@@ -222,7 +263,8 @@ bool hit_test(const Drawable& item, PointF point, float tolerance) noexcept {
             const float radius = tolerance + item.width * 0.5F;
             const float radius_squared = radius * radius;
             const auto head = arrow_head_points(item.points[item.points.size() - 2],
-                                                item.points.back(), item.width);
+                                                item.points.back(), item.width,
+                                                item.reference_scale);
             return squared_distance_to_segment(point, item.points.back(), head.left) <=
                        radius_squared ||
                    squared_distance_to_segment(point, item.points.back(), head.right) <=

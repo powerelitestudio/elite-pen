@@ -1,10 +1,10 @@
 # Publicación abierta de Elite Pen
 
-Última actualización: 10 de agosto de 2026. Elite Pen se mantiene en el repositorio
-público <https://github.com/powerelitestudio/elite-pen>. La versión 2.7.1 es la
-primera publicada íntegramente como software de código abierto bajo Apache License
-2.0; la licencia source-available de 2.7.0 solo conserva valor histórico para aquel
-tag y sus paquetes.
+Última actualización: 11 de agosto de 2026. Elite Pen se mantiene en el repositorio
+público <https://github.com/powerelitestudio/elite-pen>. La versión 2.8.0 continúa
+el modelo íntegramente abierto bajo Apache License 2.0 inaugurado por 2.7.1; la
+licencia source-available de 2.7.0 solo conserva valor histórico para aquel tag y
+sus paquetes.
 
 ## Repositorio y gobierno
 
@@ -31,8 +31,8 @@ tag y sus paquetes.
 - La edición portable incluye además hashes internos y `build-info.json`.
 - Los binarios sin firma digital se anuncian expresamente; nunca se oculta la posible
   advertencia de SmartScreen.
-- La versión anterior de `D:\Aplicaciones\Elite Pen` se conserva como respaldo al
-  actualizar el portable de trabajo.
+- Al actualizar `D:\Aplicaciones\Elite Pen`, se preserva primero su carpeta `data`;
+  la copia temporal anterior sólo se elimina después de verificar versión y hashes.
 
 ## Control por cada Release
 

@@ -1,6 +1,6 @@
-# Informe de calidad — Elite Pen 2.7.1
+# Informe de calidad — Elite Pen 2.8.0
 
-Fecha: 2026-08-10
+Fecha: 2026-08-11
 Equipo de referencia: Lenovo 80NV, Intel Core i7-6700HQ, 12 GB RAM, Intel HD 530,
 GeForce GTX 960M, Windows 10 Pro 22H2 x64, dos monitores con escalado mixto.
 
@@ -117,6 +117,29 @@ GeForce GTX 960M, Windows 10 Pro 22H2 x64, dos monitores con escalado mixto.
 - Publicación 2.7.1: la licencia Apache 2.0 canónica se compara con la fuente oficial;
   portable e instalador deben contener `LICENSE.txt`, `NOTICE`, `TRADEMARKS.md` y
   metadatos 2.7.1 antes de publicar los hashes SHA-256.
+- Zoom editable 2.8: `E` abre la barra Mano/Lápiz sin modificar `P`; QA consulta la
+  máquina de estados, orden topmost, herramienta activa y retorno al zoom vivo
+  original. Mano exige raíz transparente/no activable, hijo Magnifier deshabilitado
+  para hit testing y `ZoomInk` oculto; Lápiz revierte esas condiciones y exige una
+  instantánea válida. La tinta usa `WS_EX_NOREDIRECTIONBITMAP` y no `WS_EX_LAYERED`
+  para no cubrir el zoom de negro.
+- Grabación de zoom 2.8: una prueba gráfica aislada exige `WDA_NONE` en la raíz del
+  zoom y en `ZoomInk`, captura el cuadro completo visible y rechaza una salida con
+  menos de 3 % de muestras no negras. La validación Release obtuvo 100 %.
+- Regresión OBS 2.8: se grabaron MP4 reales con OBS 32.2.1 sobre Windows 10 22H2,
+  Intel HD 530 + NVIDIA GTX 960M. Magnifier fue negro tanto en DXGI como WGC;
+  la ruta DWM nueva produjo texto ampliado visible con WGC. DXGI continuó negro y
+  queda documentado como método no compatible para grabar Zoom en ese entorno.
+- Anclaje 2.8: pruebas puras cubren round trip viewport/fuente, origen negativo,
+  escalado de grosor y factor inválido seguro. QA real dibuja, panea y cambia el nivel,
+  comprobando que el mismo punto proyectado se mueva con la fuente.
+- Herramientas 2.8: la prueba UI combina Lápiz, Rectángulo, Texto transparente,
+  Captura de 220 × 140, Deshacer, Rehacer, Limpiar y restaurar dentro del documento
+  editable; también confirma un texto pendiente al volver a Mano y después repite la
+  batería completa de congelación clásica.
+- Rendimiento 2.8: 5.000 trazos fuente construyen una caché GPU dispersa de bloques.
+  El benchmark mide por separado población, primer cuadro y 240 transformaciones de
+  paneo sin volver a rasterizar el historial.
 - Persistencia 2.0: una prueba portable aislada escribe y vuelve a leer posición con
   coordenadas negativas, escala, modo contraído, color, grosor, zoom y atajos
   personalizados; también comprueba el reemplazo atómico sin archivo `.tmp` residual.
@@ -138,15 +161,17 @@ Resultado final en el equipo de referencia:
 
 | Prueba | Resultado | Presupuesto |
 |---|---:|---:|
-| Agregar 5.000 trazos | 15,50 ms | 250 ms |
-| 250 borrados fallidos sobre 5.000 objetos | 27,96 ms | 400 ms |
-| 10.000 ciclos de deshacer/rehacer el último objeto | 0,84 ms | 200 ms |
-| Limpiar y restaurar 5.000 objetos | 1,06 ms | 100 ms |
-| Simplificar 100.000 muestras | 49,42 ms | 500 ms |
+| Agregar 5.000 trazos | 20,92 ms | 250 ms |
+| 250 borrados fallidos sobre 5.000 objetos | 40,90 ms | 400 ms |
+| 10.000 ciclos de deshacer/rehacer el último objeto | 0,77 ms | 200 ms |
+| Limpiar y restaurar 5.000 objetos | 2,05 ms | 100 ms |
+| Simplificar 100.000 muestras | 69,98 ms | 500 ms |
 
-Renderizado real con 5.000 trazos: 2,066 ms de media para cuadros en caché,
-4,206 ms durante dibujo activo y 87,54 MiB de memoria de trabajo. Todos permanecen
-dentro de los presupuestos de 8 ms, 12 ms y 350 MiB respectivamente.
+Renderizado real con 5.000 trazos: 1,466 ms de media para cuadros en caché,
+4,952 ms durante dibujo activo y 105,58 MiB de memoria de trabajo. Zoom editable
+puebla el documento fuente en 8,782 ms, entra por primera vez en Lápiz en 445,275 ms,
+recorre 240 cuadros de Mano a 0,519 ms de media y vuelve a Lápiz con caché caliente en
+92,715 ms. Todos permanecen dentro de sus presupuestos respectivos.
 
 ## Compatibilidad y recuperacion
 
@@ -156,8 +181,9 @@ dentro de los presupuestos de 8 ms, 12 ms y 350 MiB respectivamente.
 - Historial acotado, instancia unica, `Esc` de emergencia y bandeja de sistema.
 - Preferencias separadas para edicion portable e instalada, incluidos atajos y
   estado de hibernación.
-- El zoom vivo permanece en Magnifier nativo; la copia de imagen se realiza una sola
-  vez al congelar y la tinta se compone por GPU, sin bucle de capturas de CPU.
+- El zoom vivo permanece en Magnifier nativo sin OBS; al detectar OBS puede usar una
+  miniatura DWM viva, también acelerada y sin bucle de capturas de CPU. La copia de
+  imagen se realiza una sola vez al congelar y la tinta se compone por GPU.
 - En sesiones automatizadas cuyo DC de pantalla omite las superficies
   DirectComposition, la regresión de transparencia valida dimensiones y orden de
   ventana y declara el muestreo de píxeles no disponible; en un escritorio
@@ -168,5 +194,5 @@ dentro de los presupuestos de 8 ms, 12 ms y 350 MiB respectivamente.
 - Windows puede denegar la captura del escritorio en una sesion bloqueada, segura o
   no interactiva; Elite Pen informa el fallo y no genera un archivo corrupto.
 - La presion depende del controlador del lapiz y de que Windows entregue WM_POINTER.
-- El binario 2.7.1 no esta firmado digitalmente; los hashes del paquete permiten
+- El binario 2.8.0 no esta firmado digitalmente; los hashes del paquete permiten
   verificar integridad hasta incorporar el certificado de Power Elite Studio.

@@ -1,5 +1,42 @@
 # Historial de cambios
 
+## 2.8.0 — 2026-08-11
+
+- Se corrige la pantalla negra comprobada en grabaciones reales de OBS sobre
+  Windows 10 híbrido Intel/NVIDIA. Cuando OBS está abierto, Zoom presenta la
+  aplicación enfocada mediante composición DWM grabable y conserva Magnifier
+  nativo como respaldo para ventanas no compatibles y uso sin OBS.
+- OBS debe usar `Captura de pantalla > Método: Windows 10 (1903 y posteriores)`;
+  DXGI Desktop Duplication omite tanto Magnifier como miniaturas DWM en este equipo.
+- El zoom, la tinta congelada, el indicador de lupa y la barra de Zoom editable
+  permanecen capturables por OBS y otros grabadores. Se elimina la afinidad de
+  exclusión que hacía aparecer un rectángulo negro en grabaciones de pantalla.
+- La prevención de recursión visual continúa a cargo del filtro nativo de Magnifier,
+  sin ocultar a los grabadores el contenido ampliado que se está presentando.
+- `E` incorpora Zoom editable como flujo adicional a la congelación clásica con
+  `P`: una barra flotante alterna `MANO` para usar la aplicación ampliada y `LÁPIZ` para anotar sin
+  modificar las vistas `F`, `L`, `D`, inversión, vista general ni salida existente.
+- Las anotaciones de Zoom editable se guardan en coordenadas de la fuente ampliada.
+  Trazos, grosores, texto, figuras y borrado se desplazan y escalan junto al contenido
+  durante paneo o cambios de ampliación, incluso con monitores de coordenadas negativas.
+- Una caché GPU dispersa de bloques de 512 px actualiza sólo los bloques tocados;
+  navegar transforma únicamente los visibles. El contrato automatizado usa 5.000
+  trazos y limita de forma independiente población, primer cuadro, paneo y memoria.
+- La barra flotante, la paleta y la tinta conservan un orden topmost determinista;
+  `LÁPIZ` entra en anotación y `Espacio` siempre vuelve a Mano. En Mano, clics, rueda
+  y teclado se entregan a la aplicación real, por lo que se puede escribir o navegar
+  sin abandonar la ampliación.
+- Zoom editable admite Lápiz, Resaltador, Borrador, Texto en línea, todas las figuras,
+  Captura PNG/portapapeles, Limpiar, Deshacer y Rehacer con historial independiente.
+  Un texto todavía abierto se confirma en ese mismo documento antes de volver a Mano.
+- Las preferencias y la pestaña Atajos agregan la acción contextual configurable
+  `Zoom: editar`, con `E` como valor inicial y conservación portable/local.
+- QA añade transformaciones puras, persistencia del nuevo atajo, pruebas UI del flujo
+  completo, anclaje durante paneo/zoom, orden Z, captura y regresión integral de `P`.
+- La superficie de Zoom editable usa composición directa sin bitmap de redirección y
+  queda completamente oculta en Mano, evitando el rectángulo negro que ciertos
+  controladores mostraban al entrar con `E`.
+
 ## 2.7.1 — 2026-08-10
 
 - Elite Pen pasa a ser software completamente abierto bajo Apache License 2.0.

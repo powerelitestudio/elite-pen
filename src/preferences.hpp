@@ -60,6 +60,7 @@ enum class HotkeyAction : std::uint8_t {
     ZoomOverview,
     ZoomIn,
     ZoomOut,
+    ZoomEdit,
     Count
 };
 
@@ -107,7 +108,8 @@ inline constexpr std::array<HotkeyBinding, kHotkeyActionCount> kDefaultHotkeys{{
     {0, 'I'},
     {0, '0'},
     {0, VK_OEM_PLUS},
-    {0, VK_OEM_MINUS}
+    {0, VK_OEM_MINUS},
+    {0, 'E'}
 }};
 
 // Defaults shipped through 2.3. Existing installations are migrated only when
@@ -135,7 +137,8 @@ inline constexpr std::array<HotkeyBinding, kHotkeyActionCount> kLegacyDefaultHot
     {0, 'I'},
     {0, '0'},
     {0, VK_OEM_PLUS},
-    {0, VK_OEM_MINUS}
+    {0, VK_OEM_MINUS},
+    {0, 'E'}
 }};
 
 struct Preferences {
