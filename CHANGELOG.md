@@ -2,6 +2,11 @@
 
 ## 2.8.0 — 2026-08-11
 
+- El zoom, la tinta congelada, el indicador de lupa y la barra de Zoom editable
+  permanecen capturables por OBS y otros grabadores. Se elimina la afinidad de
+  exclusión que hacía aparecer un rectángulo negro en grabaciones de pantalla.
+- La prevención de recursión visual continúa a cargo del filtro nativo de Magnifier,
+  sin ocultar a los grabadores el contenido ampliado que se está presentando.
 - `E` incorpora Zoom editable como flujo adicional a la congelación clásica con
   `P`: una barra flotante alterna `MANO` para usar la aplicación ampliada y `LÁPIZ` para anotar sin
   modificar las vistas `F`, `L`, `D`, inversión, vista general ni salida existente.

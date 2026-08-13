@@ -123,6 +123,9 @@ GeForce GTX 960M, Windows 10 Pro 22H2 x64, dos monitores con escalado mixto.
   para hit testing y `ZoomInk` oculto; Lápiz revierte esas condiciones y exige una
   instantánea válida. La tinta usa `WS_EX_NOREDIRECTIONBITMAP` y no `WS_EX_LAYERED`
   para no cubrir el zoom de negro.
+- Grabación de zoom 2.8: una prueba gráfica aislada exige `WDA_NONE` en la raíz del
+  zoom y en `ZoomInk`, captura el cuadro completo visible y rechaza una salida con
+  menos de 3 % de muestras no negras. La validación Release obtuvo 100 %.
 - Anclaje 2.8: pruebas puras cubren round trip viewport/fuente, origen negativo,
   escalado de grosor y factor inválido seguro. QA real dibuja, panea y cambia el nivel,
   comprobando que el mismo punto proyectado se mueva con la fuente.

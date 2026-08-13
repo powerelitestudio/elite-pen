@@ -131,6 +131,9 @@ el centro real del área ampliada,
 `D` acoplado, `I` invertir,
 rueda/`+`/`-` para ampliar, `0` para vista general, `Espacio` o `M` para recorrer
 vistas, y `P` o clic para congelar o reanudar. `Esc`, `F4` o clic derecho salen.
+La salida ampliada y sus anotaciones permanecen visibles en OBS y otros grabadores
+de pantalla; el filtro nativo evita la recursión de Elite Pen sin sustituir el zoom
+por un cuadro negro en la grabación.
 La congelación toma la imagen ampliada que está visible, no una captura del área
 original sin zoom, y rechaza una imagen vacía antes de abrir la capa de tinta.
 Mientras la imagen está congelada, la paleta y sus paneles permanecen siempre por

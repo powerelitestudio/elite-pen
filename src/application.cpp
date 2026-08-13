@@ -2643,6 +2643,16 @@ void PaletteWindow::install_tooltips() {
 }
 
 void PaletteWindow::install_hotkeys() {
+    // UI automation can run alongside a normal or recently terminated copy.
+    // It invokes the same commands directly and must not steal the user's
+    // machine-wide shortcuts merely to exercise unrelated interaction paths.
+    wchar_t qa_instance[2]{};
+    if (GetEnvironmentVariableW(L"ELITE_PEN_QA_INSTANCE_ID", qa_instance,
+                                static_cast<DWORD>(std::size(qa_instance))) > 0) {
+        registered_hotkeys_ = controller_.preferences().hotkeys;
+        hotkeys_registered_ = true;
+        return;
+    }
     if (!apply_hotkeys(controller_.preferences().hotkeys)) {
         controller_.preferences().hotkeys = kDefaultHotkeys;
         apply_hotkeys(kDefaultHotkeys);
@@ -5499,9 +5509,10 @@ bool ZoomInkWindow::initialize(GraphicsDevice& graphics) {
                  ex_style, WS_POPUP, initial)) return false;
     if (!initialize_surface(graphics)) return false;
     refresh_pencil_cursor();
-#ifndef ELITE_PEN_DEBUG
-    SetWindowDisplayAffinity(window_, WDA_EXCLUDEFROMCAPTURE);
-#endif
+    // Zoom annotations are presentation content, not private chrome. Keeping
+    // this full-screen surface capturable is essential for OBS and other course
+    // recorders; excluding it makes Windows emit a solid black rectangle.
+    SetWindowDisplayAffinity(window_, WDA_NONE);
     return true;
 }
 
@@ -6358,7 +6369,9 @@ bool ZoomTargetWindow::initialize(GraphicsDevice& graphics) {
                 ex_style, WS_POPUP, initial)) return false;
     SetLayeredWindowAttributes(window_, 0, 255, LWA_ALPHA);
     if (!initialize_surface(graphics)) return false;
-    SetWindowDisplayAffinity(window_, WDA_EXCLUDEFROMCAPTURE);
+    // The lens target must remain visible in recordings. Excluding even a small
+    // layered window can produce a black capture artifact on Windows 10.
+    SetWindowDisplayAffinity(window_, WDA_NONE);
     return true;
 }
 
@@ -6440,9 +6453,7 @@ bool ZoomEditToolbarWindow::initialize(GraphicsDevice& graphics) {
                 ex_style, WS_POPUP, initial)) return false;
     SetLayeredWindowAttributes(window_, 0, 255, LWA_ALPHA);
     if (!initialize_surface(graphics)) return false;
-#ifndef ELITE_PEN_DEBUG
-    SetWindowDisplayAffinity(window_, WDA_EXCLUDEFROMCAPTURE);
-#endif
+    SetWindowDisplayAffinity(window_, WDA_NONE);
     return true;
 }
 
@@ -6804,9 +6815,10 @@ bool ZoomWindow::initialize(GraphicsDevice& graphics) {
     if (!target_->initialize(graphics)) return false;
     edit_toolbar_ = std::make_unique<ZoomEditToolbarWindow>(controller_, *this);
     if (!edit_toolbar_->initialize(graphics)) return false;
-#ifndef ELITE_PEN_DEBUG
-    SetWindowDisplayAffinity(window_, WDA_EXCLUDEFROMCAPTURE);
-#endif
+    // The native Magnifier host is the actual enlarged picture OBS must see.
+    // Recursion is prevented with MagSetWindowFilterList below, independently
+    // of display-capture affinity.
+    SetWindowDisplayAffinity(window_, WDA_NONE);
     return true;
 }
 
@@ -8262,8 +8274,26 @@ Application::Application() : impl_(std::make_unique<Impl>()) {}
 Application::~Application() = default;
 
 int Application::run() {
+    std::wstring instance_name = L"Local\\PowerEliteStudio.ElitePen.Singleton.v1";
+    wchar_t qa_instance[96]{};
+    const DWORD qa_length = GetEnvironmentVariableW(
+        L"ELITE_PEN_QA_INSTANCE_ID", qa_instance,
+        static_cast<DWORD>(std::size(qa_instance)));
+    if (qa_length > 0 &&
+        qa_length < static_cast<DWORD>(std::size(qa_instance))) {
+        instance_name += L".";
+        for (DWORD index = 0; index < qa_length; ++index) {
+            const wchar_t value = qa_instance[index];
+            if ((value >= L'a' && value <= L'z') ||
+                (value >= L'A' && value <= L'Z') ||
+                (value >= L'0' && value <= L'9') || value == L'-' ||
+                value == L'_') {
+                instance_name.push_back(value);
+            }
+        }
+    }
     impl_->instance_mutex = CreateMutexW(nullptr, TRUE,
-        L"Local\\PowerEliteStudio.ElitePen.Singleton.v1");
+                                         instance_name.c_str());
     if (!impl_->instance_mutex || GetLastError() == ERROR_ALREADY_EXISTS) {
         HWND palette = FindWindowW(L"ElitePen.Palette", nullptr);
         if (palette) {

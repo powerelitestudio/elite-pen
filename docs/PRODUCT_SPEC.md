@@ -158,14 +158,16 @@ añade una fila independiente para Configuracion.
   y se activan sin recrear el documento. Al entrar en pizarra negra con color negro,
   Elite Pen cambia a amarillo para conservar contraste. Tras cada trazo o borrado,
   la paleta se recompone sobre el lienzo y continúa visible y seleccionable.
-- Zoom usa la capacidad nativa de Windows en proceso x64. La ventana de control se
-  excluye de la captura cuando el sistema lo permite para evitar recursion visual.
+- Zoom usa la capacidad nativa de Windows en proceso x64. Su salida, la tinta, el
+  indicador de lupa y la barra contextual permanecen capturables para OBS y otros
+  grabadores; la lista de exclusión de Magnifier evita la recursión visual dentro
+  de la propia ampliación sin aplicar `WDA_EXCLUDEFROMCAPTURE` a esas superficies.
 - El zoom vivo presenta directamente la salida de Magnifier, sin interponer la capa
   de tinta transparente antes de congelar. Esto evita superficies negras o sin
   inicializar al entrar con `Ctrl+Shift+Z`.
-- La congelación copia la salida ampliada ya compuesta en pantalla, retirando durante
-  ese instante la afinidad que la excluye de capturas. Una imagen completamente vacía
-  se rechaza y el zoom continúa vivo en vez de mostrar una pizarra negra falsa.
+- La congelación copia la salida ampliada ya compuesta en pantalla. Una imagen
+  completamente vacía se rechaza y el zoom continúa vivo en vez de mostrar una
+  pizarra negra falsa.
 - `P` o clic congela la salida ampliada en una superficie GPU independiente y activa Lapiz.
   Sobre ella funcionan Lapiz, Resaltador, Borrador, Texto, Linea, Rectangulo, Elipse,
   Flecha y Flecha curva. `P` reanuda el zoom vivo sin perder esas anotaciones.

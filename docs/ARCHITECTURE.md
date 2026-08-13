@@ -110,5 +110,6 @@ La máquina de estados es explícita: `Off`, `Navigate`, `Annotate`. Solo `Annot
 retira `WS_EX_TRANSPARENT`, muestra `ZoomInk` y captura gestos; `Navigate` deshabilita
 el capturador de clic, oculta la tinta, hace transparentes a entrada la raíz y el hijo
 Magnifier y devuelve el foco a la última aplicación externa. La barra se excluye del
-filtro de Magnifier y de capturas, y el orden topmost se recompone como Magnifier,
-tinta, barra y paleta.
+filtro de Magnifier para no reaparecer dentro de la ampliación, pero tanto ella como
+la raíz, la tinta y el indicador de lupa usan `WDA_NONE`: OBS debe capturar lo que el
+presentador ve. El orden topmost se recompone como Magnifier, tinta, barra y paleta.
