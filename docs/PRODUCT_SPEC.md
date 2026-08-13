@@ -158,10 +158,13 @@ añade una fila independiente para Configuracion.
   y se activan sin recrear el documento. Al entrar en pizarra negra con color negro,
   Elite Pen cambia a amarillo para conservar contraste. Tras cada trazo o borrado,
   la paleta se recompone sobre el lienzo y continúa visible y seleccionable.
-- Zoom usa la capacidad nativa de Windows en proceso x64. Su salida, la tinta, el
-  indicador de lupa y la barra contextual permanecen capturables para OBS y otros
-  grabadores; la lista de exclusión de Magnifier evita la recursión visual dentro
-  de la propia ampliación sin aplicar `WDA_EXCLUDEFROMCAPTURE` a esas superficies.
+- Zoom usa la capacidad nativa de Windows en proceso x64. Al detectar OBS y una
+  ventana enfocada compatible, usa una composición DWM viva con el mismo origen y
+  factor para que Windows Graphics Capture grabe la ampliación. Magnifier permanece
+  como respaldo general; la tinta y el resto de superficies usan `WDA_NONE`.
+- En OBS sobre Windows 10 se requiere `Captura de pantalla > Windows 10 (1903 y
+  posteriores)`. DXGI Desktop Duplication puede reemplazar por negro tanto el
+  control Magnifier como la composición DWM en portátiles con gráficos híbridos.
 - El zoom vivo presenta directamente la salida de Magnifier, sin interponer la capa
   de tinta transparente antes de congelar. Esto evita superficies negras o sin
   inicializar al entrar con `Ctrl+Shift+Z`.

@@ -12,6 +12,7 @@
 #include <magnification.h>
 #include <shellapi.h>
 #include <shlobj.h>
+#include <tlhelp32.h>
 #include <uxtheme.h>
 #include <wincodec.h>
 #include <windowsx.h>
@@ -109,6 +110,28 @@ const UiTheme& ui_theme(AppTheme theme) noexcept {
 
 const UiTheme& current_ui_theme() noexcept {
     return ui_theme(g_ui_theme);
+}
+
+bool process_is_running(const wchar_t* executable_name) {
+    const HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) return false;
+    PROCESSENTRY32W entry{};
+    entry.dwSize = sizeof(entry);
+    bool found = false;
+    if (Process32FirstW(snapshot, &entry)) {
+        do {
+            if (_wcsicmp(entry.szExeFile, executable_name) == 0) {
+                found = true;
+                break;
+            }
+        } while (Process32NextW(snapshot, &entry));
+    }
+    CloseHandle(snapshot);
+    return found;
+}
+
+bool obs_is_running() {
+    return process_is_running(L"obs64.exe") || process_is_running(L"obs32.exe");
 }
 
 D2D1_COLOR_F theme_color(std::uint32_t rgb, float alpha = 1.0F) noexcept {
@@ -1062,6 +1085,9 @@ private:
     void refresh_source();
     void update_lens_cursor(bool active);
     void remember_foreground_target();
+    bool start_recordable_output();
+    void stop_recordable_output();
+    void update_recordable_output();
     void set_edit_passthrough(bool enabled);
     bool install_click_hook();
     void uninstall_click_hook();
@@ -1090,6 +1116,10 @@ private:
     RECT monitor_rect_{};
     RECT zoom_rect_{};
     RECT source_rect_{};
+    HTHUMBNAIL recordable_thumbnail_{};
+    SIZE recordable_source_size_{};
+    RECT recordable_source_bounds_{};
+    bool recordable_output_{};
     bool initialized_{};
     bool active_{};
     bool overview_{};
@@ -6731,11 +6761,122 @@ void ZoomWindow::uninstall_click_hook() {
 }
 
 void ZoomWindow::remember_foreground_target() {
-    const HWND candidate = GetForegroundWindow();
+    HWND candidate = GetForegroundWindow();
     if (!candidate || !IsWindow(candidate)) return;
+    if (const HWND root = GetAncestor(candidate, GA_ROOT)) candidate = root;
     DWORD process_id{};
     GetWindowThreadProcessId(candidate, &process_id);
     if (process_id != GetCurrentProcessId()) foreground_before_zoom_ = candidate;
+}
+
+bool ZoomWindow::start_recordable_output() {
+    stop_recordable_output();
+    // Windows' Magnification control is composed after both OBS monitor-capture
+    // paths and is therefore recorded as black. While OBS is present, display a
+    // live DWM thumbnail of the focused application instead. WGC records this
+    // normal desktop composition while the native magnifier remains the fallback
+    // for ordinary use and unsupported windows.
+    if (!obs_is_running()) return false;
+    if (!window_ || !foreground_before_zoom_ ||
+        !IsWindow(foreground_before_zoom_) ||
+        !IsWindowVisible(foreground_before_zoom_) ||
+        IsIconic(foreground_before_zoom_)) {
+        return false;
+    }
+    BOOL cloaked = FALSE;
+    if (SUCCEEDED(DwmGetWindowAttribute(
+            foreground_before_zoom_, DWMWA_CLOAKED, &cloaked, sizeof(cloaked))) &&
+        cloaked) {
+        return false;
+    }
+    if (FAILED(DwmRegisterThumbnail(
+            window_, foreground_before_zoom_, &recordable_thumbnail_)) ||
+        !recordable_thumbnail_) {
+        recordable_thumbnail_ = nullptr;
+        return false;
+    }
+    if (FAILED(DwmQueryThumbnailSourceSize(
+            recordable_thumbnail_, &recordable_source_size_)) ||
+        recordable_source_size_.cx <= 0 || recordable_source_size_.cy <= 0 ||
+        !GetWindowRect(foreground_before_zoom_, &recordable_source_bounds_)) {
+        stop_recordable_output();
+        return false;
+    }
+    recordable_output_ = true;
+    ShowWindow(magnifier_, SW_HIDE);
+    return true;
+}
+
+void ZoomWindow::stop_recordable_output() {
+    recordable_output_ = false;
+    if (recordable_thumbnail_) {
+        DwmUnregisterThumbnail(recordable_thumbnail_);
+        recordable_thumbnail_ = nullptr;
+    }
+    recordable_source_size_ = {};
+    recordable_source_bounds_ = {};
+    if (magnifier_) ShowWindow(magnifier_, SW_SHOWNA);
+}
+
+void ZoomWindow::update_recordable_output() {
+    if (!recordable_output_ || !recordable_thumbnail_) return;
+    RECT current_bounds{};
+    if (!IsWindow(foreground_before_zoom_) ||
+        !GetWindowRect(foreground_before_zoom_, &current_bounds)) {
+        stop_recordable_output();
+        return;
+    }
+    recordable_source_bounds_ = current_bounds;
+    const int window_width = std::max(
+        1L, recordable_source_bounds_.right - recordable_source_bounds_.left);
+    const int window_height = std::max(
+        1L, recordable_source_bounds_.bottom - recordable_source_bounds_.top);
+    const double scale_x = static_cast<double>(recordable_source_size_.cx) /
+                           static_cast<double>(window_width);
+    const double scale_y = static_cast<double>(recordable_source_size_.cy) /
+                           static_cast<double>(window_height);
+    RECT source{
+        static_cast<LONG>(std::lround(
+            static_cast<double>(source_rect_.left - recordable_source_bounds_.left) *
+            scale_x)),
+        static_cast<LONG>(std::lround(
+            static_cast<double>(source_rect_.top - recordable_source_bounds_.top) *
+            scale_y)),
+        static_cast<LONG>(std::lround(
+            static_cast<double>(source_rect_.right - recordable_source_bounds_.left) *
+            scale_x)),
+        static_cast<LONG>(std::lround(
+            static_cast<double>(source_rect_.bottom - recordable_source_bounds_.top) *
+            scale_y))};
+    const LONG desired_width = std::clamp(
+        source.right - source.left, 1L, recordable_source_size_.cx);
+    const LONG desired_height = std::clamp(
+        source.bottom - source.top, 1L, recordable_source_size_.cy);
+    source.left = std::clamp(
+        source.left, 0L, recordable_source_size_.cx - desired_width);
+    source.top = std::clamp(
+        source.top, 0L, recordable_source_size_.cy - desired_height);
+    source.right = source.left + desired_width;
+    source.bottom = source.top + desired_height;
+
+    const RECT destination{
+        0, 0,
+        std::max(1L, zoom_rect_.right - zoom_rect_.left),
+        std::max(1L, zoom_rect_.bottom - zoom_rect_.top)};
+    DWM_THUMBNAIL_PROPERTIES properties{};
+    properties.dwFlags = DWM_TNP_RECTDESTINATION | DWM_TNP_RECTSOURCE |
+                         DWM_TNP_VISIBLE | DWM_TNP_OPACITY |
+                         DWM_TNP_SOURCECLIENTAREAONLY;
+    properties.rcDestination = destination;
+    properties.rcSource = source;
+    properties.opacity = 255;
+    properties.fVisible = TRUE;
+    properties.fSourceClientAreaOnly = FALSE;
+    if (FAILED(DwmUpdateThumbnailProperties(recordable_thumbnail_, &properties)))
+    {
+        stop_recordable_output();
+        source_initialized_ = false;
+    }
 }
 
 void ZoomWindow::set_edit_passthrough(bool enabled) {
@@ -6787,6 +6928,7 @@ LRESULT CALLBACK ZoomWindow::magnifier_subclass(
 }
 
 ZoomWindow::~ZoomWindow() {
+    stop_recordable_output();
     uninstall_click_hook();
     if (magnifier_)
         RemoveWindowSubclass(magnifier_, magnifier_subclass, 1);
@@ -6815,9 +6957,8 @@ bool ZoomWindow::initialize(GraphicsDevice& graphics) {
     if (!target_->initialize(graphics)) return false;
     edit_toolbar_ = std::make_unique<ZoomEditToolbarWindow>(controller_, *this);
     if (!edit_toolbar_->initialize(graphics)) return false;
-    // The native Magnifier host is the actual enlarged picture OBS must see.
-    // Recursion is prevented with MagSetWindowFilterList below, independently
-    // of display-capture affinity.
+    // Zoom presentation is intentionally capturable. Native Magnifier remains
+    // the general fallback; an OBS-aware DWM path is selected at activation.
     SetWindowDisplayAffinity(window_, WDA_NONE);
     return true;
 }
@@ -6834,6 +6975,7 @@ bool ZoomWindow::show_zoom() {
     tool_before_zoom_ = controller_.state().tool;
     foreground_before_zoom_ = nullptr;
     remember_foreground_target();
+    start_recordable_output();
     set_edit_passthrough(false);
     if (mag_set_filter_) {
         std::vector<HWND> excluded{window_};
@@ -6873,6 +7015,7 @@ void ZoomWindow::hide_zoom() {
     edit_state_ = ZoomEditState::Off;
     if (ink_) ink_->hide();
     ShowWindow(window_, SW_HIDE);
+    stop_recordable_output();
     controller_.state().tool = tool_before_zoom_;
     controller_.update_overlay_interaction();
     controller_.invalidate_all();
@@ -7268,7 +7411,8 @@ void ZoomWindow::refresh_source() {
                      SWP_NOZORDER | SWP_SHOWWINDOW);
     }
 
-    if (!source_initialized_ || factor != last_source_factor_) {
+    if (!recordable_output_ &&
+        (!source_initialized_ || factor != last_source_factor_)) {
         MAGTRANSFORM transform{{{factor, 0, 0}, {0, factor, 0}, {0, 0, 1}}};
         mag_set_transform_(magnifier_, &transform);
     }
@@ -7283,8 +7427,12 @@ void ZoomWindow::refresh_source() {
     top = std::clamp(top, static_cast<int>(monitor_rect_.top),
                      static_cast<int>(monitor_rect_.bottom) - source_height);
     source_rect_ = RECT{left, top, left + source_width, top + source_height};
-    mag_set_source_(magnifier_, source_rect_);
-    InvalidateRect(magnifier_, nullptr, TRUE);
+    if (recordable_output_) {
+        update_recordable_output();
+    } else {
+        mag_set_source_(magnifier_, source_rect_);
+        InvalidateRect(magnifier_, nullptr, TRUE);
+    }
     if (ink_ && IsWindowVisible(ink_->hwnd())) {
         if (edit_active()) {
             ink_->update_edit_view(zoom_rect_, source_rect_, factor);

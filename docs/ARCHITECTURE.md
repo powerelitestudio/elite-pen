@@ -13,8 +13,9 @@
   único enrutador de comandos para ambas presentaciones.
 - `capture`: seleccion de region, captura GDI con respaldo DXGI Desktop Duplication,
   transferencia al portapapeles y codificacion PNG mediante Windows Imaging Component.
-- `zoom`: control Magnifier nativo, superficie DirectComposition de tinta, documento
-  contextual para congelación y documento fuente/caché dispersa para Zoom editable.
+- `zoom`: control Magnifier nativo con salida DWM grabable al detectar OBS,
+  superficie DirectComposition de tinta, documento contextual para congelación y
+  documento fuente/caché dispersa para Zoom editable.
 
 ## Flujo de datos
 
@@ -31,7 +32,10 @@ pulsar `P`, se inmoviliza el refresco del control Magnifier y se copia su últim
 a la superficie `ZoomInk`; ésta recibe ratón, lápiz y tacto y conserva un `Document`
 independiente. Al reanudar, la superficie vuelve a ser transparente, mantiene sus
 vectores visibles y el control nativo continúa siguiendo el puntero. No se realizan
-capturas continuas de CPU durante el zoom vivo.
+capturas continuas de CPU durante el zoom vivo. Con OBS abierto y una ventana externa
+compatible, el host reemplaza visualmente Magnifier por un thumbnail DWM vivo,
+recortado al mismo origen y escalado al viewport. Windows Graphics Capture incluye
+esa composición; DXGI Desktop Duplication la omite en el hardware híbrido validado.
 
 Al pulsar `E`, `ZoomInk` cambia a un documento independiente en coordenadas de la
 fuente ampliada. En `MANO` la superficie de tinta se oculta, la raíz Magnifier deja

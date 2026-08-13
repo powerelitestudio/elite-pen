@@ -131,9 +131,11 @@ el centro real del área ampliada,
 `D` acoplado, `I` invertir,
 rueda/`+`/`-` para ampliar, `0` para vista general, `Espacio` o `M` para recorrer
 vistas, y `P` o clic para congelar o reanudar. `Esc`, `F4` o clic derecho salen.
-La salida ampliada y sus anotaciones permanecen visibles en OBS y otros grabadores
-de pantalla; el filtro nativo evita la recursión de Elite Pen sin sustituir el zoom
-por un cuadro negro en la grabación.
+Para grabar el zoom con OBS en Windows 10, configura la fuente `Captura de pantalla`
+con el método `Windows 10 (1903 y posteriores)`. Elite Pen detecta OBS y presenta la
+aplicación enfocada mediante una composición DWM grabable; fuera de OBS conserva el
+motor Magnifier nativo. `DXGI Desktop Duplication` no registra la composición del
+zoom y puede producir un cuadro negro en equipos con gráficos híbridos.
 La congelación toma la imagen ampliada que está visible, no una captura del área
 original sin zoom, y rechaza una imagen vacía antes de abrir la capa de tinta.
 Mientras la imagen está congelada, la paleta y sus paneles permanecen siempre por

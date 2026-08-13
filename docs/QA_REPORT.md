@@ -126,6 +126,10 @@ GeForce GTX 960M, Windows 10 Pro 22H2 x64, dos monitores con escalado mixto.
 - Grabación de zoom 2.8: una prueba gráfica aislada exige `WDA_NONE` en la raíz del
   zoom y en `ZoomInk`, captura el cuadro completo visible y rechaza una salida con
   menos de 3 % de muestras no negras. La validación Release obtuvo 100 %.
+- Regresión OBS 2.8: se grabaron MP4 reales con OBS 32.2.1 sobre Windows 10 22H2,
+  Intel HD 530 + NVIDIA GTX 960M. Magnifier fue negro tanto en DXGI como WGC;
+  la ruta DWM nueva produjo texto ampliado visible con WGC. DXGI continuó negro y
+  queda documentado como método no compatible para grabar Zoom en ese entorno.
 - Anclaje 2.8: pruebas puras cubren round trip viewport/fuente, origen negativo,
   escalado de grosor y factor inválido seguro. QA real dibuja, panea y cambia el nivel,
   comprobando que el mismo punto proyectado se mueva con la fuente.
@@ -177,8 +181,9 @@ recorre 240 cuadros de Mano a 0,519 ms de media y vuelve a Lápiz con caché cal
 - Historial acotado, instancia unica, `Esc` de emergencia y bandeja de sistema.
 - Preferencias separadas para edicion portable e instalada, incluidos atajos y
   estado de hibernación.
-- El zoom vivo permanece en Magnifier nativo; la copia de imagen se realiza una sola
-  vez al congelar y la tinta se compone por GPU, sin bucle de capturas de CPU.
+- El zoom vivo permanece en Magnifier nativo sin OBS; al detectar OBS puede usar una
+  miniatura DWM viva, también acelerada y sin bucle de capturas de CPU. La copia de
+  imagen se realiza una sola vez al congelar y la tinta se compone por GPU.
 - En sesiones automatizadas cuyo DC de pantalla omite las superficies
   DirectComposition, la regresión de transparencia valida dimensiones y orden de
   ventana y declara el muestreo de píxeles no disponible; en un escritorio

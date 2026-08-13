@@ -2,6 +2,12 @@
 
 ## 2.8.0 — 2026-08-11
 
+- Se corrige la pantalla negra comprobada en grabaciones reales de OBS sobre
+  Windows 10 híbrido Intel/NVIDIA. Cuando OBS está abierto, Zoom presenta la
+  aplicación enfocada mediante composición DWM grabable y conserva Magnifier
+  nativo como respaldo para ventanas no compatibles y uso sin OBS.
+- OBS debe usar `Captura de pantalla > Método: Windows 10 (1903 y posteriores)`;
+  DXGI Desktop Duplication omite tanto Magnifier como miniaturas DWM en este equipo.
 - El zoom, la tinta congelada, el indicador de lupa y la barra de Zoom editable
   permanecen capturables por OBS y otros grabadores. Se elimina la afinidad de
   exclusión que hacía aparecer un rectángulo negro en grabaciones de pantalla.
