@@ -47,6 +47,12 @@ struct ZoomViewportTransform {
     [[nodiscard]] float source_to_view_length(float length) const noexcept;
 };
 
+// Produces the short ease-out used while fullscreen zoom approaches its target.
+// Keeping the curve pure makes the presentation behavior deterministic in tests
+// without coupling the model to a Windows timer.
+[[nodiscard]] float zoom_entry_factor(float start, float target,
+                                      float progress) noexcept;
+
 struct Color {
     std::uint8_t r{};
     std::uint8_t g{};

@@ -1,6 +1,6 @@
-# Informe de calidad — Elite Pen 2.8.0
+# Informe de calidad — Elite Pen 2.8.1
 
-Fecha: 2026-08-11
+Fecha: 2026-08-19
 Equipo de referencia: Lenovo 80NV, Intel Core i7-6700HQ, 12 GB RAM, Intel HD 530,
 GeForce GTX 960M, Windows 10 Pro 22H2 x64, dos monitores con escalado mixto.
 
@@ -140,6 +140,9 @@ GeForce GTX 960M, Windows 10 Pro 22H2 x64, dos monitores con escalado mixto.
 - Rendimiento 2.8: 5.000 trazos fuente construyen una caché GPU dispersa de bloques.
   El benchmark mide por separado población, primer cuadro y 240 transformaciones de
   paneo sin volver a rasterizar el historial.
+- Transición 2.8.1: pruebas puras fijan los extremos, la monotonía y el ease-out de
+  la curva. QA real comprueba que `F` comienza por debajo del factor configurado,
+  aterriza exactamente en él a los 180 ms y libera el estado transitorio.
 - Persistencia 2.0: una prueba portable aislada escribe y vuelve a leer posición con
   coordenadas negativas, escala, modo contraído, color, grosor, zoom y atajos
   personalizados; también comprueba el reemplazo atómico sin archivo `.tmp` residual.
@@ -194,5 +197,5 @@ recorre 240 cuadros de Mano a 0,519 ms de media y vuelve a Lápiz con caché cal
 - Windows puede denegar la captura del escritorio en una sesion bloqueada, segura o
   no interactiva; Elite Pen informa el fallo y no genera un archivo corrupto.
 - La presion depende del controlador del lapiz y de que Windows entregue WM_POINTER.
-- El binario 2.8.0 no esta firmado digitalmente; los hashes del paquete permiten
+- El binario 2.8.1 no esta firmado digitalmente; los hashes del paquete permiten
   verificar integridad hasta incorporar el certificado de Power Elite Studio.

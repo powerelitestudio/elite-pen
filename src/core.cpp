@@ -36,6 +36,15 @@ float ZoomViewportTransform::source_to_view_length(float length) const noexcept 
     return length * safe_zoom_scale(scale);
 }
 
+float zoom_entry_factor(float start, float target, float progress) noexcept {
+    if (!std::isfinite(start)) start = 1.0F;
+    if (!std::isfinite(target)) target = start;
+    progress = std::isfinite(progress) ? std::clamp(progress, 0.0F, 1.0F) : 1.0F;
+    const float remaining = 1.0F - progress;
+    const float eased = 1.0F - remaining * remaining * remaining;
+    return start + (target - start) * eased;
+}
+
 const wchar_t* tool_name(Tool tool) noexcept {
     switch (tool) {
         case Tool::Interact: return L"Interactuar";

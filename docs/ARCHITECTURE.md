@@ -28,7 +28,11 @@ controlador restablece despues la paleta en la cima del grupo topmost. Asi sus z
 accionables siguen recibiendo clics mientras el lienzo esta en modo de dibujo.
 
 Durante zoom vivo, las superposiciones del escritorio dejan pasar la entrada. Al
-pulsar `P`, se inmoviliza el refresco del control Magnifier y se copia su último cuadro
+pulsar el atajo en vista completa, un factor de presentación transitorio interpola
+de 1x al valor configurado durante 180 ms con ease-out y ancla la fuente al punto de
+invocación. El estado persistente no cambia y cualquier acción inmediata fuerza el
+cuadro final antes de continuar. Al pulsar `P`, se inmoviliza el refresco del control
+Magnifier y se copia su último cuadro
 a la superficie `ZoomInk`; ésta recibe ratón, lápiz y tacto y conserva un `Document`
 independiente. Al reanudar, la superficie vuelve a ser transparente, mantiene sus
 vectores visibles y el control nativo continúa siguiendo el puntero. No se realizan

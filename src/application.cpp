@@ -70,6 +70,8 @@ constexpr UINT kQaQueryZoomEditFirstViewXMessage = WM_APP + 118;
 constexpr UINT kQaQueryZoomEditFirstViewYMessage = WM_APP + 119;
 constexpr UINT kQaNudgeZoomEditSourceMessage = WM_APP + 120;
 constexpr UINT kQaQueryZoomFactorMessage = WM_APP + 121;
+constexpr UINT kQaQueryZoomPresentedFactorMessage = WM_APP + 122;
+constexpr UINT kQaQueryZoomEntryAnimationMessage = WM_APP + 123;
 constexpr UINT_PTR kTrayId = 1;
 constexpr std::array<float, 4> kPaletteScales{0.48F, 0.60F, 0.75F, 0.90F};
 constexpr std::array<float, 5> kThicknessSteps{2.0F, 4.0F, 7.0F, 12.0F, 20.0F};
@@ -491,6 +493,7 @@ HCURSOR create_zoom_lens_cursor(UINT dpi) {
 
 enum class ZoomView : int { Fullscreen = 0, Lens = 1, Docked = 2 };
 enum class ZoomEditState : int { Off = 0, Navigate = 1, Annotate = 2 };
+constexpr auto kZoomEntryDuration = std::chrono::milliseconds{180};
 
 Tool current_gesture_tool(Tool selected) noexcept {
     return gesture_tool(
@@ -1094,6 +1097,7 @@ private:
     void apply_color_effect();
     void cycle_view();
     bool load_magnification();
+    void finish_entry_animation();
 
     using MagInitializePointer = BOOL(WINAPI*)();
     using MagUninitializePointer = BOOL(WINAPI*)();
@@ -1136,6 +1140,10 @@ private:
     float last_source_factor_{};
     int last_source_view_{-1};
     bool last_source_overview_{};
+    bool entry_animation_active_{};
+    std::chrono::steady_clock::time_point entry_animation_started_{};
+    POINT entry_animation_anchor_{};
+    float presented_factor_{1.0F};
     Tool tool_before_zoom_{Tool::Pen};
 };
 
@@ -4448,7 +4456,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.8.0",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.8.1",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
@@ -4587,7 +4595,7 @@ bool SettingsWindow::initialize() {
                                     reinterpret_cast<HMENU>(4300),
                                     GetModuleHandleW(nullptr), nullptr);
     help_ = CreateWindowW(L"STATIC",
-        L"Ayuda de Elite Pen 2.8.0. Anotación, pizarra, captura y zoom para Windows. "
+        L"Ayuda de Elite Pen 2.8.1. Anotación, pizarra, captura y zoom para Windows. "
         L"Código abierto bajo Apache License 2.0. Desarrollado por Power Elite Studio.",
         WS_CHILD | SS_OWNERDRAW, 24, 119, 540, 400, window_,
         reinterpret_cast<HMENU>(4105), GetModuleHandleW(nullptr), nullptr);
@@ -4815,7 +4823,7 @@ void SettingsWindow::paint_help(HDC dc, RECT bounds) {
     SelectObject(dc, small_font_);
     SetTextColor(dc, theme_colorref(theme.text_muted));
     RECT version{bounds.left, bounds.top + 73, bounds.right, bounds.top + 94};
-    DrawTextW(dc, L"Version 2.8.0 · Windows 10 y 11 · x64", -1, &version,
+    DrawTextW(dc, L"Version 2.8.1 · Windows 10 y 11 · x64", -1, &version,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
 
     SelectObject(dc, body_font_);
@@ -6989,6 +6997,13 @@ bool ZoomWindow::show_zoom() {
     edit_state_ = ZoomEditState::Off;
     if (edit_toolbar_) edit_toolbar_->hide();
     overview_ = false;
+    entry_animation_anchor_ = cursor;
+    presented_factor_ = 1.0F;
+    entry_animation_started_ = std::chrono::steady_clock::now();
+    entry_animation_active_ =
+        static_cast<ZoomView>(controller_.preferences().zoom_view) ==
+            ZoomView::Fullscreen &&
+        controller_.state().zoom_factor > 1.001F;
     source_initialized_ = false;
     install_click_hook();
     SetTimer(window_, 1, 16, nullptr);
@@ -7006,6 +7021,8 @@ void ZoomWindow::hide_zoom() {
     controller_.cancel_pending_text();
     set_edit_passthrough(false);
     active_ = false;
+    entry_animation_active_ = false;
+    presented_factor_ = 1.0F;
     source_initialized_ = false;
     uninstall_click_hook();
     KillTimer(window_, 1);
@@ -7023,6 +7040,7 @@ void ZoomWindow::hide_zoom() {
 
 bool ZoomWindow::toggle_freeze() {
     if (!active_ || !ink_) return false;
+    finish_entry_animation();
     controller_.commit_pending_text();
     if (edit_active()) {
         set_edit_passthrough(false);
@@ -7066,6 +7084,7 @@ bool ZoomWindow::toggle_freeze() {
 
 void ZoomWindow::toggle_edit_mode() {
     if (!active_ || !ink_) return;
+    finish_entry_animation();
     if (edit_active()) {
         controller_.commit_pending_text();
         set_edit_passthrough(false);
@@ -7168,6 +7187,7 @@ void ZoomWindow::set_edit_state(ZoomEditState state) {
 
 void ZoomWindow::adjust_zoom(float delta) {
     if (!active_) return;
+    finish_entry_animation();
     if (edit_state_ == ZoomEditState::Annotate)
         set_edit_state(ZoomEditState::Navigate);
     controller_.state().zoom_factor = std::clamp(
@@ -7188,6 +7208,7 @@ void ZoomWindow::execute_action(HotkeyAction action) {
             toggle_freeze();
             break;
         case HotkeyAction::ZoomFullscreen:
+            finish_entry_animation();
             if (edit_state_ == ZoomEditState::Annotate)
                 set_edit_state(ZoomEditState::Navigate);
             controller_.preferences().zoom_view = static_cast<int>(ZoomView::Fullscreen);
@@ -7196,6 +7217,7 @@ void ZoomWindow::execute_action(HotkeyAction action) {
             controller_.update_overlay_interaction();
             break;
         case HotkeyAction::ZoomLens:
+            finish_entry_animation();
             if (edit_state_ == ZoomEditState::Annotate)
                 set_edit_state(ZoomEditState::Navigate);
             controller_.preferences().zoom_view = static_cast<int>(ZoomView::Lens);
@@ -7204,6 +7226,7 @@ void ZoomWindow::execute_action(HotkeyAction action) {
             controller_.update_overlay_interaction();
             break;
         case HotkeyAction::ZoomDocked:
+            finish_entry_animation();
             if (edit_state_ == ZoomEditState::Annotate)
                 set_edit_state(ZoomEditState::Navigate);
             controller_.preferences().zoom_view = static_cast<int>(ZoomView::Docked);
@@ -7228,6 +7251,7 @@ void ZoomWindow::execute_action(HotkeyAction action) {
             apply_color_effect();
             break;
         case HotkeyAction::ZoomOverview:
+            finish_entry_animation();
             if (edit_state_ == ZoomEditState::Annotate)
                 set_edit_state(ZoomEditState::Navigate);
             overview_ = !overview_;
@@ -7305,11 +7329,21 @@ void ZoomWindow::apply_color_effect() {
 }
 
 void ZoomWindow::cycle_view() {
+    finish_entry_animation();
     controller_.preferences().zoom_view =
         (controller_.preferences().zoom_view + 1) % 3;
     controller_.save_preferences();
     refresh_source();
     controller_.update_overlay_interaction();
+}
+
+void ZoomWindow::finish_entry_animation() {
+    if (!entry_animation_active_) return;
+    entry_animation_active_ = false;
+    presented_factor_ = overview_ ? 1.0F : controller_.state().zoom_factor;
+    // Force the next refresh to present the exact configured factor before an
+    // immediate P, E, wheel or view command acts on the zoomed frame.
+    source_initialized_ = false;
 }
 
 void ZoomWindow::update_lens_cursor(bool active) {
@@ -7363,7 +7397,25 @@ void ZoomWindow::refresh_source() {
         }
     }
     const auto view = static_cast<ZoomView>(controller_.preferences().zoom_view);
-    const float factor = overview_ ? 1.0F : controller_.state().zoom_factor;
+    const float target_factor = overview_ ? 1.0F : controller_.state().zoom_factor;
+    float factor = target_factor;
+    bool entry_frame = false;
+    if (entry_animation_active_ && view == ZoomView::Fullscreen && !overview_) {
+        entry_frame = true;
+        cursor = entry_animation_anchor_;
+        const auto elapsed = std::chrono::steady_clock::now() -
+                             entry_animation_started_;
+        const float progress = std::chrono::duration<float>(elapsed).count() /
+            std::chrono::duration<float>(kZoomEntryDuration).count();
+        factor = zoom_entry_factor(1.0F, target_factor, progress);
+        if (progress >= 1.0F) {
+            factor = target_factor;
+            entry_animation_active_ = false;
+        }
+    } else if (entry_animation_active_) {
+        entry_animation_active_ = false;
+    }
+    presented_factor_ = factor;
     if (source_initialized_ && cursor.x == last_source_cursor_.x &&
         cursor.y == last_source_cursor_.y &&
         static_cast<int>(view) == last_source_view_ &&
@@ -7460,6 +7512,10 @@ void ZoomWindow::refresh_source() {
     if (edit_toolbar_ && edit_active())
         edit_toolbar_->show_for(zoom_rect_, factor, edit_state_);
     if (geometry_changed) bring_to_front();
+    // The transition stays anchored to the invocation point. Once the final
+    // frame lands, invalidate the cursor cache so live following resumes on the
+    // next 16 ms tick even when the pointer moved during those few frames.
+    if (entry_frame && !entry_animation_active_) source_initialized_ = false;
 }
 
 LRESULT ZoomWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
@@ -7480,6 +7536,10 @@ LRESULT ZoomWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
         case kQaQueryZoomFactorMessage:
             return static_cast<LRESULT>(std::lround(
                 controller_.state().zoom_factor * 100.0F));
+        case kQaQueryZoomPresentedFactorMessage:
+            return static_cast<LRESULT>(std::lround(presented_factor_ * 100.0F));
+        case kQaQueryZoomEntryAnimationMessage:
+            return entry_animation_active_ ? 1 : 0;
         case kQaQueryZoomEditStateMessage:
             return static_cast<LRESULT>(edit_state_);
         case kQaQueryZoomEditDocumentCountMessage:

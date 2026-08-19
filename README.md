@@ -10,7 +10,7 @@ pantalla para Windows, desarrollada por [Power Elite Studio](https://powerelite.
 Permite explicar sobre cualquier aplicación sin convertir la presentación en una
 sucesión de ventanas y menús.
 
-> **Estado:** acceso anticipado. La versión 2.8.0 es funcional y está validada para
+> **Estado:** acceso anticipado. La versión 2.8.1 es funcional y está validada para
 > empezar a compartirse, pero el producto continúa en desarrollo activo. Los reportes
 > de errores y casos de compatibilidad son bienvenidos.
 
@@ -126,8 +126,9 @@ transparente por píxel y solo muestra el caret y los caracteres, nunca una caja
 Las pizarras blanca y negra restauran la paleta sobre el lienzo después de cada
 trazo o borrado para conservar todos sus comandos disponibles.
 
-En zoom: `F` pantalla completa, `L` lente con una lupa persistente sincronizada con
-el centro real del área ampliada,
+En zoom: `F` pantalla completa con una transición de entrada de 180 ms, rápida y
+progresiva hacia el punto de invocación; `L` lente con una lupa persistente
+sincronizada con el centro real del área ampliada,
 `D` acoplado, `I` invertir,
 rueda/`+`/`-` para ampliar, `0` para vista general, `Espacio` o `M` para recorrer
 vistas, y `P` o clic para congelar o reanudar. `Esc`, `F4` o clic derecho salen.

@@ -286,6 +286,23 @@ void test_zoom_viewport_transform() {
           "arrow head limits preserve their creation geometry in source space");
 }
 
+void test_zoom_entry_transition() {
+    check(std::abs(zoom_entry_factor(1.0F, 3.0F, 0.0F) - 1.0F) < 0.001F,
+          "zoom entry starts at one-to-one scale");
+    check(std::abs(zoom_entry_factor(1.0F, 3.0F, 1.0F) - 3.0F) < 0.001F,
+          "zoom entry reaches the configured factor exactly");
+    const float first = zoom_entry_factor(1.0F, 3.0F, 0.25F);
+    const float middle = zoom_entry_factor(1.0F, 3.0F, 0.50F);
+    const float last = zoom_entry_factor(1.0F, 3.0F, 0.75F);
+    check(first > 1.0F && first < middle && middle < last && last < 3.0F,
+          "zoom entry is monotonic throughout the transition");
+    check((middle - first) > (last - middle),
+          "zoom entry uses a fast ease-out instead of a linear cut");
+    check(zoom_entry_factor(1.0F, 3.0F, -2.0F) == 1.0F &&
+          zoom_entry_factor(1.0F, 3.0F, 4.0F) == 3.0F,
+          "zoom entry safely clamps invalid progress ranges");
+}
+
 void test_history_limit() {
     Document document(2);
     document.add(line({0, 0}, {1, 1}));
@@ -309,6 +326,7 @@ int main() {
     test_history_limit();
     test_document_revision();
     test_zoom_viewport_transform();
+    test_zoom_entry_transition();
     if (failures == 0) {
         std::cout << "Elite Pen core: all tests passed\n";
         return EXIT_SUCCESS;
