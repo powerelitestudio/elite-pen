@@ -485,7 +485,7 @@ try {
                    -not [ElitePenUiNative]::IsWindowVisible($shortcutGuide)) `
             'Help tab did not expose its product information and official website action.'
         $helpAccessibleText = [ElitePenUiNative]::WindowText($helpPanel)
-        Assert-Ui ($helpAccessibleText.Contains('Elite Pen 2.8.0') -and
+        Assert-Ui ($helpAccessibleText.Contains('Elite Pen 2.8.1') -and
                    $helpAccessibleText.Contains('Apache License 2.0') -and
                    $helpAccessibleText.Contains('Power Elite Studio')) `
             'Help tab is missing the version, open-source license, or developer identity.'
@@ -752,6 +752,30 @@ try {
     $zoom = Wait-Window 'ElitePen.Zoom' 1000
     Assert-Ui ($zoom -ne [IntPtr]::Zero -and [ElitePenUiNative]::IsWindowVisible($zoom)) 'Zoom window did not activate.'
     if ($zoom -ne [IntPtr]::Zero) {
+        $configuredEntryFactor = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x8079, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        $presentedEntryFactor = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x807A, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        $entryAnimationActive = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x807B, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        Assert-Ui ($entryAnimationActive -eq 1 -and
+                   $presentedEntryFactor -ge 100 -and
+                   $presentedEntryFactor -lt $configuredEntryFactor) `
+            ("Fullscreen zoom did not begin with a progressive transition " +
+             "(active=$entryAnimationActive; shown=$presentedEntryFactor; " +
+             "target=$configuredEntryFactor).")
+        Start-Sleep -Milliseconds 230
+        $null = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x0113, [IntPtr]1, [IntPtr]::Zero)
+        $landedEntryFactor = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x807A, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        $entryAnimationDone = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x807B, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        Assert-Ui ($entryAnimationDone -eq 0 -and
+                   $landedEntryFactor -eq $configuredEntryFactor) `
+            ("Fullscreen zoom transition did not land on the configured factor " +
+             "(active=$entryAnimationDone; shown=$landedEntryFactor; " +
+             "target=$configuredEntryFactor).")
         $zoomInk = Wait-Window 'ElitePen.ZoomInk' 1000
         Assert-Ui ($zoomInk -ne [IntPtr]::Zero -and
                    -not [ElitePenUiNative]::IsWindowVisible($zoomInk)) `

@@ -1,5 +1,17 @@
 # Historial de cambios
 
+## 2.8.1 — 2026-08-19
+
+- La entrada a Zoom en vista completa deja de cortar de forma abrupta: progresa de
+  1x al aumento configurado en 180 ms con una curva ease-out breve y perceptible.
+- La transición apunta al lugar donde estaba el puntero al invocar `Ctrl+Shift+Z`;
+  al terminar recupera inmediatamente el seguimiento en vivo.
+- El factor configurado y guardado permanece intacto. Congelar con `P` o clic,
+  entrar con `E`, usar la rueda o cambiar de vista completa la transición primero,
+  evitando cuadros intermedios y manteniendo las rutas Magnifier y DWM/OBS.
+- Las pruebas puras validan inicio, llegada, monotonía, aceleración y límites de la
+  curva; el smoke UI comprueba el factor presentado durante y después de la entrada.
+
 ## 2.8.0 — 2026-08-11
 
 - Se corrige la pantalla negra comprobada en grabaciones reales de OBS sobre

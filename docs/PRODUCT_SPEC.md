@@ -1,6 +1,6 @@
-# Elite Pen 2.8.0 — contrato de producto
+# Elite Pen 2.8.1 — contrato de producto
 
-Estado: versión 2.8.0 implementada como software de código abierto bajo Apache
+Estado: versión 2.8.1 implementada como software de código abierto bajo Apache
 License 2.0 y preparada para distribución pública portable e instalada.
 
 ## 1. Identidad e interaccion principal
@@ -168,6 +168,10 @@ añade una fila independiente para Configuracion.
 - El zoom vivo presenta directamente la salida de Magnifier, sin interponer la capa
   de tinta transparente antes de congelar. Esto evita superficies negras o sin
   inicializar al entrar con `Ctrl+Shift+Z`.
+- Al entrar con la vista `F`, el factor presentado progresa de 1x al aumento
+  configurado durante 180 ms mediante una curva ease-out y permanece anclado al
+  punto de invocación. El factor guardado no se altera; `P`, `E`, rueda o un cambio
+  de vista completan la transición antes de ejecutar su acción.
 - La congelación copia la salida ampliada ya compuesta en pantalla. Una imagen
   completamente vacía se rechaza y el zoom continúa vivo en vez de mostrar una
   pizarra negra falsa.
