@@ -1,6 +1,6 @@
-# Elite Pen 2.8.1 — contrato de producto
+# Elite Pen 2.8.2 — contrato de producto
 
-Estado: versión 2.8.1 implementada como software de código abierto bajo Apache
+Estado: versión 2.8.2 implementada como software de código abierto bajo Apache
 License 2.0 y preparada para distribución pública portable e instalada.
 
 ## 1. Identidad e interaccion principal
@@ -95,6 +95,8 @@ Paleta es el valor predeterminado; la selección se conserva entre sesiones.
 2. Lapiz: trazo suavizado con raton o lapiz y presion cuando el hardware la informa.
    Usa un cursor nativo de lápiz inclinado en lugar de la cruz de Windows; la punta
    de grafito coincide con el punto exacto donde comienza el trazo y escala por DPI.
+   La punta ocupa el cuadrante superior izquierdo y el cuerpo se extiende abajo y a
+   la derecha: −45° cartesianos, sin cubrir el texto que se está subrayando.
 3. Resaltador: trazo semitransparente y ancho ampliado; comparte el cursor de lápiz.
 4. Borrador: elimina objetos tocados; la operacion se puede deshacer.
 5. Linea: linea recta con vista previa.

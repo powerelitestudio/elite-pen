@@ -216,12 +216,16 @@ HCURSOR create_pencil_cursor(UINT dpi) {
     constexpr int sample_grid = 4;
     constexpr float logical_size = 32.0F;
     constexpr float diagonal = 0.70710678F;
-    const CursorPoint direction{diagonal, -diagonal};
-    const CursorPoint normal{diagonal, diagonal};
-    const CursorPoint tip{2.5F, 29.5F};
+    // Screen Y grows downwards. Extending the pencil from its graphite tip in
+    // (+X, +Y) therefore presents it at -45 degrees in Cartesian coordinates:
+    // the body stays below the insertion point instead of covering the text
+    // immediately above a left-to-right underline.
+    const CursorPoint direction{diagonal, diagonal};
+    const CursorPoint normal{-diagonal, diagonal};
+    const CursorPoint tip{2.5F, 2.5F};
     const CursorPoint wood_base{tip.x + direction.x * 8.5F,
                                 tip.y + direction.y * 8.5F};
-    const CursorPoint finish{27.0F, 5.0F};
+    const CursorPoint finish{27.0F, 27.0F};
     const auto along = [direction](CursorPoint origin, float amount) {
         return CursorPoint{origin.x + direction.x * amount,
                            origin.y + direction.y * amount};
@@ -4456,7 +4460,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.8.1",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.8.2",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
@@ -4595,7 +4599,7 @@ bool SettingsWindow::initialize() {
                                     reinterpret_cast<HMENU>(4300),
                                     GetModuleHandleW(nullptr), nullptr);
     help_ = CreateWindowW(L"STATIC",
-        L"Ayuda de Elite Pen 2.8.1. Anotación, pizarra, captura y zoom para Windows. "
+        L"Ayuda de Elite Pen 2.8.2. Anotación, pizarra, captura y zoom para Windows. "
         L"Código abierto bajo Apache License 2.0. Desarrollado por Power Elite Studio.",
         WS_CHILD | SS_OWNERDRAW, 24, 119, 540, 400, window_,
         reinterpret_cast<HMENU>(4105), GetModuleHandleW(nullptr), nullptr);
@@ -4823,7 +4827,7 @@ void SettingsWindow::paint_help(HDC dc, RECT bounds) {
     SelectObject(dc, small_font_);
     SetTextColor(dc, theme_colorref(theme.text_muted));
     RECT version{bounds.left, bounds.top + 73, bounds.right, bounds.top + 94};
-    DrawTextW(dc, L"Version 2.8.1 · Windows 10 y 11 · x64", -1, &version,
+    DrawTextW(dc, L"Version 2.8.2 · Windows 10 y 11 · x64", -1, &version,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
 
     SelectObject(dc, body_font_);

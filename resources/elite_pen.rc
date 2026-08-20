@@ -4,8 +4,8 @@
 101 ICON "generated/elite_pen.ico"
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 2,8,1,0
- PRODUCTVERSION 2,8,1,0
+ FILEVERSION 2,8,2,0
+ PRODUCTVERSION 2,8,2,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -22,12 +22,12 @@ BEGIN
     BEGIN
       VALUE "CompanyName", "Power Elite Studio\0"
       VALUE "FileDescription", "Elite Pen - Anotacion, pizarra y zoom\0"
-      VALUE "FileVersion", "2.8.1\0"
+      VALUE "FileVersion", "2.8.2\0"
       VALUE "InternalName", "ElitePen\0"
       VALUE "LegalCopyright", "Copyright (C) 2026 Power Elite Studio\0"
       VALUE "OriginalFilename", "Elite Pen.exe\0"
       VALUE "ProductName", "Elite Pen\0"
-      VALUE "ProductVersion", "2.8.1\0"
+      VALUE "ProductVersion", "2.8.2\0"
     END
   END
   BLOCK "VarFileInfo"

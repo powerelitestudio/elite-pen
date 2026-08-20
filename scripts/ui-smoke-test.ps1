@@ -283,8 +283,8 @@ try {
                     Assert-Ui ($cursorBitmap.Width -ge 32 -and $cursorBitmap.Height -ge 32) `
                         'Pencil cursor is not large enough for a crisp native rendering.'
                     Assert-Ui ($cursorIcon.HotspotX -le [Math]::Floor($cursorBitmap.Width / 4) -and
-                               $cursorIcon.HotspotY -ge [Math]::Floor($cursorBitmap.Height * 3 / 4)) `
-                        'Pencil cursor hotspot is not anchored to its graphite tip.'
+                               $cursorIcon.HotspotY -le [Math]::Floor($cursorBitmap.Height / 4)) `
+                        'Pencil cursor hotspot is not anchored to its upper-left graphite tip.'
                 }
             } finally {
                 if ($cursorIcon.Mask -ne [IntPtr]::Zero) {
@@ -485,7 +485,7 @@ try {
                    -not [ElitePenUiNative]::IsWindowVisible($shortcutGuide)) `
             'Help tab did not expose its product information and official website action.'
         $helpAccessibleText = [ElitePenUiNative]::WindowText($helpPanel)
-        Assert-Ui ($helpAccessibleText.Contains('Elite Pen 2.8.1') -and
+        Assert-Ui ($helpAccessibleText.Contains('Elite Pen 2.8.2') -and
                    $helpAccessibleText.Contains('Apache License 2.0') -and
                    $helpAccessibleText.Contains('Power Elite Studio')) `
             'Help tab is missing the version, open-source license, or developer identity.'

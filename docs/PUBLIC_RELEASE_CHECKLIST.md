@@ -1,7 +1,7 @@
 # Publicación abierta de Elite Pen
 
-Última actualización: 19 de agosto de 2026. Elite Pen se mantiene en el repositorio
-público <https://github.com/powerelitestudio/elite-pen>. La versión 2.8.1 continúa
+Última actualización: 20 de agosto de 2026. Elite Pen se mantiene en el repositorio
+público <https://github.com/powerelitestudio/elite-pen>. La versión 2.8.2 continúa
 el modelo íntegramente abierto bajo Apache License 2.0 inaugurado por 2.7.1; la
 licencia source-available de 2.7.0 solo conserva valor histórico para aquel tag y
 sus paquetes.
