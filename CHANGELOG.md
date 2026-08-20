@@ -1,5 +1,16 @@
 # Historial de cambios
 
+## 2.8.2 — 2026-08-20
+
+- El cursor de Lápiz y Resaltador cambia de +45° a −45° cartesianos: la punta activa
+  queda arriba a la izquierda y el cuerpo se extiende abajo a la derecha.
+- Al subrayar de izquierda a derecha, el cuerpo del lápiz ya no cubre las letras de
+  la línea que se está leyendo; el hotspot continúa exactamente sobre el grafito.
+- La corrección se comparte entre el lienzo normal y la tinta de Zoom, conserva el
+  rasterizado antialias 4x y el escalado nativo por DPI.
+- QA inspecciona el bitmap del cursor y exige el hotspot en el cuadrante superior
+  izquierdo, además de repetir la batería completa de interfaz.
+
 ## 2.8.1 — 2026-08-19
 
 - La entrada a Zoom en vista completa deja de cortar de forma abrupta: progresa de

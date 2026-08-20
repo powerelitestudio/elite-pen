@@ -10,7 +10,7 @@ pantalla para Windows, desarrollada por [Power Elite Studio](https://powerelite.
 Permite explicar sobre cualquier aplicación sin convertir la presentación en una
 sucesión de ventanas y menús.
 
-> **Estado:** acceso anticipado. La versión 2.8.1 es funcional y está validada para
+> **Estado:** acceso anticipado. La versión 2.8.2 es funcional y está validada para
 > empezar a compartirse, pero el producto continúa en desarrollo activo. Los reportes
 > de errores y casos de compatibilidad son bienvenidos.
 
@@ -41,7 +41,8 @@ oficial y compara el SHA-256 publicado con cada versión.
 ## Objetivos del producto
 
 - Dibujar encima de cualquier aplicacion sin interrumpir el flujo de trabajo.
-- Usar un cursor de lápiz nativo, preciso y visible en lugar de la cruz genérica.
+- Usar un cursor de lápiz nativo, preciso y visible en lugar de la cruz genérica;
+  su cuerpo se inclina hacia abajo para no cubrir el texto durante el subrayado.
 - Ocultar y recuperar anotaciones sin perderlas.
 - Crear texto, lineas, rectangulos, elipses, flechas rectas y flechas curvas.
 - Capturar una region en PNG y copiarla al portapapeles, incluido el zoom congelado
