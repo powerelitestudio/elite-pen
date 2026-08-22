@@ -72,9 +72,12 @@ constexpr UINT kQaNudgeZoomEditSourceMessage = WM_APP + 120;
 constexpr UINT kQaQueryZoomFactorMessage = WM_APP + 121;
 constexpr UINT kQaQueryZoomPresentedFactorMessage = WM_APP + 122;
 constexpr UINT kQaQueryZoomEntryAnimationMessage = WM_APP + 123;
+constexpr UINT kQaQueryZoomGeometryHeightMessage = WM_APP + 124;
+constexpr UINT kQaQueryZoomLensDiameterMessage = WM_APP + 125;
 constexpr UINT_PTR kTrayId = 1;
 constexpr std::array<float, 4> kPaletteScales{0.48F, 0.60F, 0.75F, 0.90F};
 constexpr std::array<float, 5> kThicknessSteps{2.0F, 4.0F, 7.0F, 12.0F, 20.0F};
+constexpr std::array<int, 5> kZoomLensDiameters{360, 440, 520, 640, 760};
 
 struct UiTheme {
     bool light{};
@@ -889,6 +892,8 @@ private:
     HWND zoom_view_label_{};
     HWND zoom_view_{};
     HWND zoom_invert_{};
+    HWND zoom_lens_size_label_{};
+    HWND zoom_lens_size_{};
     HWND palette_size_label_{};
     HWND palette_size_{};
     HWND palette_size_hint_{};
@@ -1008,6 +1013,25 @@ protected:
     void render() override;
 };
 
+class ZoomLensFrameWindow final : public WindowBase {
+public:
+    explicit ZoomLensFrameWindow(Controller& controller) : WindowBase(controller) {}
+    bool initialize(GraphicsDevice& graphics);
+    void show_for(RECT lens_bounds);
+    void hide() { ShowWindow(window_, SW_HIDE); }
+    void bring_to_front();
+    [[nodiscard]] bool visible() const noexcept {
+        return IsWindowVisible(window_) != FALSE;
+    }
+
+protected:
+    LRESULT handle_message(UINT message, WPARAM wparam, LPARAM lparam) override;
+    void render() override;
+
+private:
+    RECT lens_bounds_{};
+};
+
 class ZoomWindow;
 
 class ZoomEditToolbarWindow final : public WindowBase {
@@ -1051,6 +1075,8 @@ public:
     void toggle_edit_mode();
     void set_edit_state(ZoomEditState state);
     void adjust_zoom(float delta);
+    void set_lens_diameter(int diameter);
+    void adjust_lens_diameter(int direction);
     void execute_action(HotkeyAction action);
     void bring_to_front();
     void invalidate_ink();
@@ -1100,6 +1126,7 @@ private:
     void uninstall_click_hook();
     void apply_color_effect();
     void cycle_view();
+    void apply_view_regions(ZoomView view, int width, int height);
     bool load_magnification();
     void finish_entry_animation();
 
@@ -1120,6 +1147,7 @@ private:
     HWND magnifier_{};
     std::unique_ptr<ZoomInkWindow> ink_;
     std::unique_ptr<ZoomTargetWindow> target_;
+    std::unique_ptr<ZoomLensFrameWindow> lens_frame_;
     std::unique_ptr<ZoomEditToolbarWindow> edit_toolbar_;
     RECT monitor_rect_{};
     RECT zoom_rect_{};
@@ -1143,6 +1171,9 @@ private:
     POINT last_source_cursor_{};
     float last_source_factor_{};
     int last_source_view_{-1};
+    int region_view_{-1};
+    int region_width_{};
+    int region_height_{};
     bool last_source_overview_{};
     bool entry_animation_active_{};
     std::chrono::steady_clock::time_point entry_animation_started_{};
@@ -1215,6 +1246,8 @@ public:
     void apply_capture_preference();
     void set_palette_size(int size);
     void set_control_mode(ControlMode mode);
+    void set_zoom_lens_diameter(int diameter);
+    void adjust_zoom_lens_diameter(int direction);
     void set_theme(AppTheme theme);
     void execute_hotkey(HotkeyAction action);
     [[nodiscard]] bool matches_hotkey(HotkeyAction action, WPARAM virtual_key) const;
@@ -4460,7 +4493,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.8.2",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.9.0",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
@@ -4556,9 +4589,21 @@ bool SettingsWindow::initialize() {
                                  WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
                                  350, 353, 208, 25, window_, reinterpret_cast<HMENU>(4007),
                                  GetModuleHandleW(nullptr), nullptr);
+    zoom_lens_size_label_ = CreateWindowW(
+        L"STATIC", L"Lente circular:", WS_CHILD | WS_VISIBLE,
+        24, 390, 112, 24, window_, nullptr, GetModuleHandleW(nullptr), nullptr);
+    zoom_lens_size_ = CreateWindowW(
+        L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP | CBS_DROPDOWNLIST,
+        140, 385, 184, 160, window_, reinterpret_cast<HMENU>(4015),
+        GetModuleHandleW(nullptr), nullptr);
+    for (const wchar_t* value : {L"Pequeña · 360 px", L"Media · 440 px",
+                                  L"Estándar · 520 px", L"Grande · 640 px",
+                                  L"Muy grande · 760 px"}) {
+        SendMessageW(zoom_lens_size_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(value));
+    }
     palette_size_hint_ = CreateWindowW(L"STATIC",
-        L"Escala la presentación completa y todas sus zonas de clic como una unidad.",
-        WS_CHILD | WS_VISIBLE, 24, 390, 534, 20, window_, nullptr,
+        L"Shift + rueda o [ ] cambia el diámetro de la lente en vivo.",
+        WS_CHILD | WS_VISIBLE, 340, 383, 218, 31, window_, nullptr,
         GetModuleHandleW(nullptr), nullptr);
     theme_label_ = CreateWindowW(L"STATIC", L"Apariencia:",
                                  WS_CHILD | WS_VISIBLE, 24, 449, 88, 27, window_, nullptr,
@@ -4576,7 +4621,8 @@ bool SettingsWindow::initialize() {
     shortcuts_ = CreateWindowW(L"STATIC",
         L"Atajos de Elite Pen. Gestos: Shift Línea; Ctrl Rectángulo; Tab Elipse; "
         L"Ctrl+Shift Flecha; Shift+Tab Flecha curva. Zoom: E Zoom editable; "
-        L"Mano usa la app ampliada; Lápiz congela y anota; Espacio vuelve a Mano.",
+        L"Mano usa la app ampliada; Lápiz congela y anota; Espacio vuelve a Mano; "
+        L"en Lente, Shift+rueda o [ ] cambia el diámetro.",
         WS_CHILD | SS_OWNERDRAW, 24, 119, 540, 400, window_,
         reinterpret_cast<HMENU>(4103), GetModuleHandleW(nullptr), nullptr);
     for (std::size_t index = 0; index < hotkey_buttons_.size(); ++index) {
@@ -4599,7 +4645,7 @@ bool SettingsWindow::initialize() {
                                     reinterpret_cast<HMENU>(4300),
                                     GetModuleHandleW(nullptr), nullptr);
     help_ = CreateWindowW(L"STATIC",
-        L"Ayuda de Elite Pen 2.8.2. Anotación, pizarra, captura y zoom para Windows. "
+        L"Ayuda de Elite Pen 2.9.0. Anotación, pizarra, captura y zoom para Windows. "
         L"Código abierto bajo Apache License 2.0. Desarrollado por Power Elite Studio.",
         WS_CHILD | SS_OWNERDRAW, 24, 119, 540, 400, window_,
         reinterpret_cast<HMENU>(4105), GetModuleHandleW(nullptr), nullptr);
@@ -4616,7 +4662,8 @@ bool SettingsWindow::initialize() {
                        capture_, confirm_clear_,
                        start_interact_, highlight_cursor_,
                        fade_label_, fade_, thickness_label_, thickness_, zoom_label_,
-                       zoom_, zoom_view_label_, zoom_view_, zoom_invert_, control_mode_label_,
+                       zoom_, zoom_view_label_, zoom_view_, zoom_invert_,
+                       zoom_lens_size_label_, zoom_lens_size_, control_mode_label_,
                        control_mode_, palette_size_label_, palette_size_, palette_size_hint_,
                        theme_label_, theme_dark_, theme_light_,
                        reset_position_,
@@ -4643,6 +4690,7 @@ bool SettingsWindow::initialize() {
     SetWindowSubclass(thickness_, premium_combo_subclass, 4010, 0);
     SetWindowSubclass(zoom_, premium_combo_subclass, 4004, 0);
     SetWindowSubclass(zoom_view_, premium_combo_subclass, 4006, 0);
+    SetWindowSubclass(zoom_lens_size_, premium_combo_subclass, 4015, 0);
     SetWindowSubclass(palette_size_, premium_combo_subclass, 4011, 0);
     SetWindowSubclass(control_mode_, premium_combo_subclass, 4014, 0);
     apply_theme();
@@ -4662,6 +4710,7 @@ void SettingsWindow::apply_theme() {
                        capture_, confirm_clear_,
                        start_interact_, highlight_cursor_, fade_label_, fade_, thickness_label_,
                        thickness_, zoom_label_, zoom_, zoom_view_label_, zoom_view_, zoom_invert_,
+                       zoom_lens_size_label_, zoom_lens_size_,
                        control_mode_label_, control_mode_, palette_size_label_, palette_size_,
                        palette_size_hint_, theme_label_,
                        theme_dark_, theme_light_, reset_position_, shortcuts_, shortcut_scrollbar_,
@@ -4778,10 +4827,11 @@ void SettingsWindow::paint_shortcuts(HDC dc, RECT bounds) {
     DrawTextW(dc, L"GUIA RAPIDA DEL ZOOM", -1, &context_heading,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
     SelectObject(dc, small_font_);
-    constexpr std::array<HotkeyInfo, 5> contextual{{
+    constexpr std::array<HotkeyInfo, 6> contextual{{
         {L"P / clic", L"Congelar o reanudar · Rueda / + / - ampliar"},
         {L"E", L"Zoom editable · Mano usa la app · Lapiz anota"},
         {L"F / L / D", L"Vistas · I invertir · 0 vista general"},
+        {L"Shift+rueda / [ ]", L"Cambiar diámetro de la lente circular"},
         {L"Espacio / M", L"Recorrer vistas · Esc / F4 / clic der. salir"},
         {L"Texto", L"Ctrl+Enter insertar · Ctrl+V pegar · Esc cancelar"}
     }};
@@ -4827,7 +4877,7 @@ void SettingsWindow::paint_help(HDC dc, RECT bounds) {
     SelectObject(dc, small_font_);
     SetTextColor(dc, theme_colorref(theme.text_muted));
     RECT version{bounds.left, bounds.top + 73, bounds.right, bounds.top + 94};
-    DrawTextW(dc, L"Version 2.8.2 · Windows 10 y 11 · x64", -1, &version,
+    DrawTextW(dc, L"Version 2.9.0 · Windows 10 y 11 · x64", -1, &version,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
 
     SelectObject(dc, body_font_);
@@ -4886,7 +4936,8 @@ void SettingsWindow::show_tab(int tab) {
                          fade_label_, fade_, control_mode_label_, control_mode_,
                          palette_size_label_, palette_size_,
                          palette_size_hint_, thickness_label_, thickness_, zoom_label_, zoom_,
-                         zoom_view_label_, zoom_view_, zoom_invert_, theme_label_, theme_dark_,
+                         zoom_view_label_, zoom_view_, zoom_invert_, zoom_lens_size_label_,
+                         zoom_lens_size_, theme_label_, theme_dark_,
                          theme_light_, reset_position_}) {
         ShowWindow(control, general_visibility);
     }
@@ -4943,6 +4994,18 @@ void SettingsWindow::refresh_controls() {
     SendMessageW(zoom_, CB_SETCURSEL, closest, 0);
     SendMessageW(zoom_view_, CB_SETCURSEL,
                  static_cast<WPARAM>(std::clamp(preferences.zoom_view, 0, 2)), 0);
+    std::size_t lens_size_selection = 0;
+    int lens_size_difference = std::numeric_limits<int>::max();
+    for (std::size_t index = 0; index < kZoomLensDiameters.size(); ++index) {
+        const int current = std::abs(
+            preferences.zoom_lens_diameter - kZoomLensDiameters[index]);
+        if (current < lens_size_difference) {
+            lens_size_difference = current;
+            lens_size_selection = index;
+        }
+    }
+    SendMessageW(zoom_lens_size_, CB_SETCURSEL,
+                 static_cast<WPARAM>(lens_size_selection), 0);
     SendMessageW(zoom_invert_, BM_SETCHECK,
                  preferences.zoom_invert ? BST_CHECKED : BST_UNCHECKED, 0);
     InvalidateRect(theme_dark_, nullptr, TRUE);
@@ -5224,6 +5287,16 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
                 if (selection >= 0 && selection <= 2) {
                     controller_.preferences().zoom_view = static_cast<int>(selection);
                     controller_.save_preferences();
+                }
+                return 0;
+            }
+            if (id == 4015 && HIWORD(wparam) == CBN_SELCHANGE) {
+                const LRESULT selection = SendMessageW(
+                    zoom_lens_size_, CB_GETCURSEL, 0, 0);
+                if (selection >= 0 &&
+                    static_cast<std::size_t>(selection) < kZoomLensDiameters.size()) {
+                    controller_.set_zoom_lens_diameter(
+                        kZoomLensDiameters[static_cast<std::size_t>(selection)]);
                 }
                 return 0;
             }
@@ -6238,9 +6311,17 @@ LRESULT ZoomInkWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
             return 0;
         case WM_MOUSEWHEEL:
             if (edit_mode_) {
-                if ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0 &&
-                    (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0) {
+                const bool control = (GET_KEYSTATE_WPARAM(wparam) & MK_CONTROL) != 0 ||
+                                     (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+                const bool shift = (GET_KEYSTATE_WPARAM(wparam) & MK_SHIFT) != 0 ||
+                                   (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+                if (control && shift) {
                     controller_.adjust_thickness_step(
+                        GET_WHEEL_DELTA_WPARAM(wparam) > 0 ? 1 : -1);
+                } else if (shift && !controller_.zoom_frozen() &&
+                           controller_.preferences().zoom_view ==
+                               static_cast<int>(ZoomView::Lens)) {
+                    controller_.adjust_zoom_lens_diameter(
                         GET_WHEEL_DELTA_WPARAM(wparam) > 0 ? 1 : -1);
                 } else {
                     controller_.execute_hotkey(
@@ -6310,6 +6391,13 @@ LRESULT ZoomInkWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
             }
             if (wparam == VK_ESCAPE || wparam == VK_F4) {
                 controller_.toggle_zoom();
+                return 0;
+            }
+            if (edit_mode_ && controller_.preferences().zoom_view ==
+                                  static_cast<int>(ZoomView::Lens) &&
+                (wparam == VK_OEM_4 || wparam == VK_OEM_6)) {
+                controller_.adjust_zoom_lens_diameter(
+                    wparam == VK_OEM_6 ? 1 : -1);
                 return 0;
             }
             break;
@@ -6482,6 +6570,93 @@ void ZoomTargetWindow::render() {
     context->DrawLine(D2D1::Point2F(cx, cy - 5.0F),
                       D2D1::Point2F(cx, cy + 5.0F), blue.Get(), 1.6F);
     context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(cx, cy), 1.8F, 1.8F), blue.Get());
+    std::wstring error;
+    if (!surface_.end_draw(error)) controller_.report_runtime_error(error);
+}
+
+bool ZoomLensFrameWindow::initialize(GraphicsDevice& graphics) {
+    constexpr DWORD ex_style = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE |
+                               WS_EX_NOREDIRECTIONBITMAP | WS_EX_TRANSPARENT;
+    const RECT initial{0, 0, 1, 1};
+    if (!create(L"ElitePen.ZoomLensFrame", L"Aro de lente — Elite Pen",
+                ex_style, WS_POPUP, initial)) return false;
+    if (!initialize_surface(graphics)) return false;
+    // The frame is part of the presentation itself and must remain visible in
+    // OBS and other monitor-capture workflows.
+    SetWindowDisplayAffinity(window_, WDA_NONE);
+    return true;
+}
+
+void ZoomLensFrameWindow::show_for(RECT lens_bounds) {
+    constexpr int padding = 16;
+    const RECT frame_bounds{
+        lens_bounds.left - padding, lens_bounds.top - padding,
+        lens_bounds.right + padding, lens_bounds.bottom + padding};
+    const bool changed = !EqualRect(&lens_bounds_, &lens_bounds);
+    const bool was_visible = visible();
+    if (!changed && was_visible) return;
+    lens_bounds_ = lens_bounds;
+    SetWindowPos(window_, nullptr, frame_bounds.left, frame_bounds.top,
+                 std::max(1L, frame_bounds.right - frame_bounds.left),
+                 std::max(1L, frame_bounds.bottom - frame_bounds.top),
+                 SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+    if (changed || !was_visible) invalidate();
+}
+
+void ZoomLensFrameWindow::bring_to_front() {
+    if (!visible()) return;
+    SetWindowPos(window_, HWND_TOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+}
+
+LRESULT ZoomLensFrameWindow::handle_message(UINT message, WPARAM wparam,
+                                             LPARAM lparam) {
+    switch (message) {
+        case WM_NCHITTEST: return HTTRANSPARENT;
+        case WM_MOUSEACTIVATE: return MA_NOACTIVATE;
+        default: break;
+    }
+    return WindowBase::handle_message(message, wparam, lparam);
+}
+
+void ZoomLensFrameWindow::render() {
+    auto* context = surface_.begin_draw(D2D1::ColorF(0, 0.0F));
+    if (!context) return;
+    constexpr float padding = 16.0F;
+    const float width = static_cast<float>(surface_.width());
+    const float height = static_cast<float>(surface_.height());
+    const float radius = std::max(1.0F, (std::min(width, height) - 2.0F * padding) / 2.0F);
+    const auto lens = D2D1::Ellipse(D2D1::Point2F(width / 2.0F, height / 2.0F),
+                                    radius, radius);
+    const auto& theme = current_ui_theme();
+    ComPtr<ID2D1SolidColorBrush> shadow;
+    ComPtr<ID2D1SolidColorBrush> aura;
+    ComPtr<ID2D1SolidColorBrush> rim;
+    ComPtr<ID2D1SolidColorBrush> glass;
+    context->CreateSolidColorBrush(
+        theme_color(theme.shadow, theme.light ? 0.14F : 0.34F), shadow.GetAddressOf());
+    context->CreateSolidColorBrush(
+        theme_color(theme.violet, theme.light ? 0.10F : 0.16F), aura.GetAddressOf());
+    context->CreateSolidColorBrush(
+        theme_color(theme.surface_1, theme.light ? 0.88F : 0.92F), rim.GetAddressOf());
+    context->CreateSolidColorBrush(
+        theme_color(theme.light ? 0xFFFFFF : theme.violet, theme.light ? 0.018F : 0.024F),
+        glass.GetAddressOf());
+    const D2D1_GRADIENT_STOP stops[] = {
+        {0.0F, theme_color(theme.light ? 0xFFFFFF : theme.text, 0.92F)},
+        {0.42F, theme_color(theme.violet, 0.92F)},
+        {1.0F, theme_color(theme.mint, 0.84F)}};
+    const auto sheen = linear_gradient(
+        context, D2D1::Point2F(padding, padding),
+        D2D1::Point2F(width - padding, height - padding), stops,
+        static_cast<UINT>(std::size(stops)));
+
+    context->FillEllipse(lens, glass.Get());
+    context->DrawEllipse(lens, shadow.Get(), 12.0F);
+    context->DrawEllipse(lens, aura.Get(), 8.0F);
+    context->DrawEllipse(lens, rim.Get(), 4.5F);
+    if (sheen) context->DrawEllipse(lens, sheen.Get(), 2.0F);
+
     std::wstring error;
     if (!surface_.end_draw(error)) controller_.report_runtime_error(error);
 }
@@ -6967,6 +7142,8 @@ bool ZoomWindow::initialize(GraphicsDevice& graphics) {
     if (!ink_->initialize(graphics)) return false;
     target_ = std::make_unique<ZoomTargetWindow>(controller_);
     if (!target_->initialize(graphics)) return false;
+    lens_frame_ = std::make_unique<ZoomLensFrameWindow>(controller_);
+    if (!lens_frame_->initialize(graphics)) return false;
     edit_toolbar_ = std::make_unique<ZoomEditToolbarWindow>(controller_, *this);
     if (!edit_toolbar_->initialize(graphics)) return false;
     // Zoom presentation is intentionally capturable. Native Magnifier remains
@@ -6992,6 +7169,7 @@ bool ZoomWindow::show_zoom() {
     if (mag_set_filter_) {
         std::vector<HWND> excluded{window_};
         if (target_) excluded.push_back(target_->hwnd());
+        if (lens_frame_) excluded.push_back(lens_frame_->hwnd());
         if (edit_toolbar_) excluded.push_back(edit_toolbar_->hwnd());
         if (controller_.palette()) excluded.push_back(controller_.palette()->hwnd());
         mag_set_filter_(magnifier_, MW_FILTERMODE_EXCLUDE,
@@ -6999,6 +7177,7 @@ bool ZoomWindow::show_zoom() {
     }
     active_ = true;
     edit_state_ = ZoomEditState::Off;
+    if (lens_frame_) lens_frame_->hide();
     if (edit_toolbar_) edit_toolbar_->hide();
     overview_ = false;
     entry_animation_anchor_ = cursor;
@@ -7032,6 +7211,7 @@ void ZoomWindow::hide_zoom() {
     KillTimer(window_, 1);
     update_lens_cursor(false);
     if (target_) target_->hide();
+    if (lens_frame_) lens_frame_->hide();
     if (edit_toolbar_) edit_toolbar_->hide();
     edit_state_ = ZoomEditState::Off;
     if (ink_) ink_->hide();
@@ -7205,6 +7385,40 @@ void ZoomWindow::adjust_zoom(float delta) {
         zoom_rect_, controller_.state().zoom_factor, edit_state_);
 }
 
+void ZoomWindow::set_lens_diameter(int diameter) {
+    diameter = std::clamp(diameter, 280, 960);
+    if (controller_.preferences().zoom_lens_diameter == diameter) return;
+    controller_.preferences().zoom_lens_diameter = diameter;
+    controller_.save_preferences();
+    if (!active_ || frozen() ||
+        static_cast<ZoomView>(controller_.preferences().zoom_view) != ZoomView::Lens) {
+        return;
+    }
+    if (edit_state_ == ZoomEditState::Annotate)
+        set_edit_state(ZoomEditState::Navigate);
+    source_initialized_ = false;
+    refresh_source();
+    controller_.update_overlay_interaction();
+}
+
+void ZoomWindow::adjust_lens_diameter(int direction) {
+    if (direction == 0) return;
+    const int current = controller_.preferences().zoom_lens_diameter;
+    int next = current;
+    if (direction > 0) {
+        const auto candidate = std::upper_bound(
+            kZoomLensDiameters.begin(), kZoomLensDiameters.end(), current);
+        next = candidate == kZoomLensDiameters.end()
+            ? kZoomLensDiameters.back() : *candidate;
+    } else {
+        const auto candidate = std::lower_bound(
+            kZoomLensDiameters.begin(), kZoomLensDiameters.end(), current);
+        next = candidate == kZoomLensDiameters.begin()
+            ? kZoomLensDiameters.front() : *(candidate - 1);
+    }
+    set_lens_diameter(next);
+}
+
 void ZoomWindow::execute_action(HotkeyAction action) {
     if (!active_) return;
     switch (action) {
@@ -7283,6 +7497,7 @@ void ZoomWindow::bring_to_front() {
     SetWindowPos(window_, HWND_TOPMOST, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     if (ink_) ink_->bring_to_front();
+    if (lens_frame_) lens_frame_->bring_to_front();
     if (target_) target_->bring_to_front();
     if (edit_toolbar_) edit_toolbar_->bring_to_front();
     if (controller_.palette() && IsWindowVisible(controller_.palette()->hwnd())) {
@@ -7341,6 +7556,28 @@ void ZoomWindow::cycle_view() {
     controller_.update_overlay_interaction();
 }
 
+void ZoomWindow::apply_view_regions(ZoomView view, int width, int height) {
+    if (region_view_ == static_cast<int>(view) && region_width_ == width &&
+        region_height_ == height) return;
+    region_view_ = static_cast<int>(view);
+    region_width_ = width;
+    region_height_ = height;
+    const bool circular = view == ZoomView::Lens;
+    auto apply = [circular, width, height](HWND target) {
+        if (!target) return;
+        if (!circular) {
+            SetWindowRgn(target, nullptr, TRUE);
+            return;
+        }
+        HRGN region = CreateEllipticRgn(0, 0, width + 1, height + 1);
+        if (!region) return;
+        // After a successful SetWindowRgn call Windows owns the region.
+        if (!SetWindowRgn(target, region, TRUE)) DeleteObject(region);
+    };
+    apply(window_);
+    if (ink_) apply(ink_->hwnd());
+}
+
 void ZoomWindow::finish_entry_animation() {
     if (!entry_animation_active_) return;
     entry_animation_active_ = false;
@@ -7381,6 +7618,7 @@ void ZoomWindow::apply_theme() {
     if (restore_cursor) update_lens_cursor(true);
     if (ink_) ink_->invalidate();
     if (target_) target_->invalidate();
+    if (lens_frame_) lens_frame_->invalidate();
     if (edit_toolbar_) edit_toolbar_->invalidate();
 }
 
@@ -7436,8 +7674,14 @@ void ZoomWindow::refresh_source() {
     const int monitor_height = monitor_rect_.bottom - monitor_rect_.top;
     RECT zoom_rect = edit_locked ? zoom_rect_ : monitor_rect_;
     if (!edit_locked && view == ZoomView::Lens) {
-        const int lens_width = std::min(640, std::max(320, monitor_width / 2));
-        const int lens_height = std::min(420, std::max(220, monitor_height / 3));
+        const int maximum_diameter = std::max(
+            1, std::min(monitor_width, monitor_height) - 48);
+        const int minimum_diameter = std::min(280, maximum_diameter);
+        const int lens_diameter = std::clamp(
+            controller_.preferences().zoom_lens_diameter,
+            minimum_diameter, maximum_diameter);
+        const int lens_width = lens_diameter;
+        const int lens_height = lens_diameter;
         int left = cursor.x + 36;
         int top = cursor.y + 36;
         if (left + lens_width > monitor_rect_.right) left = cursor.x - lens_width - 36;
@@ -7465,6 +7709,11 @@ void ZoomWindow::refresh_source() {
                      zoom_width, zoom_height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
         SetWindowPos(magnifier_, nullptr, 0, 0, zoom_width, zoom_height,
                      SWP_NOZORDER | SWP_SHOWWINDOW);
+        apply_view_regions(view, zoom_width, zoom_height);
+    }
+    if (lens_frame_) {
+        if (view == ZoomView::Lens) lens_frame_->show_for(zoom_rect_);
+        else lens_frame_->hide();
     }
 
     if (!recordable_output_ &&
@@ -7537,6 +7786,10 @@ LRESULT ZoomWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
             return controller_.preferences().zoom_view;
         case kQaQueryZoomGeometryWidthMessage:
             return zoom_rect_.right - zoom_rect_.left;
+        case kQaQueryZoomGeometryHeightMessage:
+            return zoom_rect_.bottom - zoom_rect_.top;
+        case kQaQueryZoomLensDiameterMessage:
+            return controller_.preferences().zoom_lens_diameter;
         case kQaQueryZoomFactorMessage:
             return static_cast<LRESULT>(std::lround(
                 controller_.state().zoom_factor * 100.0F));
@@ -7609,9 +7862,19 @@ LRESULT ZoomWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
             refresh_source();
             return 0;
         case WM_MOUSEWHEEL: {
-            if ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0 &&
-                (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0) {
+            const bool control = (GET_KEYSTATE_WPARAM(wparam) & MK_CONTROL) != 0 ||
+                                 (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+            const bool shift = (GET_KEYSTATE_WPARAM(wparam) & MK_SHIFT) != 0 ||
+                               (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
+            if (control && shift) {
                 controller_.adjust_thickness_step(
+                    GET_WHEEL_DELTA_WPARAM(wparam) > 0 ? 1 : -1);
+                return 0;
+            }
+            if (shift && !frozen() &&
+                static_cast<ZoomView>(controller_.preferences().zoom_view) ==
+                    ZoomView::Lens) {
+                adjust_lens_diameter(
                     GET_WHEEL_DELTA_WPARAM(wparam) > 0 ? 1 : -1);
                 return 0;
             }
@@ -7639,6 +7902,8 @@ LRESULT ZoomWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
                 }
             }
             if (wparam == 'M') { cycle_view(); return 0; }
+            if (wparam == VK_OEM_4) { adjust_lens_diameter(-1); return 0; }
+            if (wparam == VK_OEM_6) { adjust_lens_diameter(1); return 0; }
             if (wparam == VK_ADD) { execute_action(HotkeyAction::ZoomIn); return 0; }
             if (wparam == VK_SUBTRACT) { execute_action(HotkeyAction::ZoomOut); return 0; }
             break;
@@ -8396,6 +8661,20 @@ void Controller::set_control_mode(ControlMode mode) {
     if (palette_) palette_->apply_mode(mode);
     save_palette_position();
     save_preferences();
+}
+
+void Controller::set_zoom_lens_diameter(int diameter) {
+    diameter = std::clamp(diameter, 280, 960);
+    if (zoom_) {
+        zoom_->set_lens_diameter(diameter);
+    } else {
+        preferences_.zoom_lens_diameter = diameter;
+        save_preferences();
+    }
+}
+
+void Controller::adjust_zoom_lens_diameter(int direction) {
+    if (zoom_) zoom_->adjust_lens_diameter(direction);
 }
 
 void Controller::set_theme(AppTheme theme) {

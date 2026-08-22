@@ -14,8 +14,8 @@
 - `capture`: seleccion de region, captura GDI con respaldo DXGI Desktop Duplication,
   transferencia al portapapeles y codificacion PNG mediante Windows Imaging Component.
 - `zoom`: control Magnifier nativo con salida DWM grabable al detectar OBS,
-  superficie DirectComposition de tinta, documento contextual para congelación y
-  documento fuente/caché dispersa para Zoom editable.
+  región circular y aro DirectComposition para Lente, superficie de tinta, documento
+  contextual para congelación y documento fuente/caché dispersa para Zoom editable.
 
 ## Flujo de datos
 
@@ -121,3 +121,17 @@ Magnifier y devuelve el foco a la última aplicación externa. La barra se exclu
 filtro de Magnifier para no reaparecer dentro de la ampliación, pero tanto ella como
 la raíz, la tinta y el indicador de lupa usan `WDA_NONE`: OBS debe capturar lo que el
 presentador ve. El orden topmost se recompone como Magnifier, tinta, barra y paleta.
+
+### ADR-010: lente circular separada del factor de ampliación
+
+La vista `L` mantiene un viewport cuadrado para que Magnifier y la ruta DWM conserven
+una transformación uniforme, pero aplica la misma región elíptica Win32 a la raíz y
+a `ZoomInk`. Así se recortan zoom vivo, instantánea y anotaciones sin máscaras por
+cuadro ni lecturas de CPU. `ZoomLensFrame` es una superficie DirectComposition
+transparente, excluida de Magnifier y capturable con `WDA_NONE`; dibuja únicamente
+anillos alfa de bajo costo y deja pasar toda la entrada.
+
+`ZoomLensDiameter` es una preferencia independiente de `ZoomFactor`. Los tamaños
+discretos evitan estados ambiguos en Configuración; `Shift+rueda` y `[` / `]` cambian
+el área visible, mientras rueda y `+`/`-` conservan su contrato de aumento. En cada
+monitor el diámetro se limita al espacio físico disponible.

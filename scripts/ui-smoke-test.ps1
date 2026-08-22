@@ -57,6 +57,7 @@ public static class ElitePenUiNative {
     [DllImport("user32.dll")] public static extern IntPtr GetDlgItem(IntPtr window, int id);
     [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr window, int index);
     [DllImport("user32.dll")] public static extern bool GetWindowRect(IntPtr window, out RECT rectangle);
+    [DllImport("user32.dll")] public static extern int GetWindowRgn(IntPtr window, IntPtr region);
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter,
         int x, int y, int width, int height, uint flags);
     [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT point);
@@ -73,6 +74,10 @@ public static class ElitePenUiNative {
     [DllImport("gdi32.dll", EntryPoint="GetObjectW")] public static extern int GetBitmapObject(
         IntPtr bitmap, int size, out BITMAP information);
     [DllImport("gdi32.dll")] public static extern bool DeleteObject(IntPtr value);
+    [DllImport("gdi32.dll")] public static extern IntPtr CreateRectRgn(
+        int left, int top, int right, int bottom);
+    [DllImport("gdi32.dll")] public static extern bool PtInRegion(
+        IntPtr region, int x, int y);
     [DllImport("user32.dll")] public static extern bool OpenClipboard(IntPtr owner);
     [DllImport("user32.dll")] public static extern bool CloseClipboard();
     [DllImport("user32.dll")] public static extern IntPtr GetClipboardData(uint format);
@@ -87,6 +92,25 @@ public static class ElitePenUiNative {
             return true;
         }, IntPtr.Zero);
         return count;
+    }
+    public static IntPtr FindWindowForProcess(string className, string title, uint processId) {
+        IntPtr found = IntPtr.Zero;
+        EnumWindows((window, data) => {
+            uint owner;
+            GetWindowThreadProcessId(window, out owner);
+            if (owner != processId) return true;
+            var classValue = new StringBuilder(256);
+            var titleValue = new StringBuilder(512);
+            GetClassName(window, classValue, classValue.Capacity);
+            GetWindowText(window, titleValue, titleValue.Capacity);
+            if (classValue.ToString() == className &&
+                (title == null || titleValue.ToString() == title)) {
+                found = window;
+                return false;
+            }
+            return true;
+        }, IntPtr.Zero);
+        return found;
     }
     public static bool IsAboveClass(IntPtr reference, string className) {
         bool referenceSeen = false;
@@ -140,7 +164,9 @@ if (Test-Path -LiteralPath $captureDirectory) {
 New-Item -ItemType Directory -Force -Path $captureDirectory | Out-Null
 $previousCaptureDirectory = $env:ELITE_PEN_QA_CAPTURE_DIR
 $previousSyntheticCapture = $env:ELITE_PEN_QA_SYNTHETIC_CAPTURE
+$previousQaInstance = $env:ELITE_PEN_QA_INSTANCE_ID
 $env:ELITE_PEN_QA_CAPTURE_DIR = $captureDirectory
+$env:ELITE_PEN_QA_INSTANCE_ID = [Guid]::NewGuid().ToString('N')
 if ($RealDesktopCapture) {
     Remove-Item Env:ELITE_PEN_QA_SYNTHETIC_CAPTURE -ErrorAction SilentlyContinue
 } else {
@@ -187,12 +213,18 @@ function Wait-Window([string]$ClassName, [int]$TimeoutMilliseconds = 5000) {
         'ElitePen.Zoom' { 'Zoom — Elite Pen' }
         'ElitePen.ZoomInk' { 'Anotaciones de zoom — Elite Pen' }
         'ElitePen.ZoomTarget' { 'Objetivo de lupa — Elite Pen' }
+        'ElitePen.ZoomLensFrame' { 'Aro de lente — Elite Pen' }
         'ElitePen.ZoomEditToolbar' { 'Zoom editable — Navegar — Elite Pen' }
         default { $null }
     }
     $elapsed = 0
     while ($elapsed -lt $TimeoutMilliseconds) {
-        $window = [ElitePenUiNative]::FindWindow($ClassName, $title)
+        $window = if ($script:qaProcessId -gt 0) {
+            [ElitePenUiNative]::FindWindowForProcess(
+                $ClassName, $title, [uint32]$script:qaProcessId)
+        } else {
+            [ElitePenUiNative]::FindWindow($ClassName, $title)
+        }
         if ($window -ne [IntPtr]::Zero) { return $window }
         Start-Sleep -Milliseconds 50
         $elapsed += 50
@@ -244,8 +276,10 @@ function Click-ThroughOverlay([IntPtr]$Palette, [int]$X, [int]$Y) {
 }
 
 $process = $null
+$script:qaProcessId = 0
 try {
     $process = Start-Process -FilePath $executable -WindowStyle Hidden -PassThru
+    $script:qaProcessId = $process.Id
     $palette = Wait-Window 'ElitePen.Palette'
     Assert-Ui ($palette -ne [IntPtr]::Zero) 'Palette window did not start.'
     if ($palette -eq [IntPtr]::Zero) { throw 'Palette unavailable; remaining UI checks cannot run.' }
@@ -485,7 +519,7 @@ try {
                    -not [ElitePenUiNative]::IsWindowVisible($shortcutGuide)) `
             'Help tab did not expose its product information and official website action.'
         $helpAccessibleText = [ElitePenUiNative]::WindowText($helpPanel)
-        Assert-Ui ($helpAccessibleText.Contains('Elite Pen 2.8.2') -and
+        Assert-Ui ($helpAccessibleText.Contains('Elite Pen 2.9.0') -and
                    $helpAccessibleText.Contains('Apache License 2.0') -and
                    $helpAccessibleText.Contains('Power Elite Studio')) `
             'Help tab is missing the version, open-source license, or developer identity.'
@@ -553,6 +587,11 @@ try {
 
         $paletteSize = [ElitePenUiNative]::GetDlgItem($settings, 4011)
         Assert-Ui ($paletteSize -ne [IntPtr]::Zero) 'Whole-unit size selector is missing.'
+        $lensSize = [ElitePenUiNative]::GetDlgItem($settings, 4015)
+        Assert-Ui ($lensSize -ne [IntPtr]::Zero -and
+                   [ElitePenUiNative]::SendMessage(
+                       $lensSize, 0x0146, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64() -eq 5) `
+            'General settings did not expose the five persisted lens diameters.'
         $null = [ElitePenUiNative]::SendMessage($paletteSize, 0x014E, [IntPtr]0, [IntPtr]::Zero)
         $null = [ElitePenUiNative]::SendMessage($settings, 0x0111, [IntPtr]0x00010FAB, $paletteSize)
         $script:paletteScale = 0.48
@@ -795,9 +834,50 @@ try {
             $zoom, 0x806D, [IntPtr]::Zero, [IntPtr]::Zero)
         $lensGeometryWidth = [ElitePenUiNative]::SendMessage(
             $zoom, 0x806E, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        $lensGeometryHeight = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x807C, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        $configuredLensDiameter = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x807D, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
         Assert-Ui ($lensView.ToInt64() -eq 1) 'L did not select lens zoom.'
         Assert-Ui (($lens.Right - $lens.Left) -lt ($full.Right - $full.Left)) `
             "Lens zoom did not use a compact window (full $($full.Right - $full.Left) px; lens $($lens.Right - $lens.Left) px; internal $lensGeometryWidth px)."
+        Assert-Ui ($lensGeometryWidth -eq $lensGeometryHeight -and
+                   $lensGeometryWidth -eq $configuredLensDiameter) `
+            "Lens viewport is not a circle-sized square ($lensGeometryWidth x $lensGeometryHeight; configured $configuredLensDiameter)."
+        $lensRegion = [ElitePenUiNative]::CreateRectRgn(0, 0, 1, 1)
+        if ($lensRegion -ne [IntPtr]::Zero) {
+            $regionType = [ElitePenUiNative]::GetWindowRgn($zoom, $lensRegion)
+            Assert-Ui ($regionType -gt 0 -and
+                       [ElitePenUiNative]::PtInRegion(
+                           $lensRegion, [Math]::Floor($lensGeometryWidth / 2),
+                           [Math]::Floor($lensGeometryHeight / 2)) -and
+                       -not [ElitePenUiNative]::PtInRegion($lensRegion, 2, 2)) `
+                'Lens viewport did not apply a circular native clipping region.'
+            $null = [ElitePenUiNative]::DeleteObject($lensRegion)
+        }
+        $zoomLensFrame = Wait-Window 'ElitePen.ZoomLensFrame' 1000
+        Assert-Ui ($zoomLensFrame -ne [IntPtr]::Zero -and
+                   [ElitePenUiNative]::IsWindowVisible($zoomLensFrame) -and
+                   [ElitePenUiNative]::IsAboveClass($zoomLensFrame, 'ElitePen.Zoom')) `
+            'Lens mode did not present its capture-safe premium optical frame.'
+
+        # Shift+wheel changes only the visible area; normal wheel remains the
+        # magnification control. The chosen diameter persists in preferences.
+        $growLensWheel = [IntPtr]((120 -shl 16) -bor 0x0004)
+        $null = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x020A, $growLensWheel, [IntPtr]::Zero)
+        Start-Sleep -Milliseconds 80
+        $grownLensWidth = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x806E, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        $grownLensPreference = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x807D, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        Assert-Ui ($grownLensWidth -gt $lensGeometryWidth -and
+                   $grownLensPreference -eq 640) `
+            'Shift+wheel did not enlarge and persist the circular lens diameter.'
+        $shrinkLensWheel = [IntPtr]((-120 -shl 16) -bor 0x0004)
+        $null = [ElitePenUiNative]::SendMessage(
+            $zoom, 0x020A, $shrinkLensWheel, [IntPtr]::Zero)
+        Start-Sleep -Milliseconds 80
         $zoomTarget = Wait-Window 'ElitePen.ZoomTarget' 1000
         Assert-Ui ($zoomTarget -ne [IntPtr]::Zero -and
                    [ElitePenUiNative]::IsWindowVisible($zoomTarget)) `
@@ -1313,7 +1393,10 @@ try {
 
     Assert-Ui (-not $process.HasExited) 'Application exited unexpectedly during UI checks.'
 } finally {
-    $palette = [ElitePenUiNative]::FindWindow('ElitePen.Palette', 'Elite Pen')
+    $palette = if ($script:qaProcessId -gt 0) {
+        [ElitePenUiNative]::FindWindowForProcess(
+            'ElitePen.Palette', 'Elite Pen', [uint32]$script:qaProcessId)
+    } else { [IntPtr]::Zero }
     if ($palette -ne [IntPtr]::Zero) {
         $null = [ElitePenUiNative]::PostMessage($palette, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)
     }
@@ -1341,6 +1424,7 @@ try {
     }
     $env:ELITE_PEN_QA_CAPTURE_DIR = $previousCaptureDirectory
     $env:ELITE_PEN_QA_SYNTHETIC_CAPTURE = $previousSyntheticCapture
+    $env:ELITE_PEN_QA_INSTANCE_ID = $previousQaInstance
 }
 
 # The clipboard payload must outlive Elite Pen itself. This catches native bitmap

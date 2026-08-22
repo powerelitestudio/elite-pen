@@ -157,6 +157,7 @@ struct Preferences {
     bool palette_collapsed{false};
     float zoom_factor{2.0F};
     int zoom_view{0};
+    int zoom_lens_diameter{520};
     bool zoom_invert{false};
     float thickness{4.0F};
     Color color{kBlack};

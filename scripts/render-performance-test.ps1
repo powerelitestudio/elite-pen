@@ -10,10 +10,6 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $executable = Join-Path $repoRoot "build\$($Configuration.ToLowerInvariant())\Elite Pen.exe"
 if (-not (Test-Path -LiteralPath $executable)) { throw "Missing executable: $executable" }
-if (Get-Process -Name 'Elite Pen' -ErrorAction SilentlyContinue) {
-    throw 'Close Elite Pen before running the render performance test.'
-}
-
 $sandbox = Join-Path ([IO.Path]::GetFullPath([IO.Path]::GetTempPath())) `
     ("elite-pen-render-qa-" + [Guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $sandbox | Out-Null
@@ -34,6 +30,8 @@ public static class ElitePenRenderNative {
     public static extern IntPtr FindWindow(string className, string title);
     [DllImport("user32.dll")]
     public static extern bool EnumWindows(WindowCallback callback, IntPtr data);
+    [DllImport("user32.dll")]
+    public static extern uint GetWindowThreadProcessId(IntPtr window, out uint processId);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)]
     public static extern int GetClassName(IntPtr window, StringBuilder value, int count);
     [DllImport("user32.dll")]
@@ -47,13 +45,35 @@ public static class ElitePenRenderNative {
     [DllImport("user32.dll")]
     public static extern bool RedrawWindow(IntPtr window, IntPtr update,
         IntPtr region, uint flags);
-    public static IntPtr PrimaryOverlay() {
+    public static IntPtr FindWindowForProcess(string className, string title, uint processId) {
+        IntPtr found = IntPtr.Zero;
+        EnumWindows((window, data) => {
+            uint owner;
+            GetWindowThreadProcessId(window, out owner);
+            if (owner != processId) return true;
+            var classValue = new StringBuilder(128);
+            var titleValue = new StringBuilder(256);
+            GetClassName(window, classValue, classValue.Capacity);
+            GetWindowText(window, titleValue, titleValue.Capacity);
+            if (classValue.ToString() == className && titleValue.ToString() == title) {
+                found = window;
+                return false;
+            }
+            return true;
+        }, IntPtr.Zero);
+        return found;
+    }
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)]
+    public static extern int GetWindowText(IntPtr window, StringBuilder value, int count);
+    public static IntPtr PrimaryOverlay(uint processId) {
         IntPtr found = IntPtr.Zero;
         EnumWindows((window, data) => {
             var name = new StringBuilder(128);
             RECT bounds;
+            uint owner;
+            GetWindowThreadProcessId(window, out owner);
             GetClassName(window, name, name.Capacity);
-            if (name.ToString() == "ElitePen.Overlay" &&
+            if (owner == processId && name.ToString() == "ElitePen.Overlay" &&
                 GetWindowRect(window, out bounds) &&
                 bounds.Left <= 300 && bounds.Right > 300 &&
                 bounds.Top <= 300 && bounds.Bottom > 300) {
@@ -72,16 +92,21 @@ function New-LParam([int]$X, [int]$Y) {
 }
 
 $process = $null
+$previousQaInstance = $env:ELITE_PEN_QA_INSTANCE_ID
+$previousSyntheticCapture = $env:ELITE_PEN_QA_SYNTHETIC_CAPTURE
+$env:ELITE_PEN_QA_INSTANCE_ID = [Guid]::NewGuid().ToString('N')
+$env:ELITE_PEN_QA_SYNTHETIC_CAPTURE = '1'
 try {
     $process = Start-Process -FilePath (Join-Path $sandbox 'Elite Pen.exe') `
         -WindowStyle Hidden -PassThru
     $palette = [IntPtr]::Zero
     for ($attempt = 0; $attempt -lt 100 -and $palette -eq [IntPtr]::Zero; $attempt++) {
         Start-Sleep -Milliseconds 50
-        $palette = [ElitePenRenderNative]::FindWindow('ElitePen.Palette', 'Elite Pen')
+        $palette = [ElitePenRenderNative]::FindWindowForProcess(
+            'ElitePen.Palette', 'Elite Pen', [uint32]$process.Id)
     }
     if ($palette -eq [IntPtr]::Zero) { throw 'Palette did not start.' }
-    $overlay = [ElitePenRenderNative]::PrimaryOverlay()
+    $overlay = [ElitePenRenderNative]::PrimaryOverlay([uint32]$process.Id)
     if ($overlay -eq [IntPtr]::Zero) { throw 'Primary drawing overlay is missing.' }
 
     $populate = [Diagnostics.Stopwatch]::StartNew()
@@ -134,7 +159,8 @@ try {
     $zoom = [IntPtr]::Zero
     for ($attempt = 0; $attempt -lt 100 -and $zoom -eq [IntPtr]::Zero; $attempt++) {
         Start-Sleep -Milliseconds 20
-        $zoom = [ElitePenRenderNative]::FindWindow('ElitePen.Zoom', 'Zoom — Elite Pen')
+        $zoom = [ElitePenRenderNative]::FindWindowForProcess(
+            'ElitePen.Zoom', 'Zoom — Elite Pen', [uint32]$process.Id)
     }
     if ($zoom -eq [IntPtr]::Zero) { throw 'Zoom did not start for source-space performance QA.' }
     $null = [ElitePenRenderNative]::SendMessage(
@@ -142,8 +168,9 @@ try {
     $zoomInk = [IntPtr]::Zero
     for ($attempt = 0; $attempt -lt 100 -and $zoomInk -eq [IntPtr]::Zero; $attempt++) {
         Start-Sleep -Milliseconds 20
-        $zoomInk = [ElitePenRenderNative]::FindWindow(
-            'ElitePen.ZoomInk', 'Anotaciones de zoom — Elite Pen')
+        $zoomInk = [ElitePenRenderNative]::FindWindowForProcess(
+            'ElitePen.ZoomInk', 'Anotaciones de zoom — Elite Pen',
+            [uint32]$process.Id)
     }
     if ($zoomInk -eq [IntPtr]::Zero) { throw 'Editable zoom ink surface is missing.' }
 
@@ -207,7 +234,10 @@ try {
     if ($metrics.editWarmPencilMs -gt 1000) { throw 'Editable zoom warm LÁPIZ entry exceeded 1000 ms.' }
     if ($metrics.workingSetMiB -gt 350) { throw 'Working set exceeded 350 MiB.' }
 } finally {
-    $palette = [ElitePenRenderNative]::FindWindow('ElitePen.Palette', 'Elite Pen')
+    $palette = if ($process) {
+        [ElitePenRenderNative]::FindWindowForProcess(
+            'ElitePen.Palette', 'Elite Pen', [uint32]$process.Id)
+    } else { [IntPtr]::Zero }
     if ($palette -ne [IntPtr]::Zero) {
         $null = [ElitePenRenderNative]::PostMessage(
             $palette, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero)
@@ -234,6 +264,8 @@ try {
             }
         }
     }
+    $env:ELITE_PEN_QA_INSTANCE_ID = $previousQaInstance
+    $env:ELITE_PEN_QA_SYNTHETIC_CAPTURE = $previousSyntheticCapture
 }
 
 Write-Output 'Elite Pen render performance: all budgets passed'

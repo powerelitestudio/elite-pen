@@ -1,4 +1,4 @@
-ELITE PEN 2.8.2 — EDICION PORTABLE
+ELITE PEN 2.9.0 — EDICION PORTABLE
 ================================
 
 Elite Pen es la herramienta de anotacion, pizarra y ampliacion de pantalla de
@@ -58,7 +58,8 @@ ZOOM
 ----
 F  Pantalla completa
    Al entrar, el aumento llega progresivamente al area del puntero en 180 ms.
-L  Lente con lupa persistente y reticula central de enfoque
+L  Lente circular con aro optico, lupa persistente y reticula central de enfoque
+Shift+rueda o [ ]  Recorrer cinco diametros de lente sin cambiar la ampliacion
 D  Vista acoplada
 I  Invertir colores
 0  Vista general 1x
@@ -85,7 +86,7 @@ Configuracion.
 
 SOPORTE
 -------
-Producto de Power Elite Studio. Version 2.8.2.
+Producto de Power Elite Studio. Version 2.9.0.
 Sitio oficial: https://powerelite.studio/
 Codigo fuente: https://github.com/powerelitestudio/elite-pen
 

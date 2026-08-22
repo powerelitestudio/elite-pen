@@ -52,6 +52,8 @@ int main() {
     check(fresh.hotkeys[static_cast<std::size_t>(HotkeyAction::ZoomEdit)] ==
               HotkeyBinding{0, 'E'},
           "zoom edit ships with the contextual E shortcut");
+    check(fresh.zoom_lens_diameter == 520,
+          "lens mode starts with the standard circular diameter");
 
     std::filesystem::create_directories(data, error);
     {
@@ -109,6 +111,7 @@ int main() {
     expected.palette_collapsed = true;
     expected.zoom_factor = 6.0F;
     expected.zoom_view = 2;
+    expected.zoom_lens_diameter = 760;
     expected.zoom_invert = true;
     expected.thickness = 12.0F;
     expected.color = kPurple;
@@ -137,7 +140,8 @@ int main() {
     check(actual.palette_size == expected.palette_size && actual.palette_collapsed,
           "palette size and hibernation round trip");
     check(actual.zoom_factor == expected.zoom_factor && actual.zoom_view == expected.zoom_view &&
-          actual.zoom_invert, "zoom preferences round trip");
+          actual.zoom_lens_diameter == expected.zoom_lens_diameter && actual.zoom_invert,
+          "zoom preferences round trip");
     check(actual.thickness == expected.thickness && actual.color == expected.color,
           "drawing preferences round trip");
     check(actual.hotkeys == expected.hotkeys, "custom hotkeys round trip");
