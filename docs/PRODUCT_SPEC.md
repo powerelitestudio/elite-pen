@@ -1,6 +1,6 @@
-# Elite Pen 2.8.2 — contrato de producto
+# Elite Pen 2.9.0 — contrato de producto
 
-Estado: versión 2.8.2 implementada como software de código abierto bajo Apache
+Estado: versión 2.9.0 implementada como software de código abierto bajo Apache
 License 2.0 y preparada para distribución pública portable e instalada.
 
 ## 1. Identidad e interaccion principal
@@ -185,10 +185,16 @@ añade una fila independiente para Configuracion.
   está abierto; salir del zoom descarta la sesión sin tocar el documento normal.
 - Factores admitidos: 1.25x a 8x; valor inicial 2x. Las vistas son pantalla completa,
   lente y acoplada; admiten inversion de color y vista general 1x.
-- La vista Lente usa un cursor propio con aro de lupa y retícula central para mostrar
-  con precisión qué punto del escritorio alimenta el centro de la ampliación. La guía
-  es una superficie transparente persistente que sigue al puntero, no recibe entrada
-  y se excluye del contenido magnificado para evitar recursión.
+- La vista Lente presenta el contenido en un círculo real, no en un cuadro: una región
+  elíptica nativa recorta tanto Magnifier/DWM como la tinta congelada. Un aro óptico
+  transparente añade sombra difuminada, borde frío y brillo violeta/menta mediante
+  DirectComposition, permanece capturable y no recibe entrada.
+- `Shift+rueda` o `[` / `]` recorre diámetros de 360, 440, 520, 640 y 760 px sin
+  cambiar el factor de ampliación. Configuración > General ofrece los mismos cinco
+  tamaños; el valor inicial es 520 px y se conserva en `ZoomLensDiameter`.
+- Un cursor propio con aro de lupa y retícula central muestra con precisión qué punto
+  del escritorio alimenta el centro de la ampliación. La guía transparente sigue al
+  puntero y se excluye del contenido magnificado para evitar recursión.
 - Mientras el zoom está vivo, un capturador de clic temporal y limitado a esa sesión
   congela al completar el clic izquierdo en cualquier monitor. Los clics dentro de la
   paleta se excluyen para permitir preparar color o herramienta sin congelar.

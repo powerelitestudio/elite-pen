@@ -10,7 +10,7 @@ pantalla para Windows, desarrollada por [Power Elite Studio](https://powerelite.
 Permite explicar sobre cualquier aplicación sin convertir la presentación en una
 sucesión de ventanas y menús.
 
-> **Estado:** acceso anticipado. La versión 2.8.2 es funcional y está validada para
+> **Estado:** acceso anticipado. La versión 2.9.0 es funcional y está validada para
 > empezar a compartirse, pero el producto continúa en desarrollo activo. Los reportes
 > de errores y casos de compatibilidad son bienvenidos.
 
@@ -48,7 +48,8 @@ oficial y compara el SHA-256 publicado con cada versión.
 - Capturar una region en PNG y copiarla al portapapeles, incluido el zoom congelado
   con sus anotaciones visibles.
 - Usar pizarras blanca y negra instantaneas.
-- Ampliar la pantalla en vista completa, lente o acoplada y seguir el puntero.
+- Ampliar la pantalla en vista completa, lente circular redimensionable o acoplada y
+  seguir el puntero.
 - Congelar el zoom, anotar sobre la imagen fija y reanudar sin perder esa tinta.
 - Entrar con `E` en Zoom editable, usar normalmente la aplicación ampliada en Mano y
   congelar con Lápiz para anotar sin perder el contexto.
@@ -128,8 +129,9 @@ Las pizarras blanca y negra restauran la paleta sobre el lienzo después de cada
 trazo o borrado para conservar todos sus comandos disponibles.
 
 En zoom: `F` pantalla completa con una transición de entrada de 180 ms, rápida y
-progresiva hacia el punto de invocación; `L` lente con una lupa persistente
-sincronizada con el centro real del área ampliada,
+progresiva hacia el punto de invocación; `L` lente circular con aro óptico y una lupa
+persistente sincronizada con el centro real del área ampliada. En Lente,
+`Shift+rueda` o `[` / `]` recorre cinco diámetros sin cambiar cuánto se amplía;
 `D` acoplado, `I` invertir,
 rueda/`+`/`-` para ampliar, `0` para vista general, `Espacio` o `M` para recorrer
 vistas, y `P` o clic para congelar o reanudar. `Esc`, `F4` o clic derecho salen.

@@ -104,6 +104,8 @@ Preferences PreferencesStore::load() const {
     result.palette_collapsed = read_int(path_, L"PaletteCollapsed", 0) != 0;
     result.zoom_factor = std::clamp(read_float(path_, L"ZoomFactor", 2.0F), 1.25F, 8.0F);
     result.zoom_view = std::clamp(read_int(path_, L"ZoomView", 0), 0, 2);
+    result.zoom_lens_diameter = std::clamp(
+        read_int(path_, L"ZoomLensDiameter", 520), 280, 960);
     result.zoom_invert = read_int(path_, L"ZoomInvert", 0) != 0;
     result.thickness = std::clamp(read_float(path_, L"Thickness", 4.0F), 1.0F, 40.0F);
     result.color = read_color(path_, kBlack);
@@ -161,6 +163,7 @@ bool PreferencesStore::save(const Preferences& preferences) const {
     content << "PaletteCollapsed=" << (preferences.palette_collapsed ? 1 : 0) << "\r\n";
     content << "ZoomFactor=" << preferences.zoom_factor << "\r\n";
     content << "ZoomView=" << preferences.zoom_view << "\r\n";
+    content << "ZoomLensDiameter=" << preferences.zoom_lens_diameter << "\r\n";
     content << "ZoomInvert=" << (preferences.zoom_invert ? 1 : 0) << "\r\n";
     content << "Thickness=" << preferences.thickness << "\r\n";
     content << "Color=" << static_cast<int>(preferences.color.r) << ','

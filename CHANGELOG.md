@@ -1,5 +1,20 @@
 # Historial de cambios
 
+## 2.9.0 — 2026-08-22
+
+- La vista `L` deja atrás el cuadro rectangular: el contenido ampliado se recorta
+  como una lente circular nativa, también al congelar o anotar.
+- Un aro óptico premium, transparente y capturable añade profundidad, brillo violeta
+  y menta y un borde difuminado de bajo costo sin copiar cuadros en CPU.
+- `Shift+rueda` o `[` / `]` recorre cinco diámetros de 360 a 760 px sin modificar el
+  factor de ampliación. La rueda normal y `+`/`-` continúan controlando el zoom.
+- Configuración > General incorpora el tamaño de la lente y lo conserva en
+  `settings.ini` tanto instalado como portable.
+- QA comprueba geometría cuadrada, región elíptica, centro visible, esquinas
+  recortadas, aro topmost, cambio de tamaño y round trip de preferencias.
+- El smoke UI ahora aísla cada ejecución por proceso y no puede cerrar ni confundir
+  una copia personal de Elite Pen que ya esté abierta durante las pruebas.
+
 ## 2.8.2 — 2026-08-20
 
 - El cursor de Lápiz y Resaltador cambia de +45° a −45° cartesianos: la punta activa

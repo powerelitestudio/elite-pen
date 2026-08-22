@@ -1,6 +1,6 @@
-# Informe de calidad — Elite Pen 2.8.2
+# Informe de calidad — Elite Pen 2.9.0
 
-Fecha: 2026-08-20
+Fecha: 2026-08-22
 Equipo de referencia: Lenovo 80NV, Intel Core i7-6700HQ, 12 GB RAM, Intel HD 530,
 GeForce GTX 960M, Windows 10 Pro 22H2 x64, dos monitores con escalado mixto.
 
@@ -147,6 +147,14 @@ GeForce GTX 960M, Windows 10 Pro 22H2 x64, dos monitores con escalado mixto.
   sitúa el hotspot de grafito en el cuadrante superior izquierdo. El cuerpo se
   prolonga hacia abajo y a la derecha para mantener libre el texto subrayado; la
   misma fábrica de cursor cubre overlays normales y tinta de Zoom.
+- Lente 2.9: QA exige ancho y alto idénticos, centro incluido, esquinas excluidas por
+  la región elíptica nativa y `ZoomLensFrame` visible por encima de la raíz sin
+  bloquear entrada. `Shift+rueda` aumenta el diámetro, lo conserva en preferencias
+  y puede devolverlo al tamaño anterior; la prueba portable valida el valor inicial
+  de 520 px y el round trip de un valor de 760 px.
+- Aislamiento QA 2.9: cada smoke UI usa un mutex propio y busca ventanas por PID. La
+  limpieza final solo cierra la instancia de prueba, incluso si la copia portable del
+  usuario permanece abierta con las mismas clases Win32.
 - Persistencia 2.0: una prueba portable aislada escribe y vuelve a leer posición con
   coordenadas negativas, escala, modo contraído, color, grosor, zoom y atajos
   personalizados; también comprueba el reemplazo atómico sin archivo `.tmp` residual.
@@ -168,17 +176,17 @@ Resultado final en el equipo de referencia:
 
 | Prueba | Resultado | Presupuesto |
 |---|---:|---:|
-| Agregar 5.000 trazos | 20,92 ms | 250 ms |
-| 250 borrados fallidos sobre 5.000 objetos | 40,90 ms | 400 ms |
-| 10.000 ciclos de deshacer/rehacer el último objeto | 0,77 ms | 200 ms |
-| Limpiar y restaurar 5.000 objetos | 2,05 ms | 100 ms |
-| Simplificar 100.000 muestras | 69,98 ms | 500 ms |
+| Agregar 5.000 trazos | 11,11 ms | 250 ms |
+| 250 borrados fallidos sobre 5.000 objetos | 16,92 ms | 400 ms |
+| 10.000 ciclos de deshacer/rehacer el último objeto | 0,37 ms | 200 ms |
+| Limpiar y restaurar 5.000 objetos | 0,49 ms | 100 ms |
+| Simplificar 100.000 muestras | 27,39 ms | 500 ms |
 
-Renderizado real con 5.000 trazos: 1,466 ms de media para cuadros en caché,
-4,952 ms durante dibujo activo y 105,58 MiB de memoria de trabajo. Zoom editable
-puebla el documento fuente en 8,782 ms, entra por primera vez en Lápiz en 445,275 ms,
-recorre 240 cuadros de Mano a 0,519 ms de media y vuelve a Lápiz con caché caliente en
-92,715 ms. Todos permanecen dentro de sus presupuestos respectivos.
+Renderizado real con 5.000 trazos: 2,663 ms de media para cuadros en caché,
+1,915 ms durante dibujo activo y 111,87 MiB de memoria de trabajo. Zoom editable
+puebla el documento fuente en 5,504 ms, entra por primera vez en Lápiz en 172,339 ms,
+recorre 240 cuadros de Mano a 0,203 ms de media y vuelve a Lápiz con caché caliente en
+22,834 ms. Todos permanecen dentro de sus presupuestos respectivos.
 
 ## Compatibilidad y recuperacion
 
@@ -201,5 +209,5 @@ recorre 240 cuadros de Mano a 0,519 ms de media y vuelve a Lápiz con caché cal
 - Windows puede denegar la captura del escritorio en una sesion bloqueada, segura o
   no interactiva; Elite Pen informa el fallo y no genera un archivo corrupto.
 - La presion depende del controlador del lapiz y de que Windows entregue WM_POINTER.
-- El binario 2.8.2 no esta firmado digitalmente; los hashes del paquete permiten
+- El binario 2.9.0 no esta firmado digitalmente; los hashes del paquete permiten
   verificar integridad hasta incorporar el certificado de Power Elite Studio.
