@@ -1,4 +1,4 @@
-[CmdletBinding()]
+﻿[CmdletBinding()]
 param(
     [ValidateSet('Debug', 'Release')]
     [string]$Configuration = 'Debug',
@@ -104,7 +104,7 @@ public static class ElitePenUiNative {
             GetClassName(window, classValue, classValue.Capacity);
             GetWindowText(window, titleValue, titleValue.Capacity);
             if (classValue.ToString() == className &&
-                (title == null || titleValue.ToString() == title)) {
+                (String.IsNullOrEmpty(title) || titleValue.ToString() == title)) {
                 found = window;
                 return false;
             }
@@ -220,8 +220,11 @@ function Wait-Window([string]$ClassName, [int]$TimeoutMilliseconds = 5000) {
     $elapsed = 0
     while ($elapsed -lt $TimeoutMilliseconds) {
         $window = if ($script:qaProcessId -gt 0) {
+            # PID + native class uniquely identify every QA surface. Avoid
+            # coupling hidden-window discovery to Unicode caption decoding in
+            # Windows PowerShell 5.1; captions remain useful for the fallback.
             [ElitePenUiNative]::FindWindowForProcess(
-                $ClassName, $title, [uint32]$script:qaProcessId)
+                $ClassName, $null, [uint32]$script:qaProcessId)
         } else {
             [ElitePenUiNative]::FindWindow($ClassName, $title)
         }
@@ -283,6 +286,13 @@ try {
     $palette = Wait-Window 'ElitePen.Palette'
     Assert-Ui ($palette -ne [IntPtr]::Zero) 'Palette window did not start.'
     if ($palette -eq [IntPtr]::Zero) { throw 'Palette unavailable; remaining UI checks cannot run.' }
+    # Palette is created before the remaining hidden panels while startup is still
+    # initializing DirectComposition surfaces. Wait for those command targets so a
+    # fast automation host cannot dispatch a hotkey before its panel exists.
+    $startupColors = Wait-Window 'ElitePen.Colors' 5000
+    $startupTools = Wait-Window 'ElitePen.Tools' 5000
+    Assert-Ui ($startupColors -ne [IntPtr]::Zero -and $startupTools -ne [IntPtr]::Zero) `
+        'Hidden command panels did not finish initializing after the palette.'
 
     Assert-Ui ([ElitePenUiNative]::CountClass('ElitePen.Overlay') -ge 1) 'No monitor overlay was created.'
     $defaultTheme = [ElitePenUiNative]::SendMessage(
@@ -458,8 +468,8 @@ try {
     if ($toolPanel -ne [IntPtr]::Zero) {
         $toolPanelBounds = New-Object ElitePenUiNative+RECT
         $null = [ElitePenUiNative]::GetWindowRect($toolPanel, [ref]$toolPanelBounds)
-        Assert-Ui (($toolPanelBounds.Bottom - $toolPanelBounds.Top) -eq 400) 'Complete tool panel did not expose its Settings row.'
-        Click-Window $toolPanel 180 361
+        Assert-Ui (($toolPanelBounds.Bottom - $toolPanelBounds.Top) -eq 448) 'Complete tool panel did not expose its Settings row.'
+        Click-Window $toolPanel 180 409
     }
 
     # Settings remains directly accessible through the handle panel.
@@ -519,7 +529,7 @@ try {
                    -not [ElitePenUiNative]::IsWindowVisible($shortcutGuide)) `
             'Help tab did not expose its product information and official website action.'
         $helpAccessibleText = [ElitePenUiNative]::WindowText($helpPanel)
-        Assert-Ui ($helpAccessibleText.Contains('Elite Pen 2.9.0') -and
+        Assert-Ui ($helpAccessibleText.Contains('Elite Pen 2.10.0') -and
                    $helpAccessibleText.Contains('Apache License 2.0') -and
                    $helpAccessibleText.Contains('Power Elite Studio')) `
             'Help tab is missing the version, open-source license, or developer identity.'
@@ -730,8 +740,38 @@ try {
     $overlay = Wait-Window 'ElitePen.Overlay'
     Assert-Ui ($overlay -ne [IntPtr]::Zero) 'Overlay disappeared during UI test.'
 
-    # Pen, highlighter, line, rectangle, ellipse, straight and curved arrows.
-    foreach ($toolIndex in @(1, 2, 4, 5, 6, 7, 8)) {
+    # The compact geometry panel exposes all seven icon-only figures in two
+    # balanced rows. Pentagon and hexagon intentionally have no default hotkey.
+    $null = [ElitePenUiNative]::SendMessage(
+        $palette, 0x0312, [IntPtr]20, [IntPtr]::Zero)
+    $geometryPanel = Wait-Window 'ElitePen.Tools' 1000
+    Assert-Ui ($geometryPanel -ne [IntPtr]::Zero -and
+               [ElitePenUiNative]::IsWindowVisible($geometryPanel)) `
+        'Geometry panel did not open from its existing shortcut.'
+    if ($geometryPanel -ne [IntPtr]::Zero) {
+        $geometryBounds = New-Object ElitePenUiNative+RECT
+        $null = [ElitePenUiNative]::GetWindowRect($geometryPanel, [ref]$geometryBounds)
+        Assert-Ui (($geometryBounds.Bottom - $geometryBounds.Top) -eq 172) `
+            'Seven geometry options were not arranged in the compact two-row panel.'
+        Save-WindowImage $geometryPanel 'geometry-panel.png'
+        Click-Window $geometryPanel 183 129
+        $selectedPentagon = [ElitePenUiNative]::SendMessage(
+            $palette, 0x805A, [IntPtr]::Zero, [IntPtr]::Zero)
+        Assert-Ui ($selectedPentagon.ToInt64() -eq 12) `
+            'Pentagon option did not select the five-sided drawing tool.'
+
+        $null = [ElitePenUiNative]::SendMessage(
+            $palette, 0x0312, [IntPtr]20, [IntPtr]::Zero)
+        $geometryPanel = Wait-Window 'ElitePen.Tools' 1000
+        Click-Window $geometryPanel 251 129
+        $selectedHexagon = [ElitePenUiNative]::SendMessage(
+            $palette, 0x805A, [IntPtr]::Zero, [IntPtr]::Zero)
+        Assert-Ui ($selectedHexagon.ToInt64() -eq 13) `
+            'Hexagon option did not select the six-sided drawing tool.'
+    }
+
+    # Pen, highlighter, line, rectangle, ellipse, arrows and both polygons.
+    foreach ($toolIndex in @(1, 2, 4, 5, 6, 7, 8, 12, 13)) {
         Select-Tool $palette $toolIndex
         Click-Window $overlay (260 + 5 * $toolIndex) (260 + 3 * $toolIndex)
         $start = [IntPtr](((260 + 3 * $toolIndex) -shl 16) -bor ((260 + 5 * $toolIndex) -band 0xffff))
@@ -1341,26 +1381,35 @@ try {
                        [ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.Zoom') -and
                        [ElitePenUiNative]::IsAboveClass($zoomInk, 'ElitePen.Zoom')) `
                 'Changing color during frozen zoom hid or deactivated the palette.'
-            Select-Tool $palette 5
+            Select-Tool $palette 12
             $zoomGeometry = [ElitePenUiNative]::SendMessage(
                 $palette, 0x805A, [IntPtr]::Zero, [IntPtr]::Zero)
-            Assert-Ui ($zoomGeometry.ToInt64() -eq 5 -and
+            Assert-Ui ($zoomGeometry.ToInt64() -eq 12 -and
                        [ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.ZoomInk') -and
                        [ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.Zoom') -and
                        [ElitePenUiNative]::IsAboveClass($zoomInk, 'ElitePen.Zoom')) `
-                'Geometry selection was not available above the frozen zoom image.'
+                'Pentagon selection was not available above the frozen zoom image.'
+            $polygonStart = [IntPtr]((360 -shl 16) -bor 520)
+            $polygonFinish = [IntPtr]((460 -shl 16) -bor 650)
+            $null = [ElitePenUiNative]::SendMessage($zoomInk, 0x0201, [IntPtr]1, $polygonStart)
+            $null = [ElitePenUiNative]::SendMessage($zoomInk, 0x0200, [IntPtr]1, $polygonFinish)
+            $null = [ElitePenUiNative]::SendMessage($zoomInk, 0x0202, [IntPtr]0, $polygonFinish)
+            $polygonZoomItems = [ElitePenUiNative]::SendMessage(
+                $zoomInk, 0x8062, [IntPtr]::Zero, [IntPtr]::Zero)
+            Assert-Ui ($polygonZoomItems.ToInt64() -eq 2) `
+                'Frozen zoom did not commit the selected pentagon.'
             $null = [ElitePenUiNative]::SendMessage($zoomInk, 0x0100, [IntPtr][char]'P', [IntPtr]::Zero)
             Start-Sleep -Milliseconds 120
             $resumed = [ElitePenUiNative]::SendMessage($zoom, 0x8061, [IntPtr]::Zero, [IntPtr]::Zero)
             $zoomItems = [ElitePenUiNative]::SendMessage($zoomInk, 0x8062, [IntPtr]::Zero, [IntPtr]::Zero)
-            Assert-Ui ($resumed.ToInt64() -eq 0 -and $zoomItems.ToInt64() -eq 1) `
+            Assert-Ui ($resumed.ToInt64() -eq 0 -and $zoomItems.ToInt64() -eq 2) `
                 'Zoom annotations did not persist when live zoom resumed.'
             $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]6, [IntPtr]::Zero)
             $clearedZoomItems = [ElitePenUiNative]::SendMessage($zoomInk, 0x8062, [IntPtr]::Zero, [IntPtr]::Zero)
             Assert-Ui ($clearedZoomItems.ToInt64() -eq 0) 'Clear did not target the zoom document independently.'
             $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]4, [IntPtr]::Zero)
             $restoredZoomItems = [ElitePenUiNative]::SendMessage($zoomInk, 0x8062, [IntPtr]::Zero, [IntPtr]::Zero)
-            Assert-Ui ($restoredZoomItems.ToInt64() -eq 1) 'Undo did not restore zoom annotations.'
+            Assert-Ui ($restoredZoomItems.ToInt64() -eq 2) 'Undo did not restore zoom annotations.'
             $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]5, [IntPtr]::Zero)
             $redoneZoomItems = [ElitePenUiNative]::SendMessage($zoomInk, 0x8062, [IntPtr]::Zero, [IntPtr]::Zero)
             Assert-Ui ($redoneZoomItems.ToInt64() -eq 0) 'Redo did not clear zoom annotations again.'

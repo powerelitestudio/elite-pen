@@ -52,6 +52,11 @@ int main() {
     check(fresh.hotkeys[static_cast<std::size_t>(HotkeyAction::ZoomEdit)] ==
               HotkeyBinding{0, 'E'},
           "zoom edit ships with the contextual E shortcut");
+    check(fresh.hotkeys[static_cast<std::size_t>(HotkeyAction::Pentagon)] ==
+              HotkeyBinding{} &&
+          fresh.hotkeys[static_cast<std::size_t>(HotkeyAction::Hexagon)] ==
+              HotkeyBinding{},
+          "polygon tools ship without preassigned shortcuts");
     check(fresh.zoom_lens_diameter == 520,
           "lens mode starts with the standard circular diameter");
 

@@ -112,7 +112,7 @@ try {
     Click-AlphaWindow $palette ([Math]::Round(180 * $initialScale)) `
         ([Math]::Round(205 * $initialScale))
     $tools = Wait-AlphaWindow 'ElitePen.Tools' 'Herramientas — Elite Pen'
-    Click-AlphaWindow $tools 180 361
+    Click-AlphaWindow $tools 180 409
     $settings = Wait-AlphaWindow 'ElitePen.Settings' 'Configuracion — Elite Pen'
     $selector = [ElitePenAlphaNative]::GetDlgItem($settings, 4011)
     if ($selector -eq [IntPtr]::Zero) { throw 'Palette size selector is missing.' }

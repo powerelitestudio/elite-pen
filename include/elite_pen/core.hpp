@@ -87,7 +87,9 @@ enum class Tool : std::uint8_t {
     CurvedArrow,
     Text,
     Screenshot,
-    Zoom
+    Zoom,
+    Pentagon,
+    Hexagon
 };
 
 [[nodiscard]] const wchar_t* tool_name(Tool tool) noexcept;
@@ -132,6 +134,10 @@ struct ArrowHead {
 [[nodiscard]] ArrowHead arrow_head_points(PointF before, PointF end,
                                           float width,
                                           float reference_scale = 1.0F) noexcept;
+[[nodiscard]] std::size_t tool_polygon_sides(Tool tool) noexcept;
+[[nodiscard]] std::vector<PointF> polygon_vertices(PointF first,
+                                                   PointF opposite,
+                                                   std::size_t sides);
 [[nodiscard]] bool hit_test(const Drawable& item, PointF point, float tolerance = 3.0F) noexcept;
 [[nodiscard]] std::vector<PointF> simplify_path(const std::vector<PointF>& input,
                                                 float epsilon);

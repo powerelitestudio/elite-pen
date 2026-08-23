@@ -140,6 +140,43 @@ void test_hit_testing() {
     check(!hit_test(flat_ellipse, {100, 30}, 2),
           "flat ellipse rejects points beyond pixel tolerance");
 
+    Drawable pentagon;
+    pentagon.kind = Tool::Pentagon;
+    pentagon.width = 4;
+    pentagon.points = {{10, 10}, {110, 110}};
+    const auto pentagon_vertices = polygon_vertices(
+        pentagon.points.front(), pentagon.points.back(),
+        tool_polygon_sides(pentagon.kind));
+    check(tool_polygon_sides(Tool::Pentagon) == 5 &&
+          pentagon_vertices.size() == 5,
+          "pentagon produces exactly five deterministic vertices");
+    check(distance(pentagon_vertices.front(), {60, 10}) < 0.001F,
+          "pentagon starts at the top of its drag bounds");
+    check(hit_test(pentagon,
+                   {(pentagon_vertices[0].x + pentagon_vertices[1].x) * 0.5F,
+                    (pentagon_vertices[0].y + pentagon_vertices[1].y) * 0.5F}, 1.0F),
+          "pentagon outline can be selected and erased");
+    check(!hit_test(pentagon, {60, 60}, 1.0F),
+          "pentagon interior does not hit its outline");
+
+    Drawable hexagon = pentagon;
+    hexagon.kind = Tool::Hexagon;
+    const auto hexagon_vertices = polygon_vertices(
+        hexagon.points.front(), hexagon.points.back(),
+        tool_polygon_sides(hexagon.kind));
+    check(tool_polygon_sides(Tool::Hexagon) == 6 &&
+          hexagon_vertices.size() == 6,
+          "hexagon produces exactly six deterministic vertices");
+    check(hit_test(hexagon,
+                   {(hexagon_vertices[2].x + hexagon_vertices[3].x) * 0.5F,
+                    (hexagon_vertices[2].y + hexagon_vertices[3].y) * 0.5F}, 1.0F),
+          "hexagon outline can be selected and erased");
+    check(!hit_test(hexagon, {60, 60}, 1.0F),
+          "hexagon interior does not hit its outline");
+    check(polygon_vertices({0, 0}, {10, 10}, 2).empty() &&
+          tool_polygon_sides(Tool::Rectangle) == 0,
+          "non-polygon requests fail safely without synthetic vertices");
+
     const RectF original_bounds = rectangle.bounds();
     rectangle.points.back() = {210, 160};
     rectangle.invalidate_bounds_cache();
@@ -220,6 +257,9 @@ void test_modifier_gestures() {
           "arrow chord has deterministic priority over other modifiers");
     check(gesture_tool(Tool::Rectangle, true, false, false, false) == Tool::Rectangle,
           "explicit rectangle keeps Shift square constraint");
+    check(gesture_tool(Tool::Pentagon, true, true, true, true) == Tool::Pentagon &&
+          gesture_tool(Tool::Hexagon, true, true, true, true) == Tool::Hexagon,
+          "modifier gestures never replace explicitly selected polygons");
     check(gesture_tool(Tool::Eraser, true, true, true, true) == Tool::Eraser,
           "modifier gestures never override the eraser");
     check(gesture_tool(Tool::Text, true, true, true, true) == Tool::Text,

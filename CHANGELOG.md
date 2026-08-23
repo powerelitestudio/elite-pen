@@ -1,5 +1,20 @@
 # Historial de cambios
 
+## 2.10.0 — 2026-08-23
+
+- `Figuras` incorpora Pentágono y Hexágono con iconos propios, vista previa en vivo,
+  color y grosor compartidos y soporte completo en escritorio, pizarras y Zoom.
+- El panel geométrico pasa de cinco opciones en una fila a siete en dos filas
+  centradas, conservando botones amplios, nombres ocultos y estilo visual premium.
+- Ambos polígonos se construyen desde el rectángulo de arrastre; mantener `Shift`
+  iguala sus ejes. Aparecen como acciones configurables, inicialmente `Sin asignar`;
+  no se añaden atajos predeterminados ni se modifica ninguna combinación existente.
+- El borrador reconoce cada arista real del contorno, incluida la arista de cierre;
+  las pruebas puras fijan vértices, orientación, selección, centro vacío y casos no
+  válidos.
+- QA recorre las dos nuevas opciones tanto en el panel `Figuras` como en el panel
+  completo, dibuja sobre las superficies reales y verifica el nuevo diseño de menú.
+
 ## 2.9.0 — 2026-08-22
 
 - La vista `L` deja atrás el cuadro rectangular: el contenido ampliado se recorta

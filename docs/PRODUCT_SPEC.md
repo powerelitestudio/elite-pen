@@ -1,6 +1,6 @@
-# Elite Pen 2.9.0 — contrato de producto
+# Elite Pen 2.10.0 — contrato de producto
 
-Estado: versión 2.9.0 implementada como software de código abierto bajo Apache
+Estado: versión 2.10.0 implementada como software de código abierto bajo Apache
 License 2.0 y preparada para distribución pública portable e instalada.
 
 ## 1. Identidad e interaccion principal
@@ -105,14 +105,18 @@ Paleta es el valor predeterminado; la selección se conserva entre sesiones.
 8. Flecha: linea recta con punta proporcional al grosor.
 9. Flecha curva: curva cubica Bezier calculada entre inicio y fin, con arco uniforme,
    limites y hit testing sobre la trayectoria real, y punta tangencial.
-10. Texto: al elegir `T`, el siguiente clic fija el punto de insercion y abre un editor
+10. Pentágono: contorno de cinco lados inscrito en el área de arrastre; `Shift`
+    conserva ejes iguales. El borrador sigue sus cinco aristas, incluido el cierre.
+11. Hexágono: contorno de seis lados con las mismas reglas de tamaño, vista previa,
+    color, grosor, selección y borrado del Pentágono.
+12. Texto: al elegir `T`, el siguiente clic fija el punto de insercion y abre un editor
     transparente directamente sobre el escritorio. Admite multilinea, pegado,
     `Ctrl+Enter` para confirmar y `Esc` para cancelar, sin dialogo independiente ni
     superficie opaca: DirectComposition muestra únicamente caracteres y caret.
-11. Captura: seleccion rectangular, guardado PNG y copia al portapapeles. Sobre zoom
+13. Captura: seleccion rectangular, guardado PNG y copia al portapapeles. Sobre zoom
     congelado aplana la imagen ampliada exacta y todas las anotaciones visibles; la
     paleta se incluye o excluye según la preferencia general de captura.
-12. Zoom: ampliacion en vivo centrada en el puntero, ajuste con rueda, congelación o
+14. Zoom: ampliacion en vivo centrada en el puntero, ajuste con rueda, congelación o
     reanudación con `P` y salida con `Esc`.
 
 Con Lapiz activo, un modificador aplicado al comenzar el arrastre selecciona una
@@ -122,7 +126,11 @@ Esta interpretación también funciona sobre el zoom congelado y nunca sustituye
 los gestos propios de Texto, Borrador ni una figura elegida explícitamente.
 
 El panel abierto desde el mango reune todas las herramientas en un solo lugar y
-añade una fila independiente para Configuracion.
+añade una fila independiente para Configuracion. El acceso `Figuras` presenta Línea,
+Rectángulo, Elipse, Flecha, Flecha curva, Pentágono y Hexágono en dos filas centradas,
+solo mediante iconos. Pentágono y Hexágono aparecen en Configuración > Atajos como
+acciones personalizables, pero se entregan `Sin asignar` y no ocupan combinaciones
+predeterminadas.
 
 ## 3. Documento e historial
 
@@ -179,7 +187,8 @@ añade una fila independiente para Configuracion.
   pizarra negra falsa.
 - `P` o clic congela la salida ampliada en una superficie GPU independiente y activa Lapiz.
   Sobre ella funcionan Lapiz, Resaltador, Borrador, Texto, Linea, Rectangulo, Elipse,
-  Flecha y Flecha curva. `P` reanuda el zoom vivo sin perder esas anotaciones.
+  Pentagono, Hexagono, Flecha y Flecha curva. `P` reanuda el zoom vivo sin perder esas
+  anotaciones.
 - El zoom mantiene documento e historial propios durante su sesión. Papelera,
   Deshacer y Rehacer actúan exclusivamente sobre ese documento mientras el zoom
   está abierto; salir del zoom descarta la sesión sin tocar el documento normal.

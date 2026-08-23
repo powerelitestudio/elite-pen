@@ -1,6 +1,6 @@
-# Informe de calidad — Elite Pen 2.9.0
+# Informe de calidad — Elite Pen 2.10.0
 
-Fecha: 2026-08-22
+Fecha: 2026-08-23
 Equipo de referencia: Lenovo 80NV, Intel Core i7-6700HQ, 12 GB RAM, Intel HD 530,
 GeForce GTX 960M, Windows 10 Pro 22H2 x64, dos monitores con escalado mixto.
 
@@ -8,6 +8,9 @@ GeForce GTX 960M, Windows 10 Pro 22H2 x64, dos monitores con escalado mixto.
 
 - Modelo vectorial: geometria, limites, hit testing, simplificacion, historial,
   borrado compuesto, limpiar, deshacer y rehacer.
+- Polígonos 2.10: generación exacta de cinco y seis vértices, orientación superior,
+  contorno cerrado, hit testing por arista, centro vacío, modificación explícita y
+  entrada inválida segura.
 - Interfaz real: inicio, una superposicion por monitor, seis colores directos, cinco
   grosores, punta lapiz/cursor, ojo, pizarras blanca/negra, configuracion, todas las
   herramientas, texto, captura, zoom completo/lente/acoplado, inversion y cierre.
@@ -155,6 +158,13 @@ GeForce GTX 960M, Windows 10 Pro 22H2 x64, dos monitores con escalado mixto.
 - Aislamiento QA 2.9: cada smoke UI usa un mutex propio y busca ventanas por PID. La
   limpieza final solo cierra la instancia de prueba, incluso si la copia portable del
   usuario permanece abierta con las mismas clases Win32.
+- Figuras 2.10: QA abre el panel geométrico de 172 px, comprueba sus dos filas,
+  captura el diseño real y selecciona Pentágono y Hexágono por sus zonas de clic.
+  Luego dibuja ambos desde el panel completo sobre el escritorio; la misma ruta de
+  documento y renderizado queda disponible en pizarra y Zoom congelado/editable.
+- Atajos 2.10: el esquema conserva las 40 acciones y valores de fábrica anteriores,
+  añade Pentágono y Hexágono como acciones personalizables y las entrega `Sin
+  asignar`; ninguna combinación existente cambia.
 - Persistencia 2.0: una prueba portable aislada escribe y vuelve a leer posición con
   coordenadas negativas, escala, modo contraído, color, grosor, zoom y atajos
   personalizados; también comprueba el reemplazo atómico sin archivo `.tmp` residual.
@@ -176,17 +186,17 @@ Resultado final en el equipo de referencia:
 
 | Prueba | Resultado | Presupuesto |
 |---|---:|---:|
-| Agregar 5.000 trazos | 11,11 ms | 250 ms |
-| 250 borrados fallidos sobre 5.000 objetos | 16,92 ms | 400 ms |
-| 10.000 ciclos de deshacer/rehacer el último objeto | 0,37 ms | 200 ms |
-| Limpiar y restaurar 5.000 objetos | 0,49 ms | 100 ms |
-| Simplificar 100.000 muestras | 27,39 ms | 500 ms |
+| Agregar 5.000 trazos | 15,19 ms | 250 ms |
+| 250 borrados fallidos sobre 5.000 objetos | 18,87 ms | 400 ms |
+| 10.000 ciclos de deshacer/rehacer el último objeto | 0,40 ms | 200 ms |
+| Limpiar y restaurar 5.000 objetos | 0,40 ms | 100 ms |
+| Simplificar 100.000 muestras | 30,06 ms | 500 ms |
 
-Renderizado real con 5.000 trazos: 2,663 ms de media para cuadros en caché,
-1,915 ms durante dibujo activo y 111,87 MiB de memoria de trabajo. Zoom editable
-puebla el documento fuente en 5,504 ms, entra por primera vez en Lápiz en 172,339 ms,
-recorre 240 cuadros de Mano a 0,203 ms de media y vuelve a Lápiz con caché caliente en
-22,834 ms. Todos permanecen dentro de sus presupuestos respectivos.
+Renderizado real con 5.000 trazos: 3,010 ms de media para cuadros en caché,
+2,179 ms durante dibujo activo y 116,13 MiB de memoria de trabajo. Zoom editable
+puebla el documento fuente en 24,060 ms, entra por primera vez en Lápiz en 180,982 ms,
+recorre 240 cuadros de Mano a 0,229 ms de media y vuelve a Lápiz con caché caliente en
+26,275 ms. Todos permanecen dentro de sus presupuestos respectivos.
 
 ## Compatibilidad y recuperacion
 
@@ -209,5 +219,5 @@ recorre 240 cuadros de Mano a 0,203 ms de media y vuelve a Lápiz con caché cal
 - Windows puede denegar la captura del escritorio en una sesion bloqueada, segura o
   no interactiva; Elite Pen informa el fallo y no genera un archivo corrupto.
 - La presion depende del controlador del lapiz y de que Windows entregue WM_POINTER.
-- El binario 2.9.0 no esta firmado digitalmente; los hashes del paquete permiten
+- El binario 2.10.0 no esta firmado digitalmente; los hashes del paquete permiten
   verificar integridad hasta incorporar el certificado de Power Elite Studio.

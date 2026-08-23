@@ -59,6 +59,8 @@ const wchar_t* tool_name(Tool tool) noexcept {
         case Tool::Text: return L"Texto";
         case Tool::Screenshot: return L"Captura";
         case Tool::Zoom: return L"Zoom";
+        case Tool::Pentagon: return L"Pentagono";
+        case Tool::Hexagon: return L"Hexagono";
     }
     return L"Herramienta";
 }
@@ -144,6 +146,38 @@ ArrowHead arrow_head_points(PointF before, PointF end, float width,
         {end.x - size * std::cos(angle + spread),
          end.y - size * std::sin(angle + spread)}
     };
+}
+
+std::size_t tool_polygon_sides(Tool tool) noexcept {
+    switch (tool) {
+        case Tool::Pentagon: return 5;
+        case Tool::Hexagon: return 6;
+        default: return 0;
+    }
+}
+
+std::vector<PointF> polygon_vertices(PointF first, PointF opposite,
+                                     std::size_t sides) {
+    if (sides < 3) return {};
+    const float left = std::min(first.x, opposite.x);
+    const float top = std::min(first.y, opposite.y);
+    const float right = std::max(first.x, opposite.x);
+    const float bottom = std::max(first.y, opposite.y);
+    const float center_x = (left + right) * 0.5F;
+    const float center_y = (top + bottom) * 0.5F;
+    const float radius_x = (right - left) * 0.5F;
+    const float radius_y = (bottom - top) * 0.5F;
+    constexpr float kPi = 3.14159265358979323846F;
+    constexpr float kStartAngle = -kPi * 0.5F;
+    const float step = 2.0F * kPi / static_cast<float>(sides);
+    std::vector<PointF> result;
+    result.reserve(sides);
+    for (std::size_t index = 0; index < sides; ++index) {
+        const float angle = kStartAngle + step * static_cast<float>(index);
+        result.push_back({center_x + std::cos(angle) * radius_x,
+                          center_y + std::sin(angle) * radius_y});
+    }
+    return result;
 }
 
 RectF Drawable::bounds() const noexcept {
@@ -257,6 +291,22 @@ bool curved_arrow_hit(const Drawable& item, PointF point, float tolerance) noexc
            squared_distance_to_segment(point, curve.end, head.right) <= radius_squared;
 }
 
+bool polygon_hit(const Drawable& item, PointF point, float tolerance) {
+    if (item.points.size() < 2) return false;
+    const auto vertices = polygon_vertices(item.points.front(), item.points.back(),
+                                           tool_polygon_sides(item.kind));
+    if (vertices.size() < 3) return false;
+    const float radius = tolerance + item.width * 0.5F;
+    const float radius_squared = radius * radius;
+    for (std::size_t index = 0; index < vertices.size(); ++index) {
+        const PointF start = vertices[index];
+        const PointF end = vertices[(index + 1) % vertices.size()];
+        if (squared_distance_to_segment(point, start, end) <= radius_squared)
+            return true;
+    }
+    return false;
+}
+
 }  // namespace
 
 bool hit_test(const Drawable& item, PointF point, float tolerance) noexcept {
@@ -265,6 +315,8 @@ bool hit_test(const Drawable& item, PointF point, float tolerance) noexcept {
 
     if (item.kind == Tool::Text) return item.bounds().contains(point);
     if (item.kind == Tool::CurvedArrow) return curved_arrow_hit(item, point, tolerance);
+    if (tool_polygon_sides(item.kind) != 0)
+        return polygon_hit(item, point, tolerance);
     if (item.kind == Tool::Pen || item.kind == Tool::Highlighter ||
         item.kind == Tool::Line || item.kind == Tool::Arrow) {
         if (path_hit(item, point, tolerance)) return true;
