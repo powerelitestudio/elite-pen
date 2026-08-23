@@ -10,7 +10,7 @@ pantalla para Windows, desarrollada por [Power Elite Studio](https://powerelite.
 Permite explicar sobre cualquier aplicación sin convertir la presentación en una
 sucesión de ventanas y menús.
 
-> **Estado:** acceso anticipado. La versión 2.9.0 es funcional y está validada para
+> **Estado:** acceso anticipado. La versión 2.10.0 es funcional y está validada para
 > empezar a compartirse, pero el producto continúa en desarrollo activo. Los reportes
 > de errores y casos de compatibilidad son bienvenidos.
 
@@ -44,7 +44,8 @@ oficial y compara el SHA-256 publicado con cada versión.
 - Usar un cursor de lápiz nativo, preciso y visible en lugar de la cruz genérica;
   su cuerpo se inclina hacia abajo para no cubrir el texto durante el subrayado.
 - Ocultar y recuperar anotaciones sin perderlas.
-- Crear texto, lineas, rectangulos, elipses, flechas rectas y flechas curvas.
+- Crear texto, lineas, rectangulos, elipses, pentagonos, hexagonos, flechas rectas y
+  flechas curvas.
 - Capturar una region en PNG y copiarla al portapapeles, incluido el zoom congelado
   con sus anotaciones visibles.
 - Usar pizarras blanca y negra instantaneas.
@@ -122,6 +123,11 @@ Con Lápiz seleccionado, los modificadores convierten temporalmente el siguiente
 arrastre sin cambiar de herramienta: `Shift` crea una línea, `Ctrl` un rectángulo,
 `Tab` una elipse, `Ctrl+Shift` una flecha y `Shift+Tab` una flecha curva Bézier.
 Al soltar las teclas, el siguiente gesto vuelve a ser dibujo libre.
+
+El panel `Figuras` reúne siete opciones visuales sin nombres: Línea, Rectángulo,
+Elipse, Flecha, Flecha curva, Pentágono y Hexágono. Los dos polígonos se seleccionan
+desde este panel y no tienen atajos de teclado predeterminados; `Shift` durante el
+arrastre conserva ejes iguales para producir su proporción regular.
 
 Texto se escribe directamente desde el punto seleccionado: la superficie es
 transparente por píxel y solo muestra el caret y los caracteres, nunca una caja.

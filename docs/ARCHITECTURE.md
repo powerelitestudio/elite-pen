@@ -2,8 +2,9 @@
 
 ## Capas
 
-- `core`: modelo vectorial, geometria, hit testing, historial y preferencias. No
-  depende de ventanas y se prueba de forma determinista.
+- `core`: modelo vectorial, geometria, generación determinista de polígonos,
+  hit testing, historial y preferencias. No depende de ventanas y se prueba de forma
+  determinista.
 - `platform/windows`: ciclo Win32, DPI, atajos, bandeja, entrada y ampliacion.
 - `graphics`: dispositivo D3D11/D2D compartido y superficies DirectComposition con
   alfa premultiplicado.
@@ -23,6 +24,10 @@ La entrada de la superposicion se transforma a coordenadas del escritorio virtua
 El controlador produce una operacion de documento. El historial la aplica y notifica
 una invalidacion. El renderizador vuelve a componer pizarra, documento y vista previa;
 la paleta conserva su propia superficie y nunca se mezcla con el documento.
+Pentágono y Hexágono conservan solo las dos esquinas del área de arrastre en el
+documento; el núcleo deriva sus cinco o seis vértices en sentido horario desde el
+vértice superior. Renderizado e hit testing consumen la misma función, por lo que el
+borrador coincide con el contorno presentado sin almacenar puntos redundantes.
 Cuando cambia la herramienta, las superposiciones recuperan su modo de entrada y el
 controlador restablece despues la paleta en la cima del grupo topmost. Asi sus zonas
 accionables siguen recibiendo clics mientras el lienzo esta en modo de dibujo.
