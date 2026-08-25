@@ -53,11 +53,28 @@ try {
     }
     $powerShell = (Get-Process -Id $PID).Path
     $uiTestScript = Join-Path $PSScriptRoot 'ui-smoke-test.ps1'
+    $uiTestLog = Join-Path $repoRoot 'artifacts\qa\installer-ui-smoke.log'
+    $uiTestErrorLog = Join-Path $repoRoot 'artifacts\qa\installer-ui-smoke-error.log'
+    foreach ($uiLog in @($uiTestLog, $uiTestErrorLog)) {
+        if (Test-Path -LiteralPath $uiLog) { Remove-Item -LiteralPath $uiLog -Force }
+    }
     $uiTestArguments = @('-NoProfile', '-File', "`"$uiTestScript`"",
                          '-ExecutablePath', "`"$installedExecutable`"")
     $uiTest = Start-Process -FilePath $powerShell -ArgumentList $uiTestArguments `
-        -PassThru -Wait -WindowStyle Hidden
-    if ($uiTest.ExitCode -ne 0) { throw 'Installed application failed its UI smoke test.' }
+        -PassThru -Wait -WindowStyle Hidden -RedirectStandardOutput $uiTestLog `
+        -RedirectStandardError $uiTestErrorLog
+    if ($uiTest.ExitCode -ne 0) {
+        $uiDetails = @($uiTestLog, $uiTestErrorLog) |
+            Where-Object { Test-Path -LiteralPath $_ } |
+            ForEach-Object { Get-Content -LiteralPath $_ -Raw } |
+            Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+        $uiSummary = if ($uiDetails) {
+            $uiDetails -join [Environment]::NewLine
+        } else {
+            'No UI diagnostic output was produced.'
+        }
+        throw "Installed application failed its UI smoke test.`n$uiSummary"
+    }
     [GC]::Collect()
     [GC]::WaitForPendingFinalizers()
     Start-Sleep -Milliseconds 500

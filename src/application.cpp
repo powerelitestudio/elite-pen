@@ -4263,28 +4263,38 @@ void ToolWindow::render() {
                 context->DrawLine(D2D1::Point2F(icon_x - 8, icon_y + 7),
                                   D2D1::Point2F(icon_x + 8, icon_y - 7), text.Get(), 2.0F);
                 break;
-            case Tool::Arrow:
-                context->DrawLine(D2D1::Point2F(icon_x - 8, icon_y + 5),
-                                  D2D1::Point2F(icon_x + 8, icon_y - 5), text.Get(), 2.0F);
-                context->DrawLine(D2D1::Point2F(icon_x + 8, icon_y - 5),
-                                  D2D1::Point2F(icon_x + 2, icon_y - 5), text.Get(), 2.0F);
+            case Tool::Arrow: {
+                const PointF start{icon_x - 9.0F, icon_y + 6.0F};
+                const PointF end{icon_x + 9.0F, icon_y - 6.0F};
+                context->DrawLine(D2D1::Point2F(start.x, start.y),
+                                  D2D1::Point2F(end.x, end.y), text.Get(), 2.0F);
+                // The normal drawing head has a 12 px accessibility floor. At icon
+                // scale that would overwhelm the shaft, so render the same symmetric
+                // geometry at a 2x optical reference scale (6.4 px wings).
+                draw_arrow_head(context, text.Get(), start, end, 2.0F, 2.0F);
                 break;
+            }
             case Tool::CurvedArrow: {
+                const PointF start{icon_x - 9.0F, icon_y + 7.0F};
+                const PointF control1{icon_x - 8.0F, icon_y - 5.0F};
+                const PointF control2{icon_x + 1.0F, icon_y - 9.0F};
+                const PointF end{icon_x + 9.0F, icon_y + 1.0F};
                 ComPtr<ID2D1PathGeometry> curve;
                 controller_.graphics().d2d_factory()->CreatePathGeometry(curve.GetAddressOf());
                 ComPtr<ID2D1GeometrySink> curve_sink;
                 curve->Open(curve_sink.GetAddressOf());
-                curve_sink->BeginFigure(D2D1::Point2F(icon_x - 8, icon_y + 5),
+                curve_sink->BeginFigure(D2D1::Point2F(start.x, start.y),
                                         D2D1_FIGURE_BEGIN_HOLLOW);
                 curve_sink->AddBezier(D2D1::BezierSegment(
-                    D2D1::Point2F(icon_x - 3, icon_y - 8),
-                    D2D1::Point2F(icon_x + 5, icon_y - 8),
-                    D2D1::Point2F(icon_x + 8, icon_y - 2)));
+                    D2D1::Point2F(control1.x, control1.y),
+                    D2D1::Point2F(control2.x, control2.y),
+                    D2D1::Point2F(end.x, end.y)));
                 curve_sink->EndFigure(D2D1_FIGURE_END_OPEN);
                 curve_sink->Close();
                 context->DrawGeometry(curve.Get(), text.Get(), 2.0F);
-                draw_arrow_head(context, text.Get(), {icon_x + 5, icon_y - 8},
-                                {icon_x + 8, icon_y - 2}, 2.0F);
+                // Follow the final Bezier tangent so the arrowhead communicates
+                // direction instead of looking like a detached decorative mark.
+                draw_arrow_head(context, text.Get(), control2, end, 2.0F, 2.0F);
                 break;
             }
             case Tool::Text:
@@ -4559,7 +4569,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.10.0",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.10.1",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
@@ -4711,7 +4721,7 @@ bool SettingsWindow::initialize() {
                                     reinterpret_cast<HMENU>(4300),
                                     GetModuleHandleW(nullptr), nullptr);
     help_ = CreateWindowW(L"STATIC",
-        L"Ayuda de Elite Pen 2.10.0. Anotación, pizarra, captura y zoom para Windows. "
+        L"Ayuda de Elite Pen 2.10.1. Anotación, pizarra, captura y zoom para Windows. "
         L"Código abierto bajo Apache License 2.0. Desarrollado por Power Elite Studio.",
         WS_CHILD | SS_OWNERDRAW, 24, 119, 540, 400, window_,
         reinterpret_cast<HMENU>(4105), GetModuleHandleW(nullptr), nullptr);
@@ -4943,7 +4953,7 @@ void SettingsWindow::paint_help(HDC dc, RECT bounds) {
     SelectObject(dc, small_font_);
     SetTextColor(dc, theme_colorref(theme.text_muted));
     RECT version{bounds.left, bounds.top + 73, bounds.right, bounds.top + 94};
-    DrawTextW(dc, L"Version 2.10.0 · Windows 10 y 11 · x64", -1, &version,
+    DrawTextW(dc, L"Version 2.10.1 · Windows 10 y 11 · x64", -1, &version,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
 
     SelectObject(dc, body_font_);
@@ -6739,6 +6749,7 @@ bool ZoomEditToolbarWindow::initialize(GraphicsDevice& graphics) {
 
 void ZoomEditToolbarWindow::show_for(RECT zoom_bounds, float factor,
                                      ZoomEditState state) {
+    const bool visual_changed = factor_ != factor || state_ != state;
     factor_ = factor;
     state_ = state;
     const float dpi_scale = static_cast<float>(GetDpiForWindow(window_)) / 96.0F;
@@ -6760,12 +6771,28 @@ void ZoomEditToolbarWindow::show_for(RECT zoom_bounds, float factor,
                 static_cast<int>(std::lround(14.0F * dpi_scale));
         }
     }
-    SetWindowPos(window_, HWND_TOPMOST, left, top, width, height,
-                 SWP_NOACTIVATE | SWP_SHOWWINDOW);
-    SetWindowTextW(window_, state_ == ZoomEditState::Annotate
-        ? L"Zoom editable — Anotar — Elite Pen"
-        : L"Zoom editable — Navegar — Elite Pen");
-    invalidate();
+    const bool was_visible = visible();
+    RECT current{};
+    const bool geometry_changed = !GetWindowRect(window_, &current) ||
+        current.left != left || current.top != top ||
+        current.right - current.left != width ||
+        current.bottom - current.top != height;
+    if (geometry_changed || !was_visible) {
+        // A visible toolbar is already inside the explicit ZoomWindow stack.
+        // Moving it at 60 Hz with HWND_TOPMOST would repeatedly lift it above the
+        // palette. Preserve Z order during ordinary geometry refreshes; the owner
+        // performs the one authoritative restack after mode transitions.
+        const UINT flags = SWP_NOACTIVATE | SWP_SHOWWINDOW |
+            (was_visible ? SWP_NOZORDER : 0U);
+        SetWindowPos(window_, was_visible ? nullptr : HWND_TOPMOST,
+                     left, top, width, height, flags);
+    }
+    if (visual_changed || !was_visible) {
+        SetWindowTextW(window_, state_ == ZoomEditState::Annotate
+            ? L"Zoom editable — Anotar — Elite Pen"
+            : L"Zoom editable — Navegar — Elite Pen");
+        invalidate();
+    }
 }
 
 void ZoomEditToolbarWindow::bring_to_front() {

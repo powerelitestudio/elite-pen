@@ -28,6 +28,10 @@ Pentágono y Hexágono conservan solo las dos esquinas del área de arrastre en 
 documento; el núcleo deriva sus cinco o seis vértices en sentido horario desde el
 vértice superior. Renderizado e hit testing consumen la misma función, por lo que el
 borrador coincide con el contorno presentado sin almacenar puntos redundantes.
+Los glifos de Flecha y Flecha curva reutilizan `arrow_head_points`, pero declaran una
+escala óptica de icono que reduce el límite mínimo del cabezal de 12 a 6 px. Así ambos
+dibujan las dos alas simétricas y la curva conserva la tangencia sin alterar la
+geometría ni la accesibilidad de las flechas creadas en el documento.
 Cuando cambia la herramienta, las superposiciones recuperan su modo de entrada y el
 controlador restablece despues la paleta en la cima del grupo topmost. Asi sus zonas
 accionables siguen recibiendo clics mientras el lienzo esta en modo de dibujo.

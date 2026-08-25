@@ -1,6 +1,6 @@
-# Elite Pen 2.10.0 — contrato de producto
+# Elite Pen 2.10.1 — contrato de producto
 
-Estado: versión 2.10.0 implementada como software de código abierto bajo Apache
+Estado: versión 2.10.1 implementada como software de código abierto bajo Apache
 License 2.0 y preparada para distribución pública portable e instalada.
 
 ## 1. Identidad e interaccion principal
@@ -131,6 +131,10 @@ Rectángulo, Elipse, Flecha, Flecha curva, Pentágono y Hexágono en dos filas c
 solo mediante iconos. Pentágono y Hexágono aparecen en Configuración > Atajos como
 acciones personalizables, pero se entregan `Sin asignar` y no ocupan combinaciones
 predeterminadas.
+Los glifos de Flecha y Flecha curva usan cabezales simétricos de dos alas. La punta
+recta sigue el eje de su segmento; la curva sigue la tangente final de una Bézier de
+arco amplio. Su escala óptica es independiente del tamaño mínimo accesible usado al
+dibujar sobre el lienzo, evitando recortes o puntas desproporcionadas en el panel.
 
 ## 3. Documento e historial
 
