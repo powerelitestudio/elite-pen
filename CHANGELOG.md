@@ -1,5 +1,19 @@
 # Historial de cambios
 
+## 2.10.1 — 2026-08-25
+
+- El icono de Flecha recupera una punta completa: ambas alas se generan con la misma
+  geometría simétrica usada por el motor de dibujo, en lugar de una única línea.
+- Flecha curva adopta una Bézier de arco amplio y una punta compacta alineada con su
+  tangente final, por lo que dirección y curvatura se reconocen a primera vista.
+- La escala óptica limita cada punta a 6,4 px dentro del glifo sin modificar el tamaño
+  accesible de las flechas dibujadas sobre escritorio, pizarras o Zoom.
+- Las pruebas puras fijan simetría, lados opuestos y tamaño máximo del cabezal; el
+  smoke de interfaz recorre ambos iconos en los paneles `Figuras` y `Herramientas`.
+- Zoom editable deja de elevar su barra a `TOPMOST` en cada refresco de 16 ms; solo
+  actualiza geometría o estado cuando cambian y conserva la paleta por encima de
+  manera determinista. El QA instalado registra ahora la salida exacta de su smoke.
+
 ## 2.10.0 — 2026-08-23
 
 - `Figuras` incorpora Pentágono y Hexágono con iconos propios, vista previa en vivo,

@@ -210,6 +210,26 @@ void test_hit_testing() {
     check(hit_test(arrow, arrow_head_midpoint, 1.0F),
           "arrowhead can be selected and erased");
 
+    const PointF icon_start{-9.0F, 6.0F};
+    const PointF icon_end{9.0F, -6.0F};
+    const auto icon_head = arrow_head_points(icon_start, icon_end, 2.0F, 2.0F);
+    const PointF icon_direction{icon_end.x - icon_start.x,
+                                icon_end.y - icon_start.y};
+    const PointF icon_left{icon_head.left.x - icon_end.x,
+                           icon_head.left.y - icon_end.y};
+    const PointF icon_right{icon_head.right.x - icon_end.x,
+                            icon_head.right.y - icon_end.y};
+    const float left_cross = icon_direction.x * icon_left.y -
+                             icon_direction.y * icon_left.x;
+    const float right_cross = icon_direction.x * icon_right.y -
+                              icon_direction.y * icon_right.x;
+    check(left_cross * right_cross < 0.0F &&
+          std::abs(distance(icon_end, icon_head.left) -
+                   distance(icon_end, icon_head.right)) < 0.001F,
+          "icon arrowhead exposes two symmetric wings on opposite sides");
+    check(distance(icon_end, icon_head.left) < 7.0F,
+          "icon arrowhead respects its compact optical scale");
+
     const auto curved_head = arrow_head_points(bezier.control2, bezier.end, curved.width);
     const PointF curved_head_midpoint{
         (bezier.end.x + curved_head.right.x) * 0.5F,

@@ -1,6 +1,6 @@
-# Informe de calidad — Elite Pen 2.10.0
+# Informe de calidad — Elite Pen 2.10.1
 
-Fecha: 2026-08-23
+Fecha: 2026-08-25
 Equipo de referencia: Lenovo 80NV, Intel Core i7-6700HQ, 12 GB RAM, Intel HD 530,
 GeForce GTX 960M, Windows 10 Pro 22H2 x64, dos monitores con escalado mixto.
 
@@ -165,6 +165,13 @@ GeForce GTX 960M, Windows 10 Pro 22H2 x64, dos monitores con escalado mixto.
 - Atajos 2.10: el esquema conserva las 40 acciones y valores de fábrica anteriores,
   añade Pentágono y Hexágono como acciones personalizables y las entrega `Sin
   asignar`; ninguna combinación existente cambia.
+- Iconos 2.10.1: Flecha debe mostrar sus dos alas simétricas en lados opuestos del
+  eje; Flecha curva usa una Bézier de arco amplio y orienta el cabezal por la tangente
+  final. La escala óptica mantiene cada ala por debajo de 7 px sin modificar las
+  flechas dibujadas en las superficies reales.
+- Orden Z 2.10.1: la barra de Zoom editable no puede adelantarse a la paleta durante
+  su refresco de 16 ms; el smoke aislado e instalado verifica la secuencia Zoom,
+  barra y paleta por PID y conserva diagnóstico completo ante cualquier fallo.
 - Persistencia 2.0: una prueba portable aislada escribe y vuelve a leer posición con
   coordenadas negativas, escala, modo contraído, color, grosor, zoom y atajos
   personalizados; también comprueba el reemplazo atómico sin archivo `.tmp` residual.
@@ -186,17 +193,17 @@ Resultado final en el equipo de referencia:
 
 | Prueba | Resultado | Presupuesto |
 |---|---:|---:|
-| Agregar 5.000 trazos | 15,19 ms | 250 ms |
-| 250 borrados fallidos sobre 5.000 objetos | 18,87 ms | 400 ms |
-| 10.000 ciclos de deshacer/rehacer el último objeto | 0,40 ms | 200 ms |
-| Limpiar y restaurar 5.000 objetos | 0,40 ms | 100 ms |
-| Simplificar 100.000 muestras | 30,06 ms | 500 ms |
+| Agregar 5.000 trazos | 21,20 ms | 250 ms |
+| 250 borrados fallidos sobre 5.000 objetos | 39,63 ms | 400 ms |
+| 10.000 ciclos de deshacer/rehacer el último objeto | 0,56 ms | 200 ms |
+| Limpiar y restaurar 5.000 objetos | 1,44 ms | 100 ms |
+| Simplificar 100.000 muestras | 57,37 ms | 500 ms |
 
-Renderizado real con 5.000 trazos: 3,010 ms de media para cuadros en caché,
-2,179 ms durante dibujo activo y 116,13 MiB de memoria de trabajo. Zoom editable
-puebla el documento fuente en 24,060 ms, entra por primera vez en Lápiz en 180,982 ms,
-recorre 240 cuadros de Mano a 0,229 ms de media y vuelve a Lápiz con caché caliente en
-26,275 ms. Todos permanecen dentro de sus presupuestos respectivos.
+Renderizado real con 5.000 trazos: 6,577 ms de media para cuadros en caché,
+5,355 ms durante dibujo activo y 108,55 MiB de memoria de trabajo. Zoom editable
+puebla el documento fuente en 127,655 ms, entra por primera vez en Lápiz en 461,073 ms,
+recorre 240 cuadros de Mano a 0,449 ms de media y vuelve a Lápiz con caché caliente en
+36,650 ms. Todos permanecen dentro de sus presupuestos respectivos.
 
 ## Compatibilidad y recuperacion
 
@@ -219,5 +226,5 @@ recorre 240 cuadros de Mano a 0,229 ms de media y vuelve a Lápiz con caché cal
 - Windows puede denegar la captura del escritorio en una sesion bloqueada, segura o
   no interactiva; Elite Pen informa el fallo y no genera un archivo corrupto.
 - La presion depende del controlador del lapiz y de que Windows entregue WM_POINTER.
-- El binario 2.10.0 no esta firmado digitalmente; los hashes del paquete permiten
+- El binario 2.10.1 no esta firmado digitalmente; los hashes del paquete permiten
   verificar integridad hasta incorporar el certificado de Power Elite Studio.
