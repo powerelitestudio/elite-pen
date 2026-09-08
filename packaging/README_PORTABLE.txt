@@ -1,4 +1,4 @@
-ELITE PEN 2.10.1 — EDICION PORTABLE
+ELITE PEN 2.10.2 — EDICION PORTABLE
 ================================
 
 Elite Pen es la herramienta de anotacion, pizarra y ampliacion de pantalla de

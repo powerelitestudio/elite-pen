@@ -144,3 +144,11 @@ anillos alfa de bajo costo y deja pasar toda la entrada.
 discretos evitan estados ambiguos en Configuración; `Shift+rueda` y `[` / `]` cambian
 el área visible, mientras rueda y `+`/`-` conservan su contrato de aumento. En cada
 monitor el diámetro se limita al espacio físico disponible.
+
+Desde 2.10.2 la fuente lógica de `L` permanece centrada en el puntero aunque rebase
+el monitor. `clip_zoom_source` intersecta los píxeles disponibles y calcula un destino
+proporcional: Magnifier recibe una fuente válida y un hijo desplazado/recortado;
+DWM recibe ambos rectángulos sin recentrar la miniatura. El fondo neutro de la raíz
+cubre el espacio exterior al monitor. La fuente lógica sigue siendo la referencia
+para tinta, congelación y foco; `F` y `D` mantienen su clamp. El cálculo es constante,
+sin capturas por cuadro ni nuevas superficies GPU.

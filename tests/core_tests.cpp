@@ -363,6 +363,67 @@ void test_zoom_entry_transition() {
           "zoom entry safely clamps invalid progress ranges");
 }
 
+void test_lens_screen_edges() {
+    // Corners used to map to the corners of a square source, outside the lens
+    // circle. Test the actual visible point, not just source/target agreement.
+    const std::array<RectF, 4> monitors{{
+        {0, 0, 1920, 1080}, {-1920, -120, 0, 960},
+        {1920, -1440, 4480, 0}, {0, 0, 320, 240}}};
+    for (const auto monitor : monitors) {
+        for (const float diameter : {360.0F, 440.0F, 520.0F, 640.0F, 760.0F}) {
+            const float viewport = std::min(diameter,
+                std::min(monitor.width(), monitor.height()) - 48.0F);
+            for (const float factor : {1.0F, 1.25F, 2.0F, 3.5F, 8.0F, 16.0F}) {
+                const float side = std::floor(viewport / factor);
+                for (const float x : {monitor.left, monitor.left + 1,
+                        (monitor.left + monitor.right) / 2, monitor.right - 1}) {
+                    for (const float y : {monitor.top, monitor.top + 1,
+                            (monitor.top + monitor.bottom) / 2, monitor.bottom - 1}) {
+                        const auto requested = zoom_source_bounds(
+                            {x, y}, {side, side}, monitor, true);
+                        const ZoomViewportTransform transform{requested, factor};
+                        const auto focus = transform.source_to_view({x, y});
+                        check(distance(focus, {viewport / 2, viewport / 2}) < factor * 1.5F,
+                              "lens keeps edge/corner pixels safely inside its circle");
+                        const auto clip = clip_zoom_source(
+                            requested, monitor, {side * factor, side * factor});
+                        check(clip.has_value(), "every monitor corner has real lens content");
+                        if (!clip) continue;
+                        check(monitor.contains({clip->source.left, clip->source.top}) &&
+                              monitor.contains({clip->source.right, clip->source.bottom}),
+                              "lens never asks native capture for pixels outside its monitor");
+                        const PointF mapped{
+                            clip->destination.left + (x - clip->source.left) * factor,
+                            clip->destination.top + (y - clip->source.top) * factor};
+                        check(distance(mapped, focus) < 0.01F,
+                              "clipping preserves focus position at every edge and zoom factor");
+                        check(std::abs(clip->destination.width() - clip->source.width() * factor) < 0.01F &&
+                              std::abs(clip->destination.height() - clip->source.height() * factor) < 0.01F,
+                              "clipping never stretches edge content");
+                    }
+                }
+            }
+        }
+    }
+    const auto corner = clip_zoom_source({-130, -130, 130, 130},
+                                        {0, 0, 1920, 1080}, {520, 520});
+    check(corner && corner->destination.left == 260 &&
+          corner->destination.top == 260 && corner->destination.right == 520,
+          "top-left corner appears at lens center with padding outside the desktop");
+    const auto narrow_window = clip_zoom_source({-130, -130, 130, 130},
+                                               {0, 0, 60, 90}, {520, 520});
+    check(narrow_window && narrow_window->destination.width() == 120 &&
+          narrow_window->destination.height() == 180,
+          "recording a partial application window preserves scale and offset");
+    check(!clip_zoom_source({0, 0, 260, 260}, {500, 500, 900, 900}, {520, 520}),
+          "disjoint recording sources are hidden rather than showing unrelated pixels");
+    check(!clip_zoom_source({0, 0, 0, 0}, {0, 0, 100, 100}, {520, 520}),
+          "empty source does not divide by zero");
+    const auto full = zoom_source_bounds({0, 0}, {960, 540}, {0, 0, 1920, 1080}, false);
+    check(full.left == 0 && full.top == 0 && full.right == 960 && full.bottom == 540,
+          "fullscreen and docked zoom retain their monitor-clamped behavior");
+}
+
 void test_history_limit() {
     Document document(2);
     document.add(line({0, 0}, {1, 1}));
@@ -387,6 +448,7 @@ int main() {
     test_document_revision();
     test_zoom_viewport_transform();
     test_zoom_entry_transition();
+    test_lens_screen_edges();
     if (failures == 0) {
         std::cout << "Elite Pen core: all tests passed\n";
         return EXIT_SUCCESS;

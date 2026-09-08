@@ -45,6 +45,40 @@ float zoom_entry_factor(float start, float target, float progress) noexcept {
     return start + (target - start) * eased;
 }
 
+RectF zoom_source_bounds(PointF focus, PointF source_size,
+                         RectF monitor, bool centered) noexcept {
+    const float width = std::max(1.0F, std::floor(source_size.x));
+    const float height = std::max(1.0F, std::floor(source_size.y));
+    float left = focus.x - std::floor(width / 2.0F);
+    float top = focus.y - std::floor(height / 2.0F);
+    if (!centered) {
+        left = std::clamp(left, monitor.left,
+                          std::max(monitor.left, monitor.right - width));
+        top = std::clamp(top, monitor.top,
+                         std::max(monitor.top, monitor.bottom - height));
+    }
+    return {left, top, left + width, top + height};
+}
+
+std::optional<ZoomSourceClip> clip_zoom_source(
+        RectF requested, RectF available, PointF destination_size) noexcept {
+    if (!(requested.width() > 0 && requested.height() > 0 &&
+          destination_size.x > 0 && destination_size.y > 0)) return std::nullopt;
+    const RectF clipped{
+        std::max(requested.left, available.left),
+        std::max(requested.top, available.top),
+        std::min(requested.right, available.right),
+        std::min(requested.bottom, available.bottom)};
+    if (!(clipped.width() > 0 && clipped.height() > 0)) return std::nullopt;
+    const float scale_x = destination_size.x / requested.width();
+    const float scale_y = destination_size.y / requested.height();
+    return ZoomSourceClip{clipped, {
+        (clipped.left - requested.left) * scale_x,
+        (clipped.top - requested.top) * scale_y,
+        (clipped.right - requested.left) * scale_x,
+        (clipped.bottom - requested.top) * scale_y}};
+}
+
 const wchar_t* tool_name(Tool tool) noexcept {
     switch (tool) {
         case Tool::Interact: return L"Interactuar";

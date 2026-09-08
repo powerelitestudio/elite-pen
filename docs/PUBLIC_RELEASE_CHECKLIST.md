@@ -1,10 +1,15 @@
 # Publicación abierta de Elite Pen
 
-Última actualización: 25 de agosto de 2026. Elite Pen se mantiene en el repositorio
-público <https://github.com/powerelitestudio/elite-pen>. La versión 2.10.1 continúa
+Última actualización: 7 de septiembre de 2026. Elite Pen se mantiene en el repositorio
+público <https://github.com/powerelitestudio/elite-pen>. La versión 2.10.2 continúa
 el modelo íntegramente abierto bajo Apache License 2.0 inaugurado por 2.7.1; la
 licencia source-available de 2.7.0 solo conserva valor histórico para aquel tag y
 sus paquetes.
+
+La edición 2.10.2 corrige el seguimiento de la lente en bordes y esquinas.
+Sus notas, portable, instalador y manifiesto de integridad se reúnen en
+[Release v2.10.2](https://github.com/powerelitestudio/elite-pen/releases/tag/v2.10.2).
+La cobertura y sus límites están documentados en [QA_REPORT.md](QA_REPORT.md).
 
 ## Repositorio y gobierno
 

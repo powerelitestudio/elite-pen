@@ -1,5 +1,16 @@
 # Historial de cambios
 
+## 2.10.2 — 2026-09-07
+
+- La lente circular mantiene el puntero centrado al recorrer los bordes y esquinas
+  del monitor. El contenido ya no desaparece bajo la máscara circular cuando la
+  fuente alcanzaba el límite del escritorio.
+- Magnifier recorta únicamente los píxeles disponibles y los coloca en su posición
+  ampliada; el área exterior al monitor queda en un margen neutro. La ruta DWM para
+  grabación conserva el mismo contrato sin desplazar ni estirar la aplicación.
+- La fuente lógica se mantiene al congelar y anotar; pantalla completa y modo
+  acoplado conservan su seguimiento limitado al monitor.
+
 ## 2.10.1 — 2026-08-25
 
 - El icono de Flecha recupera una punta completa: ambas alas se generan con la misma
