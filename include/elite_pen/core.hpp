@@ -53,6 +53,21 @@ struct ZoomViewportTransform {
 [[nodiscard]] float zoom_entry_factor(float start, float target,
                                       float progress) noexcept;
 
+// Circular lenses must keep the pointer near their center even at a monitor
+// corner; clamping the source puts that corner outside the circular mask.
+[[nodiscard]] RectF zoom_source_bounds(PointF focus, PointF source_size,
+                                       RectF monitor, bool centered) noexcept;
+
+struct ZoomSourceClip {
+    RectF source{};
+    RectF destination{};
+};
+
+// Clip pixels that do not exist, preserving their position and magnification
+// instead of shifting or stretching the remaining source across the viewport.
+[[nodiscard]] std::optional<ZoomSourceClip> clip_zoom_source(
+    RectF requested, RectF available, PointF destination_size) noexcept;
+
 struct Color {
     std::uint8_t r{};
     std::uint8_t g{};

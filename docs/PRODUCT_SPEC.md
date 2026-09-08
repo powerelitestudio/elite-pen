@@ -202,6 +202,10 @@ dibujar sobre el lienzo, evitando recortes o puntas desproporcionadas en el pane
   elíptica nativa recorta tanto Magnifier/DWM como la tinta congelada. Un aro óptico
   transparente añade sombra difuminada, borde frío y brillo violeta/menta mediante
   DirectComposition, permanece capturable y no recibe entrada.
+- Al recorrer bordes y esquinas, la lente conserva el punto señalado en su centro.
+  Solo se recorta el área exterior al monitor, representada mediante un margen
+  neutro; el contenido disponible conserva su posición y escala. Magnifier y la
+  ruta DWM de grabación comparten este comportamiento.
 - `Shift+rueda` o `[` / `]` recorre diámetros de 360, 440, 520, 640 y 760 px sin
   cambiar el factor de ampliación. Configuración > General ofrece los mismos cinco
   tamaños; el valor inicial es 520 px y se conserva en `ZoomLensDiameter`.

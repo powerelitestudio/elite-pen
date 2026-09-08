@@ -10,7 +10,7 @@ pantalla para Windows, desarrollada por [Power Elite Studio](https://powerelite.
 Permite explicar sobre cualquier aplicación sin convertir la presentación en una
 sucesión de ventanas y menús.
 
-> **Estado:** acceso anticipado. La versión 2.10.1 es funcional y está validada para
+> **Estado:** acceso anticipado. La versión 2.10.2 es funcional y está validada para
 > empezar a compartirse, pero el producto continúa en desarrollo activo. Los reportes
 > de errores y casos de compatibilidad son bienvenidos.
 
@@ -31,8 +31,11 @@ memoria y rutas de compatibilidad.
 Los paquetes oficiales listos para usar se publican en
 [GitHub Releases](https://github.com/powerelitestudio/elite-pen/releases):
 
-- `Elite Pen Portable`: descomprime la carpeta y ejecuta `Elite Pen.exe`.
-- `Elite Pen Setup`: instala por usuario, sin privilegios de administrador.
+- [Descargar portable 2.10.2](https://github.com/powerelitestudio/elite-pen/releases/download/v2.10.2/Elite.Pen.Portable.2.10.2.zip):
+  descomprime la carpeta y ejecuta `Elite Pen.exe`.
+- [Descargar instalador 2.10.2](https://github.com/powerelitestudio/elite-pen/releases/download/v2.10.2/Elite.Pen.Setup.2.10.2.exe):
+  instala por usuario, sin privilegios de administrador.
+- [Hashes SHA-256 de 2.10.2](https://github.com/powerelitestudio/elite-pen/releases/download/v2.10.2/SHA256SUMS.txt).
 
 Windows puede mostrar una advertencia de SmartScreen mientras los binarios no estén
 firmados digitalmente. Verifica siempre que la descarga provenga del repositorio
@@ -137,6 +140,9 @@ trazo o borrado para conservar todos sus comandos disponibles.
 En zoom: `F` pantalla completa con una transición de entrada de 180 ms, rápida y
 progresiva hacia el punto de invocación; `L` lente circular con aro óptico y una lupa
 persistente sincronizada con el centro real del área ampliada. En Lente,
+el punto señalado permanece centrado también en los bordes y esquinas; el espacio
+que queda fuera de la pantalla se muestra como margen neutro sin mover ni estirar
+el contenido.
 `Shift+rueda` o `[` / `]` recorre cinco diámetros sin cambiar cuánto se amplía;
 `D` acoplado, `I` invertir,
 rueda/`+`/`-` para ampliar, `0` para vista general, `Espacio` o `M` para recorrer

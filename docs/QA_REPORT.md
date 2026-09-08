@@ -1,10 +1,38 @@
-# Informe de calidad — Elite Pen 2.10.1
+# Informe de calidad — Elite Pen 2.10.2
 
-Fecha: 2026-08-25
+Fecha: 2026-09-07
 Equipo de referencia: Lenovo 80NV, Intel Core i7-6700HQ, 12 GB RAM, Intel HD 530,
 GeForce GTX 960M, Windows 10 Pro 22H2 x64, dos monitores con escalado mixto.
 
-## Cobertura automatizada
+## Corrección de bordes de lente — 2.10.2
+
+- Reproducción en 2.10.1: con puntero en `(8, 8)` y lente de 360 px a 2x,
+  el foco quedaba en `(90, 90)`. Las esquinas del monitor podían quedar fuera de
+  la máscara circular al desplazar la fuente para contenerla en el escritorio.
+- Release compilado sin errores; núcleo y preferencias aprobados. Se añadieron
+  1.920 combinaciones puras de monitor, diámetro, factor y posición, además de
+  recortes parciales de ventanas, ausencia de intersección y preservación de F/D.
+- `scripts/lens-edge-smoke-test.ps1`: 80 casos aprobados en los dos monitores
+  conectados (cuatro esquinas y cuatro bordes por cinco tamaños). Consulta
+  `MagGetWindowSource` dentro del proceso propietario y los rectángulos reales
+  de las ventanas para verificar posición, escala y límites aceptados por Windows.
+- El punto de entrada determinista solo se acepta con `ELITE_PEN_QA_INSTANCE_ID`;
+  permite probar sin competir con el ratón real ni modificar preferencias del usuario.
+- Congelar/reanudar en los bordes preserva el foco. Esta comprobación utiliza la
+  captura sintética de QA; no equivale a validar los píxeles de una grabación.
+- Smoke completo de interfaz Release aprobado: paleta, herramientas, anotación,
+  zoom F/L/D, congelación, zoom editable, captura y preferencias.
+- La comprobación óptica automatizada no pudo mostrar de forma fiable su fondo
+  de prueba en el escritorio capturado; no se declara aprobada. La ruta DWM para
+  OBS tiene cobertura geométrica del recorte, sin una nueva grabación OBS validada.
+- Rendimiento del núcleo: agregar 5.000 trazos 29,78 ms; borrados fallidos 44,54 ms;
+  deshacer/rehacer 0,46 ms; limpiar/restaurar 0,70 ms; simplificar 42,01 ms. Todos
+  dentro del presupuesto. No se incorporan capturas continuas ni superficies GPU.
+- Portable local actualizado a 2.10.2; se verificaron todos los archivos contra el
+  staging y las preferencias conservaron su SHA-256. Ejecutable verificado:
+  `8E7F7D0F3DEAA588975DF4D69604BB8A66DD45F996186E9A2CB7B27FBEFE39BC`.
+
+## Cobertura automatizada de base (2.10.1)
 
 - Modelo vectorial: geometria, limites, hit testing, simplificacion, historial,
   borrado compuesto, limpiar, deshacer y rehacer.
@@ -189,7 +217,7 @@ limpian/restauran 5.000 elementos y simplifican un trazo de 100.000 muestras. Lo
 tiempos exactos se registran en cada compilacion Release; cualquier salida distinta
 de cero invalida el paquete.
 
-Resultado final en el equipo de referencia:
+Resultado de referencia de 2.10.1 (2026-08-25), conservado como histórico:
 
 | Prueba | Resultado | Presupuesto |
 |---|---:|---:|
@@ -226,5 +254,5 @@ recorre 240 cuadros de Mano a 0,449 ms de media y vuelve a Lápiz con caché cal
 - Windows puede denegar la captura del escritorio en una sesion bloqueada, segura o
   no interactiva; Elite Pen informa el fallo y no genera un archivo corrupto.
 - La presion depende del controlador del lapiz y de que Windows entregue WM_POINTER.
-- El binario 2.10.1 no esta firmado digitalmente; los hashes del paquete permiten
+- El binario 2.10.2 no esta firmado digitalmente; los hashes del paquete permiten
   verificar integridad hasta incorporar el certificado de Power Elite Studio.

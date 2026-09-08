@@ -36,6 +36,16 @@ namespace elite_pen::win {
 
 namespace {
 
+RectF floating_rect(RECT rect) noexcept {
+    return {static_cast<float>(rect.left), static_cast<float>(rect.top),
+            static_cast<float>(rect.right), static_cast<float>(rect.bottom)};
+}
+
+RECT rounded_rect(RectF rect) noexcept {
+    return {std::lround(rect.left), std::lround(rect.top),
+            std::lround(rect.right), std::lround(rect.bottom)};
+}
+
 constexpr UINT kTrayMessage = WM_APP + 10;
 constexpr UINT kExitMessage = WM_APP + 12;
 constexpr UINT kQaQueryToolMessage = WM_APP + 90;
@@ -74,6 +84,8 @@ constexpr UINT kQaQueryZoomPresentedFactorMessage = WM_APP + 122;
 constexpr UINT kQaQueryZoomEntryAnimationMessage = WM_APP + 123;
 constexpr UINT kQaQueryZoomGeometryHeightMessage = WM_APP + 124;
 constexpr UINT kQaQueryZoomLensDiameterMessage = WM_APP + 125;
+constexpr UINT kQaSetZoomSourceCursorMessage = WM_APP + 126;
+constexpr UINT kQaQueryZoomNativeSourceMessage = WM_APP + 127;
 constexpr UINT_PTR kTrayId = 1;
 constexpr std::array<float, 4> kPaletteScales{0.48F, 0.60F, 0.75F, 0.90F};
 constexpr std::array<float, 5> kThicknessSteps{2.0F, 4.0F, 7.0F, 12.0F, 20.0F};
@@ -1123,6 +1135,7 @@ private:
     bool start_recordable_output();
     void stop_recordable_output();
     void update_recordable_output();
+    void update_native_output(float factor);
     void set_edit_passthrough(bool enabled);
     bool install_click_hook();
     void uninstall_click_hook();
@@ -1154,6 +1167,8 @@ private:
     RECT monitor_rect_{};
     RECT zoom_rect_{};
     RECT source_rect_{};
+    RECT magnifier_bounds_{};
+    std::optional<POINT> qa_source_cursor_;
     HTHUMBNAIL recordable_thumbnail_{};
     SIZE recordable_source_size_{};
     RECT recordable_source_bounds_{};
@@ -7086,6 +7101,7 @@ bool ZoomWindow::start_recordable_output() {
 
 void ZoomWindow::stop_recordable_output() {
     recordable_output_ = false;
+    source_initialized_ = false;
     if (recordable_thumbnail_) {
         DwmUnregisterThumbnail(recordable_thumbnail_);
         recordable_thumbnail_ = nullptr;
@@ -7112,6 +7128,34 @@ void ZoomWindow::update_recordable_output() {
                            static_cast<double>(window_width);
     const double scale_y = static_cast<double>(recordable_source_size_.cy) /
                            static_cast<double>(window_height);
+    if (static_cast<ZoomView>(controller_.preferences().zoom_view) == ZoomView::Lens) {
+        RECT available{};
+        IntersectRect(&available, &recordable_source_bounds_, &monitor_rect_);
+        const auto clipped = clip_zoom_source(
+            floating_rect(source_rect_), floating_rect(available),
+            {static_cast<float>(zoom_rect_.right - zoom_rect_.left),
+             static_cast<float>(zoom_rect_.bottom - zoom_rect_.top)});
+        DWM_THUMBNAIL_PROPERTIES properties{};
+        properties.dwFlags = DWM_TNP_RECTDESTINATION | DWM_TNP_RECTSOURCE |
+                             DWM_TNP_VISIBLE | DWM_TNP_OPACITY |
+                             DWM_TNP_SOURCECLIENTAREAONLY;
+        properties.opacity = 255;
+        properties.fVisible = clipped ? TRUE : FALSE;
+        properties.fSourceClientAreaOnly = FALSE;
+        if (clipped) {
+            const RECT desktop = rounded_rect(clipped->source);
+            properties.rcSource = {
+                static_cast<LONG>(std::lround((desktop.left - current_bounds.left) * scale_x)),
+                static_cast<LONG>(std::lround((desktop.top - current_bounds.top) * scale_y)),
+                static_cast<LONG>(std::lround((desktop.right - current_bounds.left) * scale_x)),
+                static_cast<LONG>(std::lround((desktop.bottom - current_bounds.top) * scale_y))};
+            properties.rcDestination = rounded_rect(clipped->destination);
+        }
+        if (FAILED(DwmUpdateThumbnailProperties(recordable_thumbnail_, &properties))) {
+            stop_recordable_output();
+        }
+        return;
+    }
     RECT source{
         static_cast<LONG>(std::lround(
             static_cast<double>(source_rect_.left - recordable_source_bounds_.left) *
@@ -7154,6 +7198,45 @@ void ZoomWindow::update_recordable_output() {
         stop_recordable_output();
         source_initialized_ = false;
     }
+}
+
+void ZoomWindow::update_native_output(float factor) {
+    RECT source = source_rect_;
+    RECT destination{0, 0, zoom_rect_.right - zoom_rect_.left,
+                           zoom_rect_.bottom - zoom_rect_.top};
+    if (static_cast<ZoomView>(controller_.preferences().zoom_view) == ZoomView::Lens) {
+        const auto clipped = clip_zoom_source(
+            floating_rect(source_rect_), floating_rect(monitor_rect_),
+            {static_cast<float>(source_rect_.right - source_rect_.left) * factor,
+             static_cast<float>(source_rect_.bottom - source_rect_.top) * factor});
+        if (!clipped) {
+            ShowWindow(magnifier_, SW_HIDE);
+            return;
+        }
+        source = rounded_rect(clipped->source);
+        const RECT crop = rounded_rect(clipped->destination);
+        // Preserve the final partial source pixel at fractional magnification.
+        if (source.right != source_rect_.right) destination.right = crop.right;
+        if (source.bottom != source_rect_.bottom) destination.bottom = crop.bottom;
+        destination.left = crop.left;
+        destination.top = crop.top;
+    }
+    const bool geometry_changed = !source_initialized_ ||
+        !EqualRect(&magnifier_bounds_, &destination) || !IsWindowVisible(magnifier_);
+    if (geometry_changed) {
+        magnifier_bounds_ = destination;
+        SetWindowPos(magnifier_, nullptr, destination.left, destination.top,
+                     std::max(1L, destination.right - destination.left),
+                     std::max(1L, destination.bottom - destination.top),
+                     SWP_NOZORDER | SWP_NOACTIVATE | SWP_SHOWWINDOW);
+        InvalidateRect(window_, nullptr, FALSE);
+    }
+    if (!source_initialized_ || factor != last_source_factor_) {
+        MAGTRANSFORM transform{{{factor, 0, 0}, {0, factor, 0}, {0, 0, 1}}};
+        mag_set_transform_(magnifier_, &transform);
+    }
+    mag_set_source_(magnifier_, source);
+    InvalidateRect(magnifier_, nullptr, TRUE);
 }
 
 void ZoomWindow::set_edit_passthrough(bool enabled) {
@@ -7219,7 +7302,8 @@ bool ZoomWindow::initialize(GraphicsDevice& graphics) {
     initialized_ = true;
     RECT initial{0, 0, 1, 1};
     if (!create(L"ElitePen.Zoom", L"Zoom — Elite Pen",
-                WS_EX_TOPMOST | WS_EX_TOOLWINDOW, WS_POPUP, initial)) return false;
+                WS_EX_TOPMOST | WS_EX_TOOLWINDOW,
+                WS_POPUP | WS_CLIPCHILDREN, initial)) return false;
     magnifier_ = CreateWindowW(L"Magnifier", L"Elite Pen Magnifier",
                                WS_CHILD | WS_VISIBLE, 0, 0, 1, 1, window_, nullptr,
                                GetModuleHandleW(nullptr), nullptr);
@@ -7718,6 +7802,8 @@ void ZoomWindow::refresh_source() {
     POINT cursor{};
     if (edit_locked) {
         cursor = edit_anchor_;
+    } else if (qa_source_cursor_) {
+        cursor = *qa_source_cursor_;
     } else if (!GetCursorPos(&cursor)) {
         if (source_initialized_) {
             cursor = last_source_cursor_;
@@ -7797,8 +7883,6 @@ void ZoomWindow::refresh_source() {
         // size. Restack the surfaces explicitly after geometry is established.
         SetWindowPos(window_, HWND_TOPMOST, zoom_rect.left, zoom_rect.top,
                      zoom_width, zoom_height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
-        SetWindowPos(magnifier_, nullptr, 0, 0, zoom_width, zoom_height,
-                     SWP_NOZORDER | SWP_SHOWWINDOW);
         apply_view_regions(view, zoom_width, zoom_height);
     }
     if (lens_frame_) {
@@ -7806,28 +7890,18 @@ void ZoomWindow::refresh_source() {
         else lens_frame_->hide();
     }
 
-    if (!recordable_output_ &&
-        (!source_initialized_ || factor != last_source_factor_)) {
-        MAGTRANSFORM transform{{{factor, 0, 0}, {0, factor, 0}, {0, 0, 1}}};
-        mag_set_transform_(magnifier_, &transform);
-    }
     const int source_width = std::max(1, static_cast<int>(
         static_cast<float>(zoom_width) / factor));
     const int source_height = std::max(1, static_cast<int>(
         static_cast<float>(zoom_height) / factor));
-    int left = cursor.x - source_width / 2;
-    int top = cursor.y - source_height / 2;
-    left = std::clamp(left, static_cast<int>(monitor_rect_.left),
-                      static_cast<int>(monitor_rect_.right) - source_width);
-    top = std::clamp(top, static_cast<int>(monitor_rect_.top),
-                     static_cast<int>(monitor_rect_.bottom) - source_height);
-    source_rect_ = RECT{left, top, left + source_width, top + source_height};
+    source_rect_ = rounded_rect(zoom_source_bounds(
+        {static_cast<float>(cursor.x), static_cast<float>(cursor.y)},
+        {static_cast<float>(source_width), static_cast<float>(source_height)},
+        floating_rect(monitor_rect_), view == ZoomView::Lens));
     if (recordable_output_) {
         update_recordable_output();
-    } else {
-        mag_set_source_(magnifier_, source_rect_);
-        InvalidateRect(magnifier_, nullptr, TRUE);
     }
+    if (!recordable_output_) update_native_output(factor);
     if (ink_ && IsWindowVisible(ink_->hwnd())) {
         if (edit_active()) {
             ink_->update_edit_view(zoom_rect_, source_rect_, factor);
@@ -7837,9 +7911,8 @@ void ZoomWindow::refresh_source() {
     }
     if (target_) {
         if (view == ZoomView::Lens && !edit_locked) {
-            // The source rectangle can be clamped at monitor edges. Its center,
-            // not the unclamped pointer, is the pixel represented at the center
-            // of the magnified output.
+            // Lens sources remain centered even at monitor edges. The native
+            // and recording renderers clip missing pixels without moving focus.
             const POINT source_focus{
                 source_rect_.left + (source_rect_.right - source_rect_.left) / 2,
                 source_rect_.top + (source_rect_.bottom - source_rect_.top) / 2};
@@ -7863,6 +7936,16 @@ void ZoomWindow::refresh_source() {
 
 LRESULT ZoomWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
     switch (message) {
+        case WM_PAINT: {
+            PAINTSTRUCT paint{};
+            HDC dc = BeginPaint(window_, &paint);
+            SetDCBrushColor(dc, RGB(18, 22, 29));
+            FillRect(dc, &paint.rcPaint, static_cast<HBRUSH>(GetStockObject(DC_BRUSH)));
+            EndPaint(window_, &paint);
+            return 0;
+        }
+        case WM_ERASEBKGND:
+            return 1;
         case WM_NCHITTEST:
             if (edit_state_ == ZoomEditState::Navigate) return HTTRANSPARENT;
             break;
@@ -7880,6 +7963,33 @@ LRESULT ZoomWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
             return zoom_rect_.bottom - zoom_rect_.top;
         case kQaQueryZoomLensDiameterMessage:
             return controller_.preferences().zoom_lens_diameter;
+        case kQaSetZoomSourceCursorMessage: {
+            wchar_t qa_instance[2]{};
+            if (GetEnvironmentVariableW(L"ELITE_PEN_QA_INSTANCE_ID", qa_instance,
+                                        static_cast<DWORD>(std::size(qa_instance))) == 0)
+                return 0;
+            qa_source_cursor_ = POINT{static_cast<LONG>(wparam), static_cast<LONG>(lparam)};
+            source_initialized_ = false;
+            refresh_source();
+            return 1;
+        }
+        case kQaQueryZoomNativeSourceMessage: {
+            // MagGetWindowSource is local to the owning process. Return scalar
+            // coordinates for QA instead of passing a RECT across processes.
+            using GetSource = BOOL(WINAPI*)(HWND, LPRECT);
+            const auto get_source = reinterpret_cast<GetSource>(
+                GetProcAddress(magnification_module_, "MagGetWindowSource"));
+            RECT source{};
+            if (!get_source || !get_source(magnifier_, &source))
+                return std::numeric_limits<LRESULT>::min();
+            switch (wparam) {
+                case 0: return source.left;
+                case 1: return source.top;
+                case 2: return source.right;
+                case 3: return source.bottom;
+                default: return 1;
+            }
+        }
         case kQaQueryZoomFactorMessage:
             return static_cast<LRESULT>(std::lround(
                 controller_.state().zoom_factor * 100.0F));
