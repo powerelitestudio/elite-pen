@@ -3,6 +3,7 @@
 #include "elite_pen/core.hpp"
 #include "control_layout.hpp"
 #include "graphics.hpp"
+#include "history_shortcuts.hpp"
 #include "preferences.hpp"
 
 #include <windows.h>
@@ -48,6 +49,7 @@ RECT rounded_rect(RectF rect) noexcept {
 
 constexpr UINT kTrayMessage = WM_APP + 10;
 constexpr UINT kExitMessage = WM_APP + 12;
+constexpr UINT kHistoryShortcutMessage = WM_APP + 13;
 constexpr UINT kQaQueryToolMessage = WM_APP + 90;
 constexpr UINT kQaQueryColorMessage = WM_APP + 91;
 constexpr UINT kQaQueryThicknessMessage = WM_APP + 92;
@@ -86,6 +88,8 @@ constexpr UINT kQaQueryZoomGeometryHeightMessage = WM_APP + 124;
 constexpr UINT kQaQueryZoomLensDiameterMessage = WM_APP + 125;
 constexpr UINT kQaSetZoomSourceCursorMessage = WM_APP + 126;
 constexpr UINT kQaQueryZoomNativeSourceMessage = WM_APP + 127;
+constexpr UINT kQaQueryHistoryHookMessage = WM_APP + 128;
+constexpr ULONG_PTR kQaHistoryKeyTag = 0x4550484BU;
 constexpr UINT_PTR kTrayId = 1;
 constexpr std::array<float, 4> kPaletteScales{0.48F, 0.60F, 0.75F, 0.90F};
 constexpr std::array<float, 5> kThicknessSteps{2.0F, 4.0F, 7.0F, 12.0F, 20.0F};
@@ -1239,6 +1243,8 @@ public:
     void clear_document();
     void undo();
     void redo();
+    [[nodiscard]] bool history_shortcuts_active() const;
+    [[nodiscard]] bool history_hook_installed() const noexcept { return history_hook_ != nullptr; }
     void toggle_zoom();
     void toggle_zoom_freeze();
     void toggle_color_panel();
@@ -1278,6 +1284,9 @@ public:
     void populate_stress_document(std::size_t count);
 
 private:
+    static Controller* history_hook_owner_;
+    static LRESULT CALLBACK history_hook_proc(int code, WPARAM wparam, LPARAM lparam);
+    bool install_history_hook();
     static BOOL CALLBACK collect_monitor(HMONITOR monitor, HDC, LPRECT, LPARAM data);
     void create_overlays(std::wstring& error);
 
@@ -1294,6 +1303,9 @@ private:
     std::unique_ptr<TextInputWindow> text_input_;
     std::unique_ptr<SettingsWindow> settings_;
     std::unique_ptr<ZoomWindow> zoom_;
+    HHOOK history_hook_{};
+    HistoryShortcutRouter history_keys_;
+    bool qa_history_keys_{};
     bool shutting_down_{};
 };
 
@@ -3199,6 +3211,14 @@ LRESULT PaletteWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
                     static_cast<std::size_t>(wparam) - 1));
             }
             return 0;
+        case kQaQueryHistoryHookMessage:
+            return controller_.history_hook_installed() ? 1 : 0;
+        case kHistoryShortcutMessage:
+            if (controller_.history_shortcuts_active()) {
+                if (wparam == 0) controller_.undo();
+                else controller_.redo();
+            }
+            return 0;
         case kThicknessWheelMessage:
             controller_.adjust_thickness_step(wparam != 0 ? 1 : -1);
             return 0;
@@ -4584,7 +4604,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.10.1",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.10.3",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
@@ -4710,25 +4730,26 @@ bool SettingsWindow::initialize() {
                                     24, 489, 284, 31, window_, reinterpret_cast<HMENU>(4005),
                                     GetModuleHandleW(nullptr), nullptr);
     shortcuts_ = CreateWindowW(L"STATIC",
+        L"Ctrl+Z deshace y Ctrl+Y rehace al anotar; en modo cursor los recibe la app. "
         L"Atajos de Elite Pen. Gestos: Shift Línea; Ctrl Rectángulo; Tab Elipse; "
         L"Ctrl+Shift Flecha; Shift+Tab Flecha curva. Zoom: E Zoom editable; "
         L"Mano usa la app ampliada; Lápiz congela y anota; Espacio vuelve a Mano; "
         L"en Lente, Shift+rueda o [ ] cambia el diámetro.",
-        WS_CHILD | SS_OWNERDRAW, 24, 119, 540, 400, window_,
+        WS_CHILD | SS_OWNERDRAW, 24, 119, 540, 410, window_,
         reinterpret_cast<HMENU>(4103), GetModuleHandleW(nullptr), nullptr);
     for (std::size_t index = 0; index < hotkey_buttons_.size(); ++index) {
         hotkey_buttons_[index] = CreateWindowW(
             L"BUTTON", L"", WS_CHILD | BS_OWNERDRAW,
-            350, 147 + static_cast<int>(index) * 35, 158, 28, window_,
+            350, 147 + static_cast<int>(index) * 32, 158, 28, window_,
             reinterpret_cast<HMENU>(4200 + index), GetModuleHandleW(nullptr), nullptr);
         hotkey_edit_buttons_[index] = CreateWindowW(
             L"BUTTON", L"Editar", WS_CHILD | WS_TABSTOP | BS_OWNERDRAW,
-            514, 147 + static_cast<int>(index) * 35, 32, 28, window_,
+            514, 147 + static_cast<int>(index) * 32, 32, 28, window_,
             reinterpret_cast<HMENU>(4400 + index), GetModuleHandleW(nullptr), nullptr);
     }
     shortcut_scrollbar_ = CreateWindowW(
         L"SCROLLBAR", L"", WS_CHILD | SBS_VERT,
-        550, 147, 14, 203, window_, reinterpret_cast<HMENU>(4408),
+        550, 147, 14, 188, window_, reinterpret_cast<HMENU>(4408),
         GetModuleHandleW(nullptr), nullptr);
     reset_hotkeys_ = CreateWindowW(L"BUTTON", L"Restablecer atajos",
                                     WS_CHILD | WS_TABSTOP | BS_OWNERDRAW,
@@ -4736,7 +4757,7 @@ bool SettingsWindow::initialize() {
                                     reinterpret_cast<HMENU>(4300),
                                     GetModuleHandleW(nullptr), nullptr);
     help_ = CreateWindowW(L"STATIC",
-        L"Ayuda de Elite Pen 2.10.1. Anotación, pizarra, captura y zoom para Windows. "
+        L"Ayuda de Elite Pen 2.10.3. Anotación, pizarra, captura y zoom para Windows. "
         L"Código abierto bajo Apache License 2.0. Desarrollado por Power Elite Studio.",
         WS_CHILD | SS_OWNERDRAW, 24, 119, 540, 400, window_,
         reinterpret_cast<HMENU>(4105), GetModuleHandleW(nullptr), nullptr);
@@ -4871,7 +4892,7 @@ void SettingsWindow::paint_shortcuts(HDC dc, RECT bounds) {
     for (std::size_t slot = 0; slot < kVisibleShortcutRows; ++slot) {
         const std::size_t index = shortcut_scroll_offset_ + slot;
         if (index >= kHotkeyInfo.size()) break;
-        const int y = bounds.top + 28 + static_cast<int>(slot) * 35;
+        const int y = bounds.top + 28 + static_cast<int>(slot) * 32;
         SelectObject(dc, small_font_);
         SetTextColor(dc, theme_colorref(theme.text));
         RECT title{bounds.left, y, bounds.left + 122, y + 16};
@@ -4882,6 +4903,11 @@ void SettingsWindow::paint_shortcuts(HDC dc, RECT bounds) {
         DrawTextW(dc, kHotkeyInfo[index].description, -1, &description,
                   DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
     }
+    SelectObject(dc, small_font_);
+    SetTextColor(dc, theme_colorref(theme.text_soft));
+    RECT history_hint{bounds.left, bounds.top + 217, bounds.right, bounds.top + 234};
+    DrawTextW(dc, L"Al anotar: Ctrl+Z deshace · Ctrl+Y rehace. En cursor, los recibe la app.",
+              -1, &history_hint, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
     SelectObject(dc, body_font_);
     SetTextColor(dc, theme_colorref(theme.violet));
     RECT gesture_heading{bounds.left, bounds.top + 236, bounds.right, bounds.top + 255};
@@ -4968,7 +4994,7 @@ void SettingsWindow::paint_help(HDC dc, RECT bounds) {
     SelectObject(dc, small_font_);
     SetTextColor(dc, theme_colorref(theme.text_muted));
     RECT version{bounds.left, bounds.top + 73, bounds.right, bounds.top + 94};
-    DrawTextW(dc, L"Version 2.10.1 · Windows 10 y 11 · x64", -1, &version,
+    DrawTextW(dc, L"Version 2.10.3 · Windows 10 y 11 · x64", -1, &version,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
 
     SelectObject(dc, body_font_);
@@ -6106,6 +6132,7 @@ void ZoomInkWindow::clear_annotations() {
 }
 
 bool ZoomInkWindow::undo() {
+    cancel_gesture();
     Document& active = edit_mode_ ? edit_document_ : document_;
     const bool changed = active.undo();
     if (changed) invalidate();
@@ -6113,6 +6140,7 @@ bool ZoomInkWindow::undo() {
 }
 
 bool ZoomInkWindow::redo() {
+    cancel_gesture();
     Document& active = edit_mode_ ? edit_document_ : document_;
     const bool changed = active.redo();
     if (changed) invalidate();
@@ -8143,6 +8171,87 @@ void Controller::create_overlays(std::wstring& error) {
     }
 }
 
+Controller* Controller::history_hook_owner_ = nullptr;
+
+bool Controller::history_shortcuts_active() const {
+    if (shutting_down_ || !palette_ || !IsWindowEnabled(palette_->hwnd()) ||
+        (text_input_ && text_input_->active()) ||
+        (settings_ && IsWindowVisible(settings_->hwnd()))) return false;
+    if (zoom_ && zoom_->active()) {
+        if (!zoom_->accepts_annotations()) return false;
+    } else if (state_.tool == Tool::Interact || state_.tool == Tool::Screenshot) {
+        return false;
+    }
+    // Drawing overlays deliberately use MA_NOACTIVATE. The focused application
+    // may therefore be external even while all mouse input belongs to our ink.
+    const HWND foreground = GetForegroundWindow();
+    if (!foreground) return false;
+    DWORD process = 0;
+    const DWORD thread = GetWindowThreadProcessId(foreground, &process);
+    GUITHREADINFO info{};
+    info.cbSize = sizeof(info);
+    if (!GetGUIThreadInfo(thread, &info) ||
+        (info.flags & (GUI_INMENUMODE | GUI_INMOVESIZE | GUI_POPUPMENUMODE)) != 0)
+        return false;
+    if (process == GetCurrentProcessId()) {
+        // Native edits, color dialogs and shortcut capture keep their own keys.
+        wchar_t name[64]{};
+        GetClassNameW(foreground, name, static_cast<int>(std::size(name)));
+        return wcscmp(name, L"ElitePen.Palette") == 0 ||
+               wcscmp(name, L"ElitePen.Overlay") == 0 ||
+               wcscmp(name, L"ElitePen.Zoom") == 0 ||
+               wcscmp(name, L"ElitePen.ZoomInk") == 0 ||
+               wcscmp(name, L"ElitePen.ZoomEditToolbar") == 0;
+    }
+    return true;
+}
+
+LRESULT CALLBACK Controller::history_hook_proc(int code, WPARAM wparam, LPARAM lparam) {
+    auto* owner = history_hook_owner_;
+    if (code == HC_ACTION && owner) {
+        const auto& key = *reinterpret_cast<const KBDLLHOOKSTRUCT*>(lparam);
+        if ((key.vkCode == 'Z' || key.vkCode == 'Y') &&
+            (!owner->qa_history_keys_ || key.dwExtraInfo == kQaHistoryKeyTag)) {
+            const bool down = wparam == WM_KEYDOWN || wparam == WM_SYSKEYDOWN;
+            UINT modifiers = 0;
+            if ((GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0) modifiers |= MOD_CONTROL;
+            if ((GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0) modifiers |= MOD_SHIFT;
+            if ((GetAsyncKeyState(VK_MENU) & 0x8000) != 0) modifiers |= MOD_ALT;
+            if ((GetAsyncKeyState(VK_LWIN) & 0x8000) != 0 ||
+                (GetAsyncKeyState(VK_RWIN) & 0x8000) != 0) modifiers |= MOD_WIN;
+            const HotkeyBinding binding{modifiers, key.vkCode};
+            const auto& bindings = owner->preferences_.hotkeys;
+            const bool reserved = std::find(bindings.begin(), bindings.end(), binding) != bindings.end();
+            const bool active = down && modifiers == MOD_CONTROL && !reserved &&
+                                owner->history_shortcuts_active();
+            const auto result = owner->history_keys_.route(
+                key.vkCode, down, modifiers, active, reserved);
+            if (result == HistoryKeyResult::Undo || result == HistoryKeyResult::Redo) {
+                // Keep the low-level callback constant-time: history and rendering
+                // run later on the normal UI queue, never inside the hook.
+                PostMessageW(owner->palette_->hwnd(), kHistoryShortcutMessage,
+                             result == HistoryKeyResult::Redo ? 1 : 0, 0);
+            }
+            if (result != HistoryKeyResult::Pass) return 1;
+        }
+    }
+    return CallNextHookEx(nullptr, code, wparam, lparam);
+}
+
+bool Controller::install_history_hook() {
+    wchar_t value[2]{};
+    const bool qa = GetEnvironmentVariableW(L"ELITE_PEN_QA_INSTANCE_ID", value, 2) > 0;
+    qa_history_keys_ = qa;
+    // Ordinary UI QA must not intercept the user's keyboard in another instance.
+    if (qa && GetEnvironmentVariableW(L"ELITE_PEN_QA_HISTORY_KEYS", value, 2) == 0)
+        return true;
+    history_hook_owner_ = this;
+    history_hook_ = SetWindowsHookExW(WH_KEYBOARD_LL, history_hook_proc,
+                                     GetModuleHandleW(nullptr), 0);
+    if (!history_hook_) history_hook_owner_ = nullptr;
+    return history_hook_ != nullptr;
+}
+
 bool Controller::initialize(std::wstring& error) {
     preferences_ = preferences_store_.load();
     g_ui_theme = preferences_.theme;
@@ -8201,6 +8310,10 @@ bool Controller::initialize(std::wstring& error) {
         // Zoom failure is isolated: drawing remains available and an error is shown on use.
         zoom_.reset();
     }
+    if (!install_history_hook()) {
+        palette_->show_notification(L"Atajos de historial",
+            L"No se pudo activar Ctrl+Z / Ctrl+Y. Usa los atajos globales de Configuración.");
+    }
     invalidate_all();
     return true;
 }
@@ -8217,6 +8330,11 @@ int Controller::message_loop() {
 void Controller::shutdown() {
     if (shutting_down_) return;
     shutting_down_ = true;
+    if (history_hook_) {
+        UnhookWindowsHookEx(history_hook_);
+        history_hook_ = nullptr;
+    }
+    if (history_hook_owner_ == this) history_hook_owner_ = nullptr;
     save_palette_position();
     preferences_.zoom_factor = state_.zoom_factor;
     preferences_.thickness = state_.thickness;
@@ -8391,6 +8509,7 @@ void Controller::undo() {
         zoom_->undo();
         return;
     }
+    for (const auto& overlay : overlays_) overlay->cancel_gesture();
     if (state_.document.undo()) invalidate_document();
 }
 
@@ -8399,6 +8518,7 @@ void Controller::redo() {
         zoom_->redo();
         return;
     }
+    for (const auto& overlay : overlays_) overlay->cancel_gesture();
     if (state_.document.redo()) invalidate_document();
 }
 

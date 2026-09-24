@@ -10,7 +10,7 @@ pantalla para Windows, desarrollada por [Power Elite Studio](https://powerelite.
 Permite explicar sobre cualquier aplicación sin convertir la presentación en una
 sucesión de ventanas y menús.
 
-> **Estado:** acceso anticipado. La versión 2.10.2 es funcional y está validada para
+> **Estado:** acceso anticipado. La versión 2.10.3 es funcional y está validada para
 > empezar a compartirse, pero el producto continúa en desarrollo activo. Los reportes
 > de errores y casos de compatibilidad son bienvenidos.
 
@@ -31,11 +31,11 @@ memoria y rutas de compatibilidad.
 Los paquetes oficiales listos para usar se publican en
 [GitHub Releases](https://github.com/powerelitestudio/elite-pen/releases):
 
-- [Descargar portable 2.10.2](https://github.com/powerelitestudio/elite-pen/releases/download/v2.10.2/Elite.Pen.Portable.2.10.2.zip):
+- [Descargar portable 2.10.3](https://github.com/powerelitestudio/elite-pen/releases/download/v2.10.3/Elite.Pen.Portable.2.10.3.zip):
   descomprime la carpeta y ejecuta `Elite Pen.exe`.
-- [Descargar instalador 2.10.2](https://github.com/powerelitestudio/elite-pen/releases/download/v2.10.2/Elite.Pen.Setup.2.10.2.exe):
+- [Descargar instalador 2.10.3](https://github.com/powerelitestudio/elite-pen/releases/download/v2.10.3/Elite.Pen.Setup.2.10.3.exe):
   instala por usuario, sin privilegios de administrador.
-- [Hashes SHA-256 de 2.10.2](https://github.com/powerelitestudio/elite-pen/releases/download/v2.10.2/SHA256SUMS.txt).
+- [Hashes SHA-256 de 2.10.3](https://github.com/powerelitestudio/elite-pen/releases/download/v2.10.3/SHA256SUMS.txt).
 
 Windows puede mostrar una advertencia de SmartScreen mientras los binarios no estén
 firmados digitalmente. Verifica siempre que la descarga provenga del repositorio
@@ -115,6 +115,13 @@ comparten estado, paneles, atajos, tema, escala y posición guardada.
 | Zoom editable | Barra flotante de zoom | `E` dentro del zoom |
 | Contraer/expandir | Control bajo el ojo | `Ctrl+Shift+D` |
 | Salir de modo/zoom | — | `Esc` |
+
+Al anotar, **`Ctrl+Z` deshace y `Ctrl+Y` rehace** en el escritorio, las pizarras y
+el zoom congelado (incluido Lápiz del Zoom editable). En modo cursor, zoom vivo o
+Mano, esas combinaciones quedan disponibles para la aplicación que estés usando.
+No interfieren con la entrada de texto ni la edición de atajos. Los atajos globales
+de la tabla y tus personalizaciones se conservan; una asignación personalizada
+explícita de `Ctrl+Z` o `Ctrl+Y` tiene prioridad sobre este comportamiento contextual.
 
 Los seis colores rápidos también son directos: `Ctrl+Shift+1` negro,
 `Ctrl+Shift+2` amarillo, `Ctrl+Shift+3` azul, `Ctrl+Shift+4` rojo,

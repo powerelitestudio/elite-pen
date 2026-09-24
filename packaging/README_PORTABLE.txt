@@ -1,4 +1,4 @@
-ELITE PEN 2.10.2 — EDICION PORTABLE
+ELITE PEN 2.10.3 — EDICION PORTABLE
 ================================
 
 Elite Pen es la herramienta de anotacion, pizarra y ampliacion de pantalla de
@@ -32,6 +32,11 @@ CONTROLES PRINCIPALES
 
 ATAJOS
 ------
+Ctrl+Z       Deshacer al anotar (escritorio, pizarras y zoom congelado)
+Ctrl+Y       Rehacer al anotar
+En modo cursor o Mano del zoom, estas teclas siguen perteneciendo a la app.
+Los atajos globales configurables se conservan, incluso fuera del modo dibujo.
+
 Ctrl+Shift+Q  Cursor / lapiz
 Ctrl+Shift+A  Ocultar / mostrar
 Ctrl+Shift+W  Pizarra blanca
@@ -89,7 +94,7 @@ Configuracion.
 
 SOPORTE
 -------
-Producto de Power Elite Studio. Version 2.10.1.
+Producto de Power Elite Studio. Version 2.10.3.
 Sitio oficial: https://powerelite.studio/
 Codigo fuente: https://github.com/powerelitestudio/elite-pen
 

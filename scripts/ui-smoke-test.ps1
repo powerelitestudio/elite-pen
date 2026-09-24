@@ -534,7 +534,8 @@ try {
                    -not [ElitePenUiNative]::IsWindowVisible($shortcutGuide)) `
             'Help tab did not expose its product information and official website action.'
         $helpAccessibleText = [ElitePenUiNative]::WindowText($helpPanel)
-        Assert-Ui ($helpAccessibleText.Contains('Elite Pen 2.10.1') -and
+        $binaryVersion = (Get-Item -LiteralPath $sourceExecutable).VersionInfo.ProductVersion
+        Assert-Ui ($helpAccessibleText.Contains("Elite Pen $binaryVersion") -and
                    $helpAccessibleText.Contains('Apache License 2.0') -and
                    $helpAccessibleText.Contains('Power Elite Studio')) `
             'Help tab is missing the version, open-source license, or developer identity.'
