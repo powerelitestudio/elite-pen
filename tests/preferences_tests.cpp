@@ -1,4 +1,5 @@
 #include "preferences.hpp"
+#include "history_shortcuts.hpp"
 
 #include <windows.h>
 
@@ -32,6 +33,36 @@ std::filesystem::path executable_directory() {
 }  // namespace
 
 int main() {
+    HistoryShortcutRouter keys;
+    check(keys.route('Z', true, MOD_CONTROL, true, false) == HistoryKeyResult::Undo,
+          "Ctrl+Z undoes annotations");
+    check(keys.route('Z', true, MOD_CONTROL, true, false) == HistoryKeyResult::Consume,
+          "holding undo does not erase the whole history");
+    check(keys.route('Z', false, 0, false, false) == HistoryKeyResult::Consume,
+          "owned key-up stays consumed after leaving drawing mode");
+    check(keys.route('Y', true, MOD_CONTROL, true, false) == HistoryKeyResult::Redo,
+          "Ctrl+Y redoes annotations");
+    keys.route('Y', false, 0, true, false);
+    for (const UINT modifiers : {0U, static_cast<UINT>(MOD_SHIFT),
+            static_cast<UINT>(MOD_CONTROL | MOD_SHIFT),
+            static_cast<UINT>(MOD_CONTROL | MOD_ALT),
+            static_cast<UINT>(MOD_CONTROL | MOD_WIN)}) {
+        check(keys.route('Z', true, modifiers, true, false) == HistoryKeyResult::Pass,
+              "plain typing, zoom, AltGr and other combinations pass through");
+        check(keys.route('Z', false, modifiers, true, false) == HistoryKeyResult::Pass,
+              "unowned key-up passes through");
+    }
+    check(keys.route('Z', true, MOD_CONTROL, false, false) == HistoryKeyResult::Pass,
+          "interact, live zoom and text editing keep their own undo");
+    check(keys.route('Z', true, MOD_CONTROL, true, false) == HistoryKeyResult::Pass,
+          "a key already held before annotation is not stolen on repeat");
+    keys.route('Z', false, 0, true, false);
+    check(keys.route('Z', true, MOD_CONTROL, true, true) == HistoryKeyResult::Pass,
+          "custom shortcuts take precedence without double dispatch");
+    keys.route('Z', false, 0, true, false);
+    check(keys.route('V', true, MOD_CONTROL, true, false) == HistoryKeyResult::Pass,
+          "unrelated shortcuts remain untouched");
+
     const auto root = executable_directory();
     const auto data = root / L"data";
     std::error_code error;

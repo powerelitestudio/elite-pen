@@ -1,6 +1,6 @@
-# Elite Pen 2.10.1 — contrato de producto
+# Elite Pen 2.10.3 — contrato de producto
 
-Estado: versión 2.10.1 implementada como software de código abierto bajo Apache
+Estado: versión 2.10.3 implementada como software de código abierto bajo Apache
 License 2.0 y preparada para distribución pública portable e instalada.
 
 ## 1. Identidad e interaccion principal
@@ -284,6 +284,12 @@ dibujar sobre el lienzo, evitando recortes o puntas desproporcionadas en el pane
 - `Atajos` documenta también los cinco gestos temporales del Lápiz en el propio
   producto: `Shift` Línea, `Ctrl` Rectángulo, `Tab` Elipse, `Ctrl+Shift` Flecha y
   `Shift+Tab` Flecha curva Bézier.
+- `Ctrl+Z` y `Ctrl+Y` deshacen y rehacen al anotar sobre escritorio, pizarras y
+  zoom congelado, incluido Lápiz del Zoom editable, sin exigir foco en la paleta.
+  En Cursor, zoom vivo, Mano, texto activo y Configuración, las combinaciones
+  contextuales no interceptan la entrada. Las asignaciones explícitas del usuario
+  prevalecen; los atajos globales existentes se conservan. Una pulsación ejecuta
+  una acción y la repetición de tecla no vacía el historial.
 - `Ayuda` identifica Elite Pen y su versión, resume su propósito y compatibilidad,
   acredita a Power Elite Studio y abre tanto https://powerelite.studio/ como el
   repositorio público en el navegador predeterminado. También comunica el estado de

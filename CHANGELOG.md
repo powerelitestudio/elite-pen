@@ -1,5 +1,16 @@
 # Historial de cambios
 
+## 2.10.3 — 2026-09-24
+
+- `Ctrl+Z` y `Ctrl+Y` deshacen y rehacen al anotar sobre el escritorio, pizarras y
+  zoom congelado, incluso cuando la ventana subyacente conserva el foco.
+- En modo cursor, zoom vivo, Mano, entrada de texto y configuración, los atajos
+  contextuales no capturan el teclado. Las combinaciones globales y las
+  personalizaciones existentes se conservan sin migrar preferencias.
+- Cada pulsación ejecuta una acción; mantener la tecla no vacía el historial.
+  Soltarla después de cambiar de modo no deja eventos huérfanos en otra aplicación.
+- Configuración > Atajos y la guía portable explican ambas combinaciones.
+
 ## 2.10.2 — 2026-09-07
 
 - La lente circular mantiene el puntero centrado al recorrer los bordes y esquinas

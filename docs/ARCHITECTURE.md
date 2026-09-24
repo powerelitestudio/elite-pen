@@ -78,6 +78,22 @@ El historial conserva operaciones reversibles, no imagenes completas. Una limpie
 guarda los objetos retirados y un borrado guarda indice y objeto, lo que mantiene
 deshacer exacto con menor uso de memoria.
 
+`Ctrl+Z` / `Ctrl+Y` son alias contextuales, no registros globales permanentes.
+Un hook `WH_KEYBOARD_LL` filtra únicamente Z/Y y envía la operación a la cola de
+interfaz; no dibuja ni modifica documentos dentro del callback. Es necesario
+porque las superficies de tinta usan `MA_NOACTIVATE`: la app subyacente puede
+conservar el foco mientras Elite Pen recibe los trazos. El filtro deja pasar
+las teclas en Interact, zoom vivo/Mano, texto activo, configuración y diálogos.
+Las asignaciones explícitas del usuario tienen prioridad. `HistoryShortcutRouter`
+conserva la propiedad de cada pulsación hasta soltar la tecla, sin repetir acciones.
+El hook se libera al cerrar; el texto tecleado no se almacena ni se registra.
+
+`scripts/history-shortcuts-smoke-test.ps1` inyecta teclas reales con `SendInput`
+contra una ventana temporal que cuenta los eventos recibidos. Verifica cambios
+en los documentos y ausencia/presencia de eventos en la app de fondo. Requiere
+cerrar otras instancias y confirma el foco antes de cada inyección. La copia de
+QA únicamente acepta eventos etiquetados; el smoke habitual no instala el hook.
+
 ### ADR-004: herramienta portable reproducible
 
 La compilacion se fija a LLVM-MinGW/UCRT x64 y se valida con SHA-256. La herramienta

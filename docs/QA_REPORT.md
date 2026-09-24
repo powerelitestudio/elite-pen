@@ -1,8 +1,53 @@
-# Informe de calidad — Elite Pen 2.10.2
+# Informe de calidad — Elite Pen 2.10.3
 
-Fecha: 2026-09-07
+Fecha: 2026-09-24
 Equipo de referencia: Lenovo 80NV, Intel Core i7-6700HQ, 12 GB RAM, Intel HD 530,
 GeForce GTX 960M, Windows 10 Pro 22H2 x64, dos monitores con escalado mixto.
+
+## Historial desde teclado — 2.10.3
+
+- Causa: solo estaban registrados `Ctrl+Alt+Z` y `Ctrl+Shift+Y`. Las superficies
+  de dibujo no activan su ventana y no recibían `Ctrl+Z` / `Ctrl+Y` de la app
+  que conservaba el foco. El nuevo filtro es contextual, sin cambiar preferencias.
+- Compilación Release, pruebas del núcleo y preferencias aprobadas. Pruebas puras
+  del ciclo pulsar/repetir/soltar, cambio de modo con tecla mantenida, prioridad
+  de asignaciones explícitas y paso de combinaciones con Shift, Alt o Windows.
+- `history-shortcuts-smoke-test.ps1`: 47 comprobaciones con `SendInput` real y una
+  ventana desechable que conserva el foco. Escritorio, pizarras blanca/negra, línea,
+  borrador, limpiar/restaurar, historial vacío, invalidación de rehacer, vista previa
+  interrumpida, texto confirmado, zoom congelado y Lápiz del Zoom editable.
+- Cursor, zoom vivo, Mano, texto activo y Configuración dejan pasar Ctrl+Z/Y;
+  se comprueba que el receptor externo recibe ambas combinaciones y el documento
+  de Elite Pen no cambia. Los tests no escriben en aplicaciones del usuario.
+- Smoke completo de interfaz aprobado. Se comprueba que Ayuda coincide con la
+  versión del ejecutable y se revisa visualmente la explicación en Atajos.
+- Rendimiento del núcleo: agregar 5.000 trazos 11,96 ms; 250 borrados fallidos
+  24,74 ms; 10.000 ciclos deshacer/rehacer 0,39 ms; limpiar/restaurar 0,48 ms;
+  simplificar 100.000 muestras 39,16 ms. Todos dentro de sus presupuestos.
+- Las pruebas de congelación usan captura sintética. No se declara una nueva
+  validación visual de OBS ni de Windows 11.
+- Portable local actualizado a 2.10.3: todos los archivos coinciden por SHA-256
+  con el paquete validado, conservando intacto `data/settings.ini`. Respaldo del
+  paquete anterior dentro de `artifacts/portable-backups/`, no en Aplicaciones.
+  SHA-256 del ejecutable final:
+  `2396C14FD172CFE8D48C7975723D0F1D65BC4C5982FC110C73A9EA5F1A265850`.
+
+### Paquetes de distribución — 2.10.3
+
+- Portable e instalador generados desde el mismo ejecutable Release validado.
+  Se inspeccionó el ZIP: ocho archivos, sin preferencias del usuario ni datos
+  locales, con versión 2.10.3 y hashes internos correctos. LICENSE, NOTICE,
+  TRADEMARKS y LEEME coinciden con sus fuentes.
+- Instalación silenciosa, inicio, smoke completo de interfaz y desinstalación
+  aislados aprobados. No había otra edición instalada al iniciar la prueba.
+- Transparencia: geometría y texto inline aprobados; el muestreo de píxeles de
+  la paleta no estuvo disponible en esta sesión de Windows y no se da por validado.
+- Se repitieron núcleo, preferencias y rendimiento: todos aprobados. La versión
+  continúa bajo Apache License 2.0 y los ejecutables no están firmados digitalmente.
+- SHA-256 de `Elite.Pen.Portable.2.10.3.zip`:
+  `7627BB5F02AC1D26BA74692CF82EDCAFE99CB53F3A39FF48523F2929583A8F43`.
+- SHA-256 de `Elite.Pen.Setup.2.10.3.exe`:
+  `24A837682D7295E52DDACD0782140D0B9D1FAD6466039D4717F90401D3224FA9`.
 
 ## Corrección de bordes de lente — 2.10.2
 
@@ -254,5 +299,5 @@ recorre 240 cuadros de Mano a 0,449 ms de media y vuelve a Lápiz con caché cal
 - Windows puede denegar la captura del escritorio en una sesion bloqueada, segura o
   no interactiva; Elite Pen informa el fallo y no genera un archivo corrupto.
 - La presion depende del controlador del lapiz y de que Windows entregue WM_POINTER.
-- El binario 2.10.2 no esta firmado digitalmente; los hashes del paquete permiten
+- El binario 2.10.3 no esta firmado digitalmente; los hashes del paquete permiten
   verificar integridad hasta incorporar el certificado de Power Elite Studio.
