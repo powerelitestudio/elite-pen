@@ -1,4 +1,4 @@
-ELITE PEN 2.10.3 — EDICION PORTABLE
+ELITE PEN 2.11.0 — EDICION PORTABLE
 ================================
 
 Elite Pen es la herramienta de anotacion, pizarra y ampliacion de pantalla de
@@ -14,6 +14,8 @@ CONTROLES PRINCIPALES
 ---------------------
 - Presentacion: Configuracion permite elegir Paleta de pintor o Lineal vertical.
   Paleta es el modo inicial; ambos comparten herramientas, temas y atajos.
+- Tamaño: Compacta 80 %, Estándar 100 %, Grande 125 %, Muy grande 150 %,
+  Extra grande 200 % y Gigante 300 %. Se guarda para ambas presentaciones.
 - Punta del pincel: alterna entre dibujar y cursor normal.
 - Colores: negro, amarillo, azul, rojo, verde y morado. El boton + abre la paleta completa.
 - Ojo: oculta o muestra las anotaciones sin eliminarlas.
@@ -94,7 +96,7 @@ Configuracion.
 
 SOPORTE
 -------
-Producto de Power Elite Studio. Version 2.10.3.
+Producto de Power Elite Studio. Version 2.11.0.
 Sitio oficial: https://powerelite.studio/
 Codigo fuente: https://github.com/powerelitestudio/elite-pen
 

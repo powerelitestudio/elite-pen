@@ -20,6 +20,11 @@ enum class ControlMode : std::uint8_t {
     Linear = 1,
 };
 
+// Standard is 60% of the original design canvas. Keep the saved indices stable
+// and append sizes so existing installed and portable preferences still match.
+inline constexpr std::array<float, 6> kPaletteScales{
+    0.48F, 0.60F, 0.75F, 0.90F, 1.20F, 1.80F};
+
 enum class HotkeyAction : std::uint8_t {
     Interact,
     Visibility,

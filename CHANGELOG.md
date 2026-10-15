@@ -1,5 +1,17 @@
 # Historial de cambios
 
+## 2.11.0 — 2026-10-15
+
+- Configuración > General incorpora Extra grande · 200 % y Gigante · 300 %.
+  Ambos escalan toda la Paleta o la barra Lineal, incluidas zonas de clic,
+  ayudas, colores, grosores y estado contraído.
+- Los seis tamaños se conservan entre sesiones tanto instalados como portables;
+  los cuatro índices anteriores y el tamaño Estándar inicial no cambian.
+- Un control mayor que el área útil mantiene su origen accesible sin invertir
+  los límites de colocación ni reducir silenciosamente la escala elegida.
+- El selector dispone de espacio para las seis opciones y sus etiquetas completas.
+  Las pruebas cubren dimensiones, persistencia, colocación, clics y contracción.
+
 ## 2.10.3 — 2026-09-24
 
 - `Ctrl+Z` y `Ctrl+Y` deshacen y rehacen al anotar sobre el escritorio, pizarras y

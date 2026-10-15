@@ -1,4 +1,31 @@
-# Informe de calidad — Elite Pen 2.10.3
+# Informe de calidad — Elite Pen 2.11.0
+
+Fecha de validación de tamaños: 2026-10-15.
+
+## Tamaños Extra grande y Gigante — 2.11.0
+
+- Extra grande 200 % y Gigante 300 % amplían Paleta a 348 × 336 y 522 × 504 px,
+  y Lineal a 91 × 811 y 137 × 1217 px. Las cuatro opciones anteriores conservan
+  sus índices, dimensiones y el valor predeterminado Estándar.
+- Pruebas de núcleo, preferencias y rendimiento CPU aprobadas en Debug y Release.
+  La persistencia recorre los seis índices y comprueba tamaño contraído, un monitor
+  con coordenadas negativas y una superficie menor que el control gigante.
+- Smoke completo de interfaz aprobado: seis opciones, dimensiones, selección de
+  color y grosor, contracción/expansión y cambio entre ambas presentaciones.
+  El selector dispone de ancho suficiente para mostrar las etiquetas completas.
+- Rendimiento GPU con 5.000 trazos y 240 cuadros: caché 0,784 ms/cuadro; dibujo
+  activo 1,044 ms/cuadro; Mano del zoom editable 0,078 ms/cuadro; memoria 247,75 MiB.
+  Población 411,186 ms, primer cuadro 98,598 ms; primer Lápiz editable 140,915 ms
+  y retorno con caché caliente 39,239 ms. Todos dentro de los presupuestos.
+- Transparencia: geometría y texto inline aprobados. El muestreo de píxeles de la
+  paleta no estuvo disponible en esta sesión; no se declara una aprobación óptica
+  completa. La tabla del smoke incluye los seis tamaños.
+- Instalación del usuario respaldada antes de actualizar; las pruebas de UI usan
+  copias portables aisladas y no cambian sus preferencias.
+- No se declara una nueva validación física de presión, OBS o de la matriz completa
+  Windows 10/11. La evidencia histórica se conserva a continuación.
+
+## Referencia histórica de 2.10.3
 
 Fecha: 2026-09-24
 Equipo de referencia: Lenovo 80NV, Intel Core i7-6700HQ, 12 GB RAM, Intel HD 530,

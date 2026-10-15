@@ -603,6 +603,9 @@ try {
 
         $paletteSize = [ElitePenUiNative]::GetDlgItem($settings, 4011)
         Assert-Ui ($paletteSize -ne [IntPtr]::Zero) 'Whole-unit size selector is missing.'
+        Assert-Ui ([ElitePenUiNative]::SendMessage(
+            $paletteSize, 0x0146, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64() -eq 6) `
+            'General settings did not expose all six control sizes.'
         $lensSize = [ElitePenUiNative]::GetDlgItem($settings, 4015)
         Assert-Ui ($lensSize -ne [IntPtr]::Zero -and
                    [ElitePenUiNative]::SendMessage(
@@ -638,6 +641,42 @@ try {
         Click-PaletteWindow $palette 69 60
         $veryLargeColor = [ElitePenUiNative]::SendMessage($palette, 0x805B, [IntPtr]::Zero, [IntPtr]::Zero)
         Assert-Ui ($veryLargeColor.ToInt64() -eq 4294950445) 'Very large palette did not scale its color hit zones.'
+        foreach ($sizeCase in @(
+            @{ Index = 4; Scale = 1.20; Width = 348; Height = 336; CollapsedWidth = 104; CollapsedHeight = 101; LinearWidth = 91; LinearHeight = 811 },
+            @{ Index = 5; Scale = 1.80; Width = 522; Height = 504; CollapsedWidth = 157; CollapsedHeight = 151; LinearWidth = 137; LinearHeight = 1217 }
+        )) {
+            $null = [ElitePenUiNative]::SendMessage($paletteSize, 0x014E, [IntPtr]$sizeCase.Index, [IntPtr]::Zero)
+            $null = [ElitePenUiNative]::SendMessage($settings, 0x0111, [IntPtr]0x00010FAB, $paletteSize)
+            $script:paletteScale = $sizeCase.Scale
+            $sizeBounds = New-Object ElitePenUiNative+RECT
+            $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$sizeBounds)
+            Assert-Ui (($sizeBounds.Right - $sizeBounds.Left) -eq $sizeCase.Width -and
+                       ($sizeBounds.Bottom - $sizeBounds.Top) -eq $sizeCase.Height) `
+                "Control size $($sizeCase.Index) did not scale the whole palette."
+            Click-PaletteWindow $palette 169 53
+            Assert-Ui ([ElitePenUiNative]::SendMessage($palette, 0x805B, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64() -eq 4293870660) `
+                "Control size $($sizeCase.Index) did not scale color hit zones."
+            Click-PaletteWindow $palette 23 93
+            Assert-Ui ([ElitePenUiNative]::SendMessage($palette, 0x805C, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64() -eq 120) `
+                "Control size $($sizeCase.Index) did not scale thickness hit zones."
+            $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]23, [IntPtr]::Zero)
+            $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$sizeBounds)
+            Assert-Ui (($sizeBounds.Right - $sizeBounds.Left) -eq $sizeCase.CollapsedWidth -and
+                       ($sizeBounds.Bottom - $sizeBounds.Top) -eq $sizeCase.CollapsedHeight) `
+                "Control size $($sizeCase.Index) did not collapse at its selected scale."
+            $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]23, [IntPtr]::Zero)
+            $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$sizeBounds)
+            Assert-Ui (($sizeBounds.Right - $sizeBounds.Left) -eq $sizeCase.Width -and
+                       ($sizeBounds.Bottom - $sizeBounds.Top) -eq $sizeCase.Height) `
+                "Control size $($sizeCase.Index) did not restore after expansion."
+            $null = [ElitePenUiNative]::SendMessage($palette, 0x8071, [IntPtr]1, [IntPtr]::Zero)
+            $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$sizeBounds)
+            Assert-Ui (($sizeBounds.Right - $sizeBounds.Left) -eq $sizeCase.LinearWidth -and
+                       ($sizeBounds.Bottom - $sizeBounds.Top) -eq $sizeCase.LinearHeight) `
+                "Control size $($sizeCase.Index) did not scale the linear presentation."
+            $null = [ElitePenUiNative]::SendMessage($palette, 0x8071, [IntPtr]0, [IntPtr]::Zero)
+            Save-WindowImage $settings "settings-size-$($sizeCase.Index).png"
+        }
         $null = [ElitePenUiNative]::SendMessage($paletteSize, 0x014E, [IntPtr]1, [IntPtr]::Zero)
         $null = [ElitePenUiNative]::SendMessage($settings, 0x0111, [IntPtr]0x00010FAB, $paletteSize)
         $script:paletteScale = 0.60

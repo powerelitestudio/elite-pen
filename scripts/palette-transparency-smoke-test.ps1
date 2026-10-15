@@ -94,7 +94,7 @@ function Get-ScreenRgb([IntPtr]$Dc, [int]$X, [int]$Y) {
 $background = New-Object System.Windows.Forms.Form
 $background.StartPosition = 'Manual'
 $background.Location = New-Object System.Drawing.Point(220, 220)
-$background.Size = New-Object System.Drawing.Size(680, 560)
+$background.Size = New-Object System.Drawing.Size(680, 620)
 $background.BackColor = [System.Drawing.Color]::White
 $background.FormBorderStyle = 'None'
 $background.TopMost = $true
@@ -104,7 +104,7 @@ $background.Show()
 $process = $null
 $pixelInspectionAvailable = $true
 try {
-    $process = Start-Process -FilePath (Join-Path $sandbox 'Elite Pen.exe') -PassThru
+    $process = Start-Process -FilePath (Join-Path $sandbox 'Elite Pen.exe') -WindowStyle Hidden -PassThru
     $palette = Wait-AlphaWindow 'ElitePen.Palette' 'Elite Pen'
     $initial = New-Object ElitePenAlphaNative+RECT
     $null = [ElitePenAlphaNative]::GetWindowRect($palette, [ref]$initial)
@@ -123,7 +123,9 @@ try {
         @{ Index = 0; Scale = 0.48; Width = 139; Height = 134; Name = 'Compacta' },
         @{ Index = 1; Scale = 0.60; Width = 174; Height = 168; Name = 'Estándar' },
         @{ Index = 2; Scale = 0.75; Width = 218; Height = 210; Name = 'Grande' },
-        @{ Index = 3; Scale = 0.90; Width = 261; Height = 252; Name = 'Muy grande' }
+        @{ Index = 3; Scale = 0.90; Width = 261; Height = 252; Name = 'Muy grande' },
+        @{ Index = 4; Scale = 1.20; Width = 348; Height = 336; Name = 'Extra grande' },
+        @{ Index = 5; Scale = 1.80; Width = 522; Height = 504; Name = 'Gigante' }
     )
     $screen = [ElitePenAlphaNative]::GetDC([IntPtr]::Zero)
     try {

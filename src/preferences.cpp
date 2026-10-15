@@ -100,7 +100,8 @@ Preferences PreferencesStore::load() const {
     result.has_palette_position = read_int(path_, L"HasPalettePosition", 0) != 0;
     result.palette_x = read_int(path_, L"PaletteX", 0);
     result.palette_y = read_int(path_, L"PaletteY", 0);
-    result.palette_size = std::clamp(read_int(path_, L"PaletteSize", 1), 0, 3);
+    result.palette_size = std::clamp(read_int(path_, L"PaletteSize", 1), 0,
+                                    static_cast<int>(kPaletteScales.size()) - 1);
     result.palette_collapsed = read_int(path_, L"PaletteCollapsed", 0) != 0;
     result.zoom_factor = std::clamp(read_float(path_, L"ZoomFactor", 2.0F), 1.25F, 8.0F);
     result.zoom_view = std::clamp(read_int(path_, L"ZoomView", 0), 0, 2);

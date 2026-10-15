@@ -1,6 +1,6 @@
-# Elite Pen 2.10.3 — contrato de producto
+# Elite Pen 2.11.0 — contrato de producto
 
-Estado: versión 2.10.3 implementada como software de código abierto bajo Apache
+Estado: versión 2.11.0 implementada como software de código abierto bajo Apache
 License 2.0 y preparada para distribución pública portable e instalada.
 
 ## 1. Identidad e interaccion principal
@@ -51,11 +51,14 @@ Paleta es el valor predeterminado; la selección se conserva entre sesiones.
   posición ya desplazada de la ventana; debe seguir cada delta sin rebote ni lastre.
 - El componente principal mide 174 x 168 pixeles fisicos a escala 100 %, una
   reduccion uniforme del 40 % respecto del lienzo visual anterior de 290 x 280.
-- Configuración ofrece tamaños Compacta 80 %, Estándar 100 %, Grande 125 % y Muy
-  grande 150 %. El tamaño Estándar conserva exactamente los 174 x 168 píxeles.
+- Configuración ofrece tamaños Compacta 80 %, Estándar 100 %, Grande 125 %, Muy
+  grande 150 %, Extra grande 200 % y Gigante 300 %. El tamaño Estándar conserva
+  exactamente los 174 x 168 píxeles; Extra grande mide 348 x 336 y Gigante 522 x 504.
 - El escalado se aplica a la unidad completa: forma, puntos, colores, ojo, pincel,
   papelera, ayudas y zonas interactivas; conserva el centro visual y se limita al
-  área útil del monitor.
+  área útil del monitor. Si una dimensión supera el área útil, se conserva la escala
+  solicitada y el origen queda accesible en el borde superior o izquierdo. El control
+  puede seguir arrastrándose; no se aplica un ajuste de tamaño silencioso.
 - Todos los comandos permanecen por encima del lienzo y muestran cursor de mano, por
   lo que color, grosor y herramienta se seleccionan sin abandonar el modo de dibujo.
 
@@ -65,8 +68,10 @@ Paleta es el valor predeterminado; la selección se conserva entre sesiones.
   borrador, figuras, texto, pizarra, zoom, Deshacer, Rehacer, Limpiar y Configuración.
 - Conserva acceso directo a los cinco grosores y a negro, amarillo, azul, rojo,
   verde, morado y el selector `+` en el pie de la barra.
-- A escala Estándar mide 46 × 406 píxeles físicos. Los otros tres tamaños aplican
+- A escala Estándar mide 46 × 406 píxeles físicos. Los otros cinco tamaños aplican
   el mismo factor uniforme usado por Paleta a dibujo, iconos y zonas de clic.
+  Extra grande mide 91 × 811 y Gigante 137 × 1217 píxeles. En monitores más bajos
+  que la barra, esta conserva el tamaño elegido y puede desplazarse manualmente.
 - El estado activo se comunica mediante superficie violeta, contorno y cambio del
   propio glifo. El hover solo invalida la barra cuando cambia de elemento.
 - Al contraerse queda una píldora Elite de 46 × 49 píxeles a escala Estándar; el

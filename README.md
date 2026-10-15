@@ -10,8 +10,8 @@ pantalla para Windows, desarrollada por [Power Elite Studio](https://powerelite.
 Permite explicar sobre cualquier aplicación sin convertir la presentación en una
 sucesión de ventanas y menús.
 
-> **Estado:** acceso anticipado. La versión 2.10.3 es funcional y está validada para
-> empezar a compartirse, pero el producto continúa en desarrollo activo. Los reportes
+> **Estado:** acceso anticipado. El código de la versión 2.11.0 incorpora tamaños
+> Extra grande (200 %) y Gigante (300 %). El producto continúa en desarrollo activo. Los reportes
 > de errores y casos de compatibilidad son bienvenidos.
 
 Ofrece dos presentaciones del mismo motor: `Paleta`, inspirada en una paleta de
@@ -30,6 +30,9 @@ memoria y rutas de compatibilidad.
 
 Los paquetes oficiales listos para usar se publican en
 [GitHub Releases](https://github.com/powerelitestudio/elite-pen/releases):
+
+La distribución publicada que se enlaza a continuación es 2.10.3. Los tamaños nuevos
+están en el código 2.11.0 y pueden compilarse con los scripts de este repositorio.
 
 - [Descargar portable 2.10.3](https://github.com/powerelitestudio/elite-pen/releases/download/v2.10.3/Elite.Pen.Portable.2.10.3.zip):
   descomprime la carpeta y ejecuta `Elite Pen.exe`.
@@ -181,7 +184,7 @@ con `+` y `−` de la barra y se sale con su cierre o con `Ctrl+Shift+Z`. `P` co
 congelación clásica fuera de este flujo.
 
 Configuración permite elegir Paleta o Lineal y escalar toda la unidad al 80 %,
-100 %, 125 % o 150 %; el
+100 %, 125 %, 150 %, 200 % (Extra grande) o 300 % (Gigante); el
 100 % corresponde al tamaño Estándar original. El icono bajo el ojo contrae la unidad
 un 70 % y deja una paleta mínima. Solo el icono central la expande; el resto de la
 superficie conserva el cursor de cuatro flechas y permite moverla. La pestaña

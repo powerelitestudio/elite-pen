@@ -1,5 +1,9 @@
 # Publicación abierta de Elite Pen
 
+Desarrollo 2.11.0 (15 de octubre de 2026): añade Extra grande 200 % y Gigante 300 %.
+La publicación histórica descrita a continuación corresponde a 2.10.3; actualizar
+el código y generar paquetes locales no cambia por sí solo esa Release pública.
+
 Última actualización: 24 de septiembre de 2026. Elite Pen se mantiene en el repositorio
 público <https://github.com/powerelitestudio/elite-pen>. La versión 2.10.3 continúa
 el modelo íntegramente abierto bajo Apache License 2.0 inaugurado por 2.7.1; la

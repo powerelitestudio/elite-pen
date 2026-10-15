@@ -1,5 +1,6 @@
 #include "preferences.hpp"
 #include "history_shortcuts.hpp"
+#include "control_layout.hpp"
 
 #include <windows.h>
 
@@ -183,6 +184,42 @@ int main() {
     check(actual.hotkeys == expected.hotkeys, "custom hotkeys round trip");
     check(!std::filesystem::exists(std::filesystem::path(store.path()).wstring() + L".tmp"),
           "atomic temporary file is removed after save");
+
+    const std::array<int, 6> palette_widths{139, 174, 218, 261, 348, 522};
+    const std::array<int, 6> palette_heights{134, 168, 210, 252, 336, 504};
+    for (std::size_t index = 0; index < kPaletteScales.size(); ++index) {
+        expected.palette_size = static_cast<int>(index);
+        check(store.save(expected), "each control size saves successfully");
+        check(store.load().palette_size == expected.palette_size,
+              "all six size indices survive restart without changing legacy indices");
+        check(control_pixel_width(ControlMode::Palette, kPaletteScales[index], false) ==
+                  palette_widths[index] &&
+              control_pixel_height(ControlMode::Palette, kPaletteScales[index], false) ==
+                  palette_heights[index],
+              "palette dimensions preserve standard-relative percentages");
+    }
+    check(control_pixel_width(ControlMode::Linear, kPaletteScales[4], false) == 91 &&
+          control_pixel_height(ControlMode::Linear, kPaletteScales[4], false) == 811 &&
+          control_pixel_width(ControlMode::Linear, kPaletteScales[5], false) == 137 &&
+          control_pixel_height(ControlMode::Linear, kPaletteScales[5], false) == 1217,
+          "extra large and giant scale the linear presentation too");
+    check(control_pixel_width(ControlMode::Palette, kPaletteScales[5], true) == 157 &&
+          control_pixel_height(ControlMode::Palette, kPaletteScales[5], true) == 151 &&
+          control_pixel_height(ControlMode::Linear, kPaletteScales[5], true) == 148,
+          "giant controls keep their scaled collapsed dimensions");
+    const RECT negative_monitor{-1280, -720, 0, 0};
+    const POINT giant_position = control_position_in_work_area(
+        {-30, -30}, negative_monitor, 137, 1217);
+    check(giant_position.x == -137 && giant_position.y == -720,
+          "an oversized bar keeps its origin reachable on negative-coordinate monitors");
+    const POINT oversized_position = control_position_in_work_area(
+        {900, 600}, {0, 0, 320, 240}, 522, 504);
+    check(oversized_position.x == 0 && oversized_position.y == 0,
+          "oversized controls never use inverted position bounds");
+
+    expected.palette_size = 99;
+    check(store.save(expected) && store.load().palette_size == 5,
+          "unknown future sizes clamp to the largest supported size");
 
     if (failures == 0) std::cout << "Elite Pen preferences: all tests passed\n";
     return failures == 0 ? 0 : 1;

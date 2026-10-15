@@ -85,6 +85,18 @@ inline int control_pixel_height(ControlMode mode, float scale, bool collapsed) n
         static_cast<float>(logical_height) * scale * factor)));
 }
 
+inline POINT control_position_in_work_area(POINT desired, RECT work_area,
+                                           int width, int height) noexcept {
+    // A giant linear bar can exceed a short monitor. Keep its upper-left corner
+    // reachable without passing an inverted range to std::clamp or changing scale.
+    return {
+        std::clamp(desired.x, work_area.left,
+                   std::max(work_area.left, work_area.right - width)),
+        std::clamp(desired.y, work_area.top,
+                   std::max(work_area.top, work_area.bottom - height))
+    };
+}
+
 inline bool point_in_rect(POINT point, RECT bounds) noexcept {
     return point.x >= bounds.left && point.x <= bounds.right &&
            point.y >= bounds.top && point.y <= bounds.bottom;

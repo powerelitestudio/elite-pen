@@ -91,7 +91,6 @@ constexpr UINT kQaQueryZoomNativeSourceMessage = WM_APP + 127;
 constexpr UINT kQaQueryHistoryHookMessage = WM_APP + 128;
 constexpr ULONG_PTR kQaHistoryKeyTag = 0x4550484BU;
 constexpr UINT_PTR kTrayId = 1;
-constexpr std::array<float, 4> kPaletteScales{0.48F, 0.60F, 0.75F, 0.90F};
 constexpr std::array<float, 5> kThicknessSteps{2.0F, 4.0F, 7.0F, 12.0F, 20.0F};
 constexpr std::array<int, 5> kZoomLensDiameters{360, 440, 520, 640, 760};
 
@@ -2639,15 +2638,11 @@ void PaletteWindow::apply_size(int size) {
     MONITORINFO info{};
     info.cbSize = sizeof(info);
     GetMonitorInfoW(monitor, &info);
-    desired.left = static_cast<LONG>(std::clamp(
-        static_cast<int>(desired.left), static_cast<int>(info.rcWork.left),
-        static_cast<int>(info.rcWork.right) - next_width));
-    desired.top = static_cast<LONG>(std::clamp(
-        static_cast<int>(desired.top), static_cast<int>(info.rcWork.top),
-        static_cast<int>(info.rcWork.bottom) - next_height));
+    const POINT position = control_position_in_work_area(
+        {desired.left, desired.top}, info.rcWork, next_width, next_height);
 
     scale_ = next_scale;
-    SetWindowPos(window_, nullptr, desired.left, desired.top, next_width, next_height,
+    SetWindowPos(window_, nullptr, position.x, position.y, next_width, next_height,
                  SWP_NOACTIVATE | SWP_NOZORDER);
     if (tooltip_) {
         DestroyWindow(tooltip_);
@@ -2672,13 +2667,9 @@ void PaletteWindow::apply_mode(ControlMode mode) {
     MONITORINFO info{};
     info.cbSize = sizeof(info);
     GetMonitorInfoW(monitor, &info);
-    const int x = std::clamp(center_x - width / 2,
-                             static_cast<int>(info.rcWork.left),
-                             static_cast<int>(info.rcWork.right) - width);
-    const int y = std::clamp(center_y - height / 2,
-                             static_cast<int>(info.rcWork.top),
-                             static_cast<int>(info.rcWork.bottom) - height);
-    SetWindowPos(window_, HWND_TOPMOST, x, y, width, height,
+    const POINT position = control_position_in_work_area(
+        {center_x - width / 2, center_y - height / 2}, info.rcWork, width, height);
+    SetWindowPos(window_, HWND_TOPMOST, position.x, position.y, width, height,
                  SWP_NOACTIVATE | SWP_SHOWWINDOW);
     if (tooltip_) {
         DestroyWindow(tooltip_);
@@ -2702,13 +2693,9 @@ void PaletteWindow::set_collapsed(bool collapsed) {
     MONITORINFO info{};
     info.cbSize = sizeof(info);
     GetMonitorInfoW(monitor, &info);
-    const int x = std::clamp(center_x - width / 2,
-                             static_cast<int>(info.rcWork.left),
-                             static_cast<int>(info.rcWork.right) - width);
-    const int y = std::clamp(center_y - height / 2,
-                             static_cast<int>(info.rcWork.top),
-                             static_cast<int>(info.rcWork.bottom) - height);
-    SetWindowPos(window_, HWND_TOPMOST, x, y, width, height,
+    const POINT position = control_position_in_work_area(
+        {center_x - width / 2, center_y - height / 2}, info.rcWork, width, height);
+    SetWindowPos(window_, HWND_TOPMOST, position.x, position.y, width, height,
                  SWP_NOACTIVATE | SWP_SHOWWINDOW);
     if (tooltip_) {
         DestroyWindow(tooltip_);
@@ -4604,7 +4591,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.10.3",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.11.0",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
@@ -4649,40 +4636,41 @@ bool SettingsWindow::initialize() {
         SendMessageW(fade_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(value));
     }
     control_mode_label_ = CreateWindowW(L"STATIC", L"Presentación:",
-                                        WS_CHILD | WS_VISIBLE, 24, 270, 102, 24,
+                                        WS_CHILD | WS_VISIBLE, 24, 260, 102, 20,
                                         window_, nullptr, GetModuleHandleW(nullptr), nullptr);
     control_mode_ = CreateWindowW(L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-                                  CBS_DROPDOWNLIST, 130, 265, 190, 110, window_,
+                                  CBS_DROPDOWNLIST, 24, 280, 250, 110, window_,
                                   reinterpret_cast<HMENU>(4014),
                                   GetModuleHandleW(nullptr), nullptr);
     for (const wchar_t* value : {L"Paleta de pintor", L"Lineal vertical"}) {
         SendMessageW(control_mode_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(value));
     }
     palette_size_label_ = CreateWindowW(L"STATIC", L"Tamaño:",
-                                        WS_CHILD | WS_VISIBLE, 340, 270, 65, 24,
+                                        WS_CHILD | WS_VISIBLE, 300, 260, 65, 20,
                                         window_, nullptr, GetModuleHandleW(nullptr), nullptr);
     palette_size_ = CreateWindowW(L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-                                  CBS_DROPDOWNLIST, 405, 265, 153, 150, window_,
+                                  CBS_DROPDOWNLIST, 300, 280, 258, 220, window_,
                                   reinterpret_cast<HMENU>(4011),
                                   GetModuleHandleW(nullptr), nullptr);
     for (const wchar_t* value : {L"Compacta · 80 %", L"Estándar · 100 %",
-                                  L"Grande · 125 %", L"Muy grande · 150 %"}) {
+                                  L"Grande · 125 %", L"Muy grande · 150 %",
+                                  L"Extra grande · 200 %", L"Gigante · 300 %"}) {
         SendMessageW(palette_size_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(value));
     }
     thickness_label_ = CreateWindowW(L"STATIC", L"Grosor inicial:", WS_CHILD | WS_VISIBLE,
-                                     24, 313, 112, 24, window_, nullptr,
+                                     24, 320, 112, 24, window_, nullptr,
                                      GetModuleHandleW(nullptr), nullptr);
     thickness_ = CreateWindowW(L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-                               CBS_DROPDOWNLIST, 140, 308, 108, 160, window_,
+                               CBS_DROPDOWNLIST, 140, 315, 108, 160, window_,
                                reinterpret_cast<HMENU>(4010), GetModuleHandleW(nullptr), nullptr);
     for (const wchar_t* value : {L"2 px", L"4 px", L"7 px", L"12 px", L"20 px"}) {
         SendMessageW(thickness_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(value));
     }
     zoom_label_ = CreateWindowW(L"STATIC", L"Ampliación:", WS_CHILD | WS_VISIBLE,
-                                275, 313, 102, 24, window_, nullptr,
+                                275, 320, 102, 24, window_, nullptr,
                                 GetModuleHandleW(nullptr), nullptr);
     zoom_ = CreateWindowW(L"COMBOBOX", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
-                          CBS_DROPDOWNLIST, 380, 308, 178, 180, window_,
+                          CBS_DROPDOWNLIST, 380, 315, 178, 180, window_,
                           reinterpret_cast<HMENU>(4004), GetModuleHandleW(nullptr), nullptr);
     for (const wchar_t* value : {L"1.5×", L"2×", L"3×", L"4×", L"6×", L"8×"}) {
         SendMessageW(zoom_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(value));
@@ -4757,7 +4745,7 @@ bool SettingsWindow::initialize() {
                                     reinterpret_cast<HMENU>(4300),
                                     GetModuleHandleW(nullptr), nullptr);
     help_ = CreateWindowW(L"STATIC",
-        L"Ayuda de Elite Pen 2.10.3. Anotación, pizarra, captura y zoom para Windows. "
+        L"Ayuda de Elite Pen 2.11.0. Anotación, pizarra, captura y zoom para Windows. "
         L"Código abierto bajo Apache License 2.0. Desarrollado por Power Elite Studio.",
         WS_CHILD | SS_OWNERDRAW, 24, 119, 540, 400, window_,
         reinterpret_cast<HMENU>(4105), GetModuleHandleW(nullptr), nullptr);
@@ -4994,7 +4982,7 @@ void SettingsWindow::paint_help(HDC dc, RECT bounds) {
     SelectObject(dc, small_font_);
     SetTextColor(dc, theme_colorref(theme.text_muted));
     RECT version{bounds.left, bounds.top + 73, bounds.right, bounds.top + 94};
-    DrawTextW(dc, L"Version 2.10.3 · Windows 10 y 11 · x64", -1, &version,
+    DrawTextW(dc, L"Version 2.11.0 · Windows 10 y 11 · x64", -1, &version,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
 
     SelectObject(dc, body_font_);
@@ -5081,7 +5069,8 @@ void SettingsWindow::refresh_controls() {
     SendMessageW(highlight_cursor_, BM_SETCHECK,
                  preferences.highlight_cursor ? BST_CHECKED : BST_UNCHECKED, 0);
     SendMessageW(palette_size_, CB_SETCURSEL,
-                 static_cast<WPARAM>(std::clamp(preferences.palette_size, 0, 3)), 0);
+                 static_cast<WPARAM>(std::clamp(preferences.palette_size, 0,
+                     static_cast<int>(kPaletteScales.size()) - 1)), 0);
     SendMessageW(control_mode_, CB_SETCURSEL,
                  static_cast<WPARAM>(preferences.control_mode), 0);
     constexpr std::array<int, 4> fade_values{0, 3, 8, 15};
@@ -8275,13 +8264,10 @@ bool Controller::initialize(std::wstring& error) {
             MONITORINFO info{};
             info.cbSize = sizeof(info);
             GetMonitorInfoW(monitor, &info);
-            const int x = std::clamp(preferences_.palette_x,
-                                     static_cast<int>(info.rcWork.left),
-                                     static_cast<int>(info.rcWork.right) - palette_->pixel_width());
-            const int y = std::clamp(preferences_.palette_y,
-                                     static_cast<int>(info.rcWork.top),
-                                     static_cast<int>(info.rcWork.bottom) - palette_->pixel_height());
-            SetWindowPos(palette_->hwnd(), HWND_TOPMOST, x, y, 0, 0,
+            const POINT position = control_position_in_work_area(
+                {preferences_.palette_x, preferences_.palette_y}, info.rcWork,
+                palette_->pixel_width(), palette_->pixel_height());
+            SetWindowPos(palette_->hwnd(), HWND_TOPMOST, position.x, position.y, 0, 0,
                          SWP_NOSIZE | SWP_NOACTIVATE);
         }
     }
