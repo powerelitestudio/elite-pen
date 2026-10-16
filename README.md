@@ -10,8 +10,9 @@ pantalla para Windows, desarrollada por [Power Elite Studio](https://powerelite.
 Permite explicar sobre cualquier aplicación sin convertir la presentación en una
 sucesión de ventanas y menús.
 
-> **Estado:** acceso anticipado. El código de la versión 2.11.0 incorpora tamaños
-> Extra grande (200 %) y Gigante (300 %). El producto continúa en desarrollo activo. Los reportes
+> **Estado:** acceso anticipado. El código de la versión 2.12.0 incorpora Tacha,
+> Chulito, Advertencia y Prohibido con atajos configurables para macropads, además
+> de los tamaños Extra grande (200 %) y Gigante (300 %). Los reportes
 > de errores y casos de compatibilidad son bienvenidos.
 
 Ofrece dos presentaciones del mismo motor: `Paleta`, inspirada en una paleta de
@@ -31,8 +32,8 @@ memoria y rutas de compatibilidad.
 Los paquetes oficiales listos para usar se publican en
 [GitHub Releases](https://github.com/powerelitestudio/elite-pen/releases):
 
-La distribución publicada que se enlaza a continuación es 2.10.3. Los tamaños nuevos
-están en el código 2.11.0 y pueden compilarse con los scripts de este repositorio.
+La distribución publicada que se enlaza a continuación es 2.10.3. Los símbolos y
+tamaños nuevos están en el código 2.12.0 y pueden compilarse con los scripts del repositorio.
 
 - [Descargar portable 2.10.3](https://github.com/powerelitestudio/elite-pen/releases/download/v2.10.3/Elite.Pen.Portable.2.10.3.zip):
   descomprime la carpeta y ejecuta `Elite Pen.exe`.
@@ -50,8 +51,8 @@ oficial y compara el SHA-256 publicado con cada versión.
 - Usar un cursor de lápiz nativo, preciso y visible en lugar de la cruz genérica;
   su cuerpo se inclina hacia abajo para no cubrir el texto durante el subrayado.
 - Ocultar y recuperar anotaciones sin perderlas.
-- Crear texto, lineas, rectangulos, elipses, pentagonos, hexagonos, flechas rectas y
-  flechas curvas.
+- Crear texto, lineas, rectangulos, elipses, pentagonos, hexagonos, flechas rectas,
+  flechas curvas y símbolos de tacha, chulito, advertencia y prohibido.
 - Capturar una region en PNG y copiarla al portapapeles, incluido el zoom congelado
   con sus anotaciones visibles.
 - Usar pizarras blanca y negra instantaneas.
@@ -137,10 +138,23 @@ arrastre sin cambiar de herramienta: `Shift` crea una línea, `Ctrl` un rectáng
 `Tab` una elipse, `Ctrl+Shift` una flecha y `Shift+Tab` una flecha curva Bézier.
 Al soltar las teclas, el siguiente gesto vuelve a ser dibujo libre.
 
-El panel `Figuras` reúne siete opciones visuales sin nombres: Línea, Rectángulo,
-Elipse, Flecha, Flecha curva, Pentágono y Hexágono. Los dos polígonos se seleccionan
-desde este panel y no tienen atajos de teclado predeterminados; `Shift` durante el
-arrastre conserva ejes iguales para producir su proporción regular.
+El panel `Figuras` reúne once opciones visuales: Línea, Rectángulo, Elipse, Flecha,
+Flecha curva, Pentágono, Hexágono, Tacha (X), Chulito, Advertencia y Prohibido.
+Los símbolos son figuras vectoriales que usan el color y grosor seleccionados.
+Un clic coloca un símbolo de 64 píxeles; arrastrar define su tamaño. `Shift`
+durante el arrastre conserva ejes iguales en símbolos, polígonos, rectángulos y elipses.
+Cada símbolo es un solo objeto: borrarlo, deshacerlo o rehacerlo requiere una acción.
+Funcionan en el escritorio, las pizarras, el zoom congelado y el Zoom editable.
+
+Todas las figuras tienen su propia acción en `Configuración > Atajos`.
+Los dos polígonos y los cuatro símbolos se entregan `Sin asignar` para conservar
+las combinaciones del usuario. Para usar un macropad, pulsa el lápiz de una acción,
+envía la combinación deseada desde el teclado o el dispositivo y programa esa
+misma combinación en su botón. Por ejemplo, F13, F14, F15 y F16 para los cuatro
+símbolos; se admiten F1–F24 sin modificadores y combinaciones con Ctrl, Alt, Shift o Win.
+Los atajos de figuras son globales y activan directamente la herramienta incluso
+desde modo cursor; después coloca el símbolo con un clic o un arrastre.
+Las asignaciones se guardan entre sesiones y se rechazan combinaciones ocupadas.
 
 Texto se escribe directamente desde el punto seleccionado: la superficie es
 transparente por píxel y solo muestra el caret y los caracteres, nunca una caja.

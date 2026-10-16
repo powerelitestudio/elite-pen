@@ -1,6 +1,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <deque>
@@ -104,7 +105,11 @@ enum class Tool : std::uint8_t {
     Screenshot,
     Zoom,
     Pentagon,
-    Hexagon
+    Hexagon,
+    Cross,
+    Checkmark,
+    Warning,
+    Prohibition
 };
 
 [[nodiscard]] const wchar_t* tool_name(Tool tool) noexcept;
@@ -153,6 +158,27 @@ struct ArrowHead {
 [[nodiscard]] std::vector<PointF> polygon_vertices(PointF first,
                                                    PointF opposite,
                                                    std::size_t sides);
+[[nodiscard]] constexpr bool is_symbol_tool(Tool tool) noexcept {
+    return tool == Tool::Cross || tool == Tool::Checkmark ||
+           tool == Tool::Warning || tool == Tool::Prohibition;
+}
+
+struct SymbolSegment {
+    PointF start{};
+    PointF end{};
+};
+
+// Shared vector geometry for canvas rendering, tool icons and selective erasing.
+// Separate segments keep the cross and warning from acquiring connector strokes.
+struct SymbolGeometry {
+    std::array<SymbolSegment, 4> segments{};
+    std::size_t segment_count{};
+    std::optional<RectF> ellipse;
+    std::optional<PointF> dot;
+};
+
+[[nodiscard]] SymbolGeometry symbol_geometry(Tool tool, PointF first,
+                                              PointF opposite) noexcept;
 [[nodiscard]] bool hit_test(const Drawable& item, PointF point, float tolerance = 3.0F) noexcept;
 [[nodiscard]] std::vector<PointF> simplify_path(const std::vector<PointF>& input,
                                                 float epsilon);

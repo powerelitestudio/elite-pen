@@ -424,6 +424,63 @@ void test_lens_screen_edges() {
           "fullscreen and docked zoom retain their monitor-clamped behavior");
 }
 
+void test_symbols() {
+    for (Tool tool : {Tool::Cross, Tool::Checkmark, Tool::Warning, Tool::Prohibition}) {
+        check(is_symbol_tool(tool) && is_drawing_tool(tool),
+              "all four symbols are drawing tools");
+        Drawable symbol;
+        symbol.kind = tool;
+        symbol.width = 4;
+        symbol.points = {{-210, -160}, {-110, -60}};
+        const auto geometry = symbol_geometry(tool, symbol.points[0], symbol.points[1]);
+        const auto reversed = symbol_geometry(tool, symbol.points[1], symbol.points[0]);
+        check(geometry.segment_count > 0 && geometry.segment_count == reversed.segment_count,
+              "drag direction preserves symbol geometry");
+        for (std::size_t index = 0; index < geometry.segment_count; ++index) {
+            const auto& segment = geometry.segments[index];
+            const PointF middle{(segment.start.x + segment.end.x) * 0.5F,
+                                 (segment.start.y + segment.end.y) * 0.5F};
+            check(hit_test(symbol, middle, 1), "every symbol stroke is erasable");
+            check(symbol.bounds().contains(segment.start) &&
+                  symbol.bounds().contains(segment.end), "symbol bounds contain its strokes");
+            check(distance(segment.start, reversed.segments[index].start) < 0.001F &&
+                  distance(segment.end, reversed.segments[index].end) < 0.001F,
+                  "reverse drags do not mirror the check or warning");
+        }
+        Document document;
+        document.add(symbol);
+        check(document.items().size() == 1 && document.undo() && document.empty() &&
+              document.redo() && document.items().size() == 1,
+              "a multi-stroke symbol has one undo and redo operation");
+        const auto& segment = geometry.segments[0];
+        check(document.erase_at(segment.start, 1) && document.empty() && document.undo(),
+              "erasing one symbol stroke removes and restores the entire symbol");
+    }
+    Drawable symbol;
+    symbol.width = 4;
+    symbol.points = {{0, 0}, {100, 100}};
+    symbol.kind = Tool::Cross;
+    check(hit_test(symbol, {50, 50}, 1) && !hit_test(symbol, {50, 0}, 1),
+          "cross has two diagonals with no phantom connecting segment");
+    symbol.kind = Tool::Checkmark;
+    check(hit_test(symbol, {35, 100}, 1) && !hit_test(symbol, {50, 20}, 1),
+          "checkmark follows its two strokes rather than its bounding box");
+    symbol.kind = Tool::Warning;
+    check(hit_test(symbol, {50, 82}, 1) && hit_test(symbol, {50, 48}, 1) &&
+          !hit_test(symbol, {50, 72}, 1) && !hit_test(symbol, {25, 65}, 1),
+          "warning has an erasable exclamation dot and empty interior gaps");
+    symbol.kind = Tool::Prohibition;
+    check(hit_test(symbol, {100, 50}, 1) && hit_test(symbol, {50, 50}, 1) &&
+          !hit_test(symbol, {25, 60}, 1),
+          "prohibition outline and slash erase without filling the circle");
+    symbol.points = {{200, 80}, {0, 0}};
+    symbol.invalidate_bounds_cache();
+    check(hit_test(symbol, {200, 40}, 1) && hit_test(symbol, {100, 40}, 1),
+          "non-square prohibition follows a reversed ellipse and its slash");
+    check(symbol_geometry(Tool::Pen, {0, 0}, {100, 100}).segment_count == 0,
+          "freehand tools do not acquire symbol geometry");
+}
+
 void test_history_limit() {
     Document document(2);
     document.add(line({0, 0}, {1, 1}));
@@ -442,6 +499,7 @@ int main() {
     test_erase_and_redo_invalidation();
     test_compound_erase();
     test_hit_testing();
+    test_symbols();
     test_simplification();
     test_modifier_gestures();
     test_history_limit();

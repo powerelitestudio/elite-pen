@@ -79,6 +79,13 @@ int main() {
     check(std::filesystem::path(store.path()).parent_path() == data,
           "portable settings stay beside the executable");
     const Preferences fresh = store.load();
+    check(kHotkeyActionCount == 46 && kGlobalHotkeyActionCount == 36,
+          "symbols have four global actions while all ten zoom actions stay contextual");
+    for (auto action : {HotkeyAction::Cross, HotkeyAction::Checkmark,
+                        HotkeyAction::Warning, HotkeyAction::Prohibition}) {
+        check(fresh.hotkeys[static_cast<std::size_t>(action)] == HotkeyBinding{},
+              "symbols do not occupy a new global shortcut until assigned");
+    }
     check(fresh.theme == AppTheme::Light,
           "fresh installations start with the light appearance");
     check(fresh.hotkeys[static_cast<std::size_t>(HotkeyAction::ZoomEdit)] ==
@@ -136,6 +143,26 @@ int main() {
               HotkeyBinding{0, 'E'},
           "legacy settings gain editable zoom without shifting saved actions");
 
+    {
+        std::ofstream previous(std::filesystem::path(store.path()),
+                               std::ios::binary | std::ios::trunc);
+        previous << "[ElitePen]\r\nHotkeySchemeVersion=2\r\n"
+                    "HotkeyPentagon=3,119\r\nHotkeyHexagon=6,120\r\n"
+                    "HotkeyZoomFreeze=1,80\r\nHotkeyZoomEdit=1,69\r\n";
+    }
+    const Preferences previous_version = store.load();
+    check(previous_version.hotkeys[static_cast<std::size_t>(HotkeyAction::Pentagon)] ==
+              HotkeyBinding{3, 119} &&
+          previous_version.hotkeys[static_cast<std::size_t>(HotkeyAction::Hexagon)] ==
+              HotkeyBinding{6, 120} &&
+          previous_version.hotkeys[static_cast<std::size_t>(HotkeyAction::ZoomFreeze)] ==
+              HotkeyBinding{MOD_ALT, 'P'} &&
+          previous_version.hotkeys[static_cast<std::size_t>(HotkeyAction::ZoomEdit)] ==
+              HotkeyBinding{MOD_ALT, 'E'},
+          "adding symbols preserves existing polygon and contextual zoom keys by name");
+    check(previous_version.hotkeys[static_cast<std::size_t>(HotkeyAction::Cross)] ==
+              HotkeyBinding{}, "old settings gain symbols without overwriting user bindings");
+
     Preferences expected;
     expected.theme = AppTheme::Light;
     expected.control_mode = ControlMode::Linear;
@@ -165,6 +192,10 @@ int main() {
     expected.hotkeys[static_cast<std::size_t>(HotkeyAction::ZoomIn)] = {};
     expected.hotkeys[static_cast<std::size_t>(HotkeyAction::ZoomEdit)] =
         {MOD_ALT, 'E'};
+    for (std::size_t offset = 0; offset < 4; ++offset) {
+        expected.hotkeys[static_cast<std::size_t>(HotkeyAction::Cross) + offset] =
+            {0, VK_F13 + static_cast<UINT>(offset)};
+    }
 
     check(store.save(expected), "preferences save atomically");
     const Preferences actual = store.load();

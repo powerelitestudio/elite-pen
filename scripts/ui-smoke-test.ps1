@@ -60,11 +60,16 @@ public static class ElitePenUiNative {
     [DllImport("user32.dll")] public static extern int GetWindowRgn(IntPtr window, IntPtr region);
     [DllImport("user32.dll")] public static extern bool SetWindowPos(IntPtr window, IntPtr insertAfter,
         int x, int y, int width, int height, uint flags);
+    [DllImport("user32.dll")] public static extern bool RedrawWindow(
+        IntPtr window, IntPtr updateRectangle, IntPtr updateRegion, uint flags);
+    [DllImport("dwmapi.dll")] public static extern int DwmFlush();
     [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT point);
     [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
     [DllImport("user32.dll")] public static extern bool GetCursorPos(out POINT point);
     [DllImport("user32.dll")] public static extern void mouse_event(
         uint flags, uint dx, uint dy, uint data, UIntPtr extraInfo);
+    [DllImport("user32.dll")] public static extern void keybd_event(
+        byte key, byte scan, uint flags, UIntPtr extraInfo);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern bool SetWindowText(IntPtr window, string value);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetWindowText(
         IntPtr window, StringBuilder value, int count);
@@ -183,6 +188,9 @@ function Assert-Ui([bool]$Condition, [string]$Message) {
 }
 
 function Save-WindowImage([IntPtr]$Window, [string]$Name) {
+    $null = [ElitePenUiNative]::RedrawWindow($Window, [IntPtr]::Zero, [IntPtr]::Zero, 0x0181)
+    $null = [ElitePenUiNative]::DwmFlush()
+    Start-Sleep -Milliseconds 80
     $bounds = New-Object ElitePenUiNative+RECT
     if (-not [ElitePenUiNative]::GetWindowRect($Window, [ref]$bounds)) { return }
     $width = $bounds.Right - $bounds.Left
@@ -263,6 +271,23 @@ function Select-Tool([IntPtr]$Palette, [int]$Index) {
     $column = $Index % 2
     $row = [Math]::Floor($Index / 2)
     Click-Window $tools (96 + 169 * $column) (68 + 48 * $row)
+}
+
+function Test-ZoomSymbols([IntPtr]$Palette, [IntPtr]$Ink, [IntPtr]$CounterWindow, [int]$CounterMessage) {
+    foreach ($symbolTool in @(14, 15, 16, 17)) {
+        Select-Tool $Palette $symbolTool
+        $before = [ElitePenUiNative]::SendMessage(
+            $CounterWindow, $CounterMessage, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        Click-Window $Ink 300 200
+        Assert-Ui ([ElitePenUiNative]::SendMessage(
+            $CounterWindow, $CounterMessage, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64() -eq ($before + 1)) `
+            "Zoom did not commit symbol $symbolTool as one annotation."
+        $null = [ElitePenUiNative]::SendMessage($Palette, 0x0312, [IntPtr]4, [IntPtr]::Zero)
+        Assert-Ui ([ElitePenUiNative]::SendMessage(
+            $CounterWindow, $CounterMessage, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64() -eq $before) `
+            "Zoom did not undo symbol $symbolTool in one step."
+    }
+    Select-Tool $Palette 1
 }
 
 function Click-ThroughOverlay([IntPtr]$Palette, [int]$X, [int]$Y) {
@@ -473,8 +498,8 @@ try {
     if ($toolPanel -ne [IntPtr]::Zero) {
         $toolPanelBounds = New-Object ElitePenUiNative+RECT
         $null = [ElitePenUiNative]::GetWindowRect($toolPanel, [ref]$toolPanelBounds)
-        Assert-Ui (($toolPanelBounds.Bottom - $toolPanelBounds.Top) -eq 448) 'Complete tool panel did not expose its Settings row.'
-        Click-Window $toolPanel 180 409
+        Assert-Ui (($toolPanelBounds.Bottom - $toolPanelBounds.Top) -eq 544) 'Complete tool panel did not expose its Settings row.'
+        Click-Window $toolPanel 180 505
     }
 
     # Settings remains directly accessible through the handle panel.
@@ -527,6 +552,27 @@ try {
         Assert-Ui ([ElitePenUiNative]::IsWindowVisible($firstHotkeyEditor) -and
                    [ElitePenUiNative]::WindowText($lastHotkey) -eq 'E') `
             'Shortcut list did not expose the configurable E action for editable zoom.'
+        # Assign the four real global F13-F16 bindings through the pencil editors.
+        # These are sent as keyboard input below, like a programmable macropad.
+        $null = [ElitePenUiNative]::SendMessage(
+            $settings, 0x0115, [IntPtr]((32 -shl 16) -bor 4), $shortcutScrollbar)
+        for ($symbolIndex = 0; $symbolIndex -lt 4; $symbolIndex++) {
+            $editor = [ElitePenUiNative]::GetDlgItem($settings, (4400 + $symbolIndex))
+            $null = [ElitePenUiNative]::SendMessage($editor, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
+            $null = [ElitePenUiNative]::SendMessage(
+                $settings, 0x0100, [IntPtr](0x7C + $symbolIndex), [IntPtr]1)
+            $value = [ElitePenUiNative]::GetDlgItem($settings, (4200 + $symbolIndex))
+            Assert-Ui ([ElitePenUiNative]::WindowText($value) -eq ('F' + (13 + $symbolIndex))) `
+                "Symbol $symbolIndex could not receive its own global function key."
+        }
+        # Re-enter a registered key: Windows delivers WM_HOTKEY instead of
+        # WM_KEYDOWN, and the editor must retain it without activating the tool.
+        $null = [ElitePenUiNative]::SendMessage($firstHotkeyEditor, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
+        $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]33, [IntPtr]::Zero)
+        Assert-Ui ([ElitePenUiNative]::IsWindowVisible($settings) -and
+                   [ElitePenUiNative]::WindowText($firstHotkey) -eq 'F13') `
+            'Re-entering a registered macropad key activated its old tool instead of capturing it.'
+        Save-WindowImage $settings 'settings-symbol-shortcuts.png'
         $null = [ElitePenUiNative]::SendMessage($helpTab, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
         Assert-Ui ([ElitePenUiNative]::IsWindowVisible($helpPanel) -and
                    [ElitePenUiNative]::IsWindowVisible($helpWebsite) -and
@@ -785,8 +831,7 @@ try {
     $overlay = Wait-Window 'ElitePen.Overlay'
     Assert-Ui ($overlay -ne [IntPtr]::Zero) 'Overlay disappeared during UI test.'
 
-    # The compact geometry panel exposes all seven icon-only figures in two
-    # balanced rows. Pentagon and hexagon intentionally have no default hotkey.
+    # Eleven figures, including the four symbols, occupy three balanced rows.
     $null = [ElitePenUiNative]::SendMessage(
         $palette, 0x0312, [IntPtr]20, [IntPtr]::Zero)
     $geometryPanel = Wait-Window 'ElitePen.Tools' 1000
@@ -796,10 +841,10 @@ try {
     if ($geometryPanel -ne [IntPtr]::Zero) {
         $geometryBounds = New-Object ElitePenUiNative+RECT
         $null = [ElitePenUiNative]::GetWindowRect($geometryPanel, [ref]$geometryBounds)
-        Assert-Ui (($geometryBounds.Bottom - $geometryBounds.Top) -eq 172) `
-            'Seven geometry options were not arranged in the compact two-row panel.'
+        Assert-Ui (($geometryBounds.Bottom - $geometryBounds.Top) -eq 232) `
+            'Eleven geometry options were not arranged in the three-row panel.'
         Save-WindowImage $geometryPanel 'geometry-panel.png'
-        Click-Window $geometryPanel 183 129
+        Click-Window $geometryPanel 149 129
         $selectedPentagon = [ElitePenUiNative]::SendMessage(
             $palette, 0x805A, [IntPtr]::Zero, [IntPtr]::Zero)
         Assert-Ui ($selectedPentagon.ToInt64() -eq 12) `
@@ -808,15 +853,47 @@ try {
         $null = [ElitePenUiNative]::SendMessage(
             $palette, 0x0312, [IntPtr]20, [IntPtr]::Zero)
         $geometryPanel = Wait-Window 'ElitePen.Tools' 1000
-        Click-Window $geometryPanel 251 129
+        Click-Window $geometryPanel 217 129
         $selectedHexagon = [ElitePenUiNative]::SendMessage(
             $palette, 0x805A, [IntPtr]::Zero, [IntPtr]::Zero)
         Assert-Ui ($selectedHexagon.ToInt64() -eq 13) `
             'Hexagon option did not select the six-sided drawing tool.'
+        foreach ($symbolCell in @(@(285,129,14), @(115,189,15), @(183,189,16), @(251,189,17))) {
+            $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]20, [IntPtr]::Zero)
+            Click-Window $geometryPanel $symbolCell[0] $symbolCell[1]
+            Assert-Ui ([ElitePenUiNative]::SendMessage(
+                $palette, 0x805A, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64() -eq $symbolCell[2]) `
+                "Geometry cell did not select symbol $($symbolCell[2])."
+        }
     }
 
-    # Pen, highlighter, line, rectangle, ellipse, arrows and both polygons.
-    foreach ($toolIndex in @(1, 2, 4, 5, 6, 7, 8, 12, 13)) {
+    for ($symbolIndex = 0; $symbolIndex -lt 4; $symbolIndex++) {
+        Select-Tool $palette 0
+        [ElitePenUiNative]::keybd_event([byte](0x7C + $symbolIndex), 0, 0, [UIntPtr]::Zero)
+        [ElitePenUiNative]::keybd_event([byte](0x7C + $symbolIndex), 0, 2, [UIntPtr]::Zero)
+        Start-Sleep -Milliseconds 150
+        Assert-Ui ([ElitePenUiNative]::SendMessage(
+            $palette, 0x805A, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64() -eq (14 + $symbolIndex)) `
+            "Macropad function key did not activate symbol $symbolIndex from cursor mode."
+        $beforeStamp = [ElitePenUiNative]::SendMessage(
+            $palette, 0x805E, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+        Click-Window $overlay (300 + 100 * $symbolIndex) 200
+        Assert-Ui ([ElitePenUiNative]::SendMessage(
+            $palette, 0x805E, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64() -eq ($beforeStamp + 1)) `
+            'A symbol click must create exactly one complete annotation.'
+        Select-Tool $palette 3
+        # Warning is hit on its top vertex; the other three share the center.
+        $eraseX = 332 + 100 * $symbolIndex
+        if ($symbolIndex -eq 1) { $eraseX = 322 + 100 * $symbolIndex }
+        $eraseY = if ($symbolIndex -eq 2) { 200 } elseif ($symbolIndex -eq 1) { 264 } else { 232 }
+        Click-Window $overlay $eraseX $eraseY
+        Assert-Ui ([ElitePenUiNative]::SendMessage(
+            $palette, 0x805E, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64() -eq $beforeStamp) `
+            'Erasing a symbol stroke must remove the complete click stamp.'
+    }
+
+    # Existing tools, polygons and all four new symbols also support drag sizing.
+    foreach ($toolIndex in @(1, 2, 4, 5, 6, 7, 8, 12, 13, 14, 15, 16, 17)) {
         Select-Tool $palette $toolIndex
         Click-Window $overlay (260 + 5 * $toolIndex) (260 + 3 * $toolIndex)
         $start = [IntPtr](((260 + 3 * $toolIndex) -shl 16) -bor ((260 + 5 * $toolIndex) -band 0xffff))
@@ -1107,6 +1184,7 @@ try {
         Assert-Ui ($editState -eq 2) `
             'Editable zoom could not return to annotation after the Space regression check.'
 
+        Test-ZoomSymbols $palette $zoomInk $zoom 0x8073
         Select-Tool $palette 1
         $editStart = [IntPtr]((220 -shl 16) -bor 300)
         $editFinish = [IntPtr]((300 -shl 16) -bor 450)
@@ -1328,6 +1406,7 @@ try {
                    [ElitePenUiNative]::IsAboveClass($palette, 'ElitePen.Zoom')) `
             'Zoom surfaces covered the palette while annotation mode was active.'
         if ($zoomInk -ne [IntPtr]::Zero) {
+            Test-ZoomSymbols $palette $zoomInk $zoomInk 0x8062
             Click-PaletteWindow $palette 169 53
             $start = [IntPtr]((220 -shl 16) -bor 300)
             $finish = [IntPtr]((290 -shl 16) -bor 430)
@@ -1559,6 +1638,7 @@ if ($clipboardOpenedAfterExit) {
 }
 
 if ($failures.Count -gt 0) {
+    $failures | ForEach-Object { Write-Output "FAILED: $_" }
     $failures | ForEach-Object { Write-Error $_ }
     exit 1
 }

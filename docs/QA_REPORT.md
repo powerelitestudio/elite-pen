@@ -1,4 +1,34 @@
-# Informe de calidad — Elite Pen 2.11.0
+# Informe de calidad — Elite Pen 2.12.0
+
+Fecha de validación de símbolos y atajos: 2026-10-16.
+
+## Símbolos y macropad — 2.12.0
+
+- Núcleo, preferencias y rendimiento CPU aprobados en Debug y Release. La geometría
+  común cubre las cuatro figuras, arrastres invertidos, coordenadas negativas,
+  contornos, huecos, punto de advertencia y un solo paso de borrar/deshacer/rehacer.
+- Se conservan las claves guardadas de polígonos y zoom; los cuatro símbolos llegan
+  sin asignar. F13–F16 sobreviven al guardado y carga de preferencias.
+- Smoke completo de interfaz aprobado con el binario Release final. Asigna F13–F16
+  desde los editores y envía eventos de teclado a Windows para activar los cuatro
+  símbolos desde modo cursor. También verifica volver a capturar un atajo registrado
+  sin activar su herramienta anterior y muestra nombres explícitos F1–F24.
+- Once figuras en tres filas de 232 px; panel completo de 544 px con Configuración
+  accesible. Se prueban selección por iconos, clic para estampar, arrastre y borrado
+  completo de cada símbolo. La caja de detección se invalida al completar el clic
+  para incluir los 64 px finales y evitar tinta fuera del área cacheada.
+- Zoom congelado y Zoom editable admiten los cuatro símbolos y los deshacen en un
+  solo paso; el resto del recorrido de texto, capturas, pizarras y zoom sigue pasando.
+- Rendimiento GPU con 5.000 trazos y 240 cuadros: caché 0,500 ms/cuadro; dibujo
+  activo 0,963 ms/cuadro; Mano editable 0,131 ms/cuadro; memoria 250,33 MiB.
+  Población 244,530 ms, primer cuadro 54,826 ms; primer Lápiz editable 68,339 ms
+  y retorno caliente 17,371 ms. Todos los presupuestos aprobados.
+- Instalación local actualizada a 2.12.0 después de respaldar aplicación, preferencias
+  y registro. El ejecutable instalado coincide con el build validado y los bytes de
+  preferencias permanecen idénticos. Las pruebas usan copias portables aisladas.
+- La activación de macropad se valida mediante teclado simulado; no se declara una
+  prueba ni programación de hardware físico. Tampoco una nueva matriz física de
+  OBS, presión o Windows 10/11. La última Release pública sigue siendo 2.10.3.
 
 Fecha de validación de tamaños: 2026-10-15.
 

@@ -1,6 +1,6 @@
-# Elite Pen 2.11.0 — contrato de producto
+# Elite Pen 2.12.0 — contrato de producto
 
-Estado: versión 2.11.0 implementada como software de código abierto bajo Apache
+Estado: versión 2.12.0 implementada como software de código abierto bajo Apache
 License 2.0 y preparada para distribución pública portable e instalada.
 
 ## 1. Identidad e interaccion principal
@@ -132,10 +132,22 @@ los gestos propios de Texto, Borrador ni una figura elegida explícitamente.
 
 El panel abierto desde el mango reune todas las herramientas en un solo lugar y
 añade una fila independiente para Configuracion. El acceso `Figuras` presenta Línea,
-Rectángulo, Elipse, Flecha, Flecha curva, Pentágono y Hexágono en dos filas centradas,
-solo mediante iconos. Pentágono y Hexágono aparecen en Configuración > Atajos como
-acciones personalizables, pero se entregan `Sin asignar` y no ocupan combinaciones
-predeterminadas.
+Rectángulo, Elipse, Flecha, Flecha curva, Pentágono, Hexágono, Tacha (X), Chulito,
+Advertencia y Prohibido en tres filas centradas mediante iconos. El panel completo
+crece automáticamente con su número de herramientas y mantiene Configuración al final.
+Pentágono, Hexágono y los cuatro símbolos aparecen en Configuración > Atajos como
+acciones globales personalizables, pero se entregan `Sin asignar`. Los atajos previos
+se conservan por sus claves de preferencias, incluidos los diez contextuales de zoom.
+
+Los símbolos son geometría vectorial nativa, sin dependencia de glifos emoji. Usan
+color y grosor actuales. Un clic coloca una figura de 64 px visuales; arrastrar define
+su caja y Shift conserva sus ejes iguales. En Zoom editable, esos 64 px se convierten
+a coordenadas de origen según la escala actual. Cada símbolo constituye una sola
+operación de documento, incluidos los dos trazos de la X y el punto de la advertencia.
+El borrador reconoce las líneas, el círculo y el punto sin seleccionar sus espacios
+vacíos. El mismo generador geométrico alimenta renderizado, iconos y hit testing.
+Las cuatro acciones globales admiten F1–F24 o combinaciones modificadas; un macropad
+puede emitir exactamente esas mismas teclas. No se programa ni presupone el hardware.
 Los glifos de Flecha y Flecha curva usan cabezales simétricos de dos alas. La punta
 recta sigue el eje de su segmento; la curva sigue la tangente final de una Bézier de
 arco amplio. Su escala óptica es independiente del tamaño mínimo accesible usado al

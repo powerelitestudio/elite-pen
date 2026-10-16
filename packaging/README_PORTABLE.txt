@@ -1,4 +1,4 @@
-ELITE PEN 2.11.0 — EDICION PORTABLE
+ELITE PEN 2.12.0 — EDICION PORTABLE
 ================================
 
 Elite Pen es la herramienta de anotacion, pizarra y ampliacion de pantalla de
@@ -28,9 +28,14 @@ CONTROLES PRINCIPALES
 - Papelera: limpiar; la accion se puede deshacer.
 - Texto: seleccionalo en Herramientas, pulsa el punto de insercion y escribe sobre la
   pantalla. Ctrl+Enter confirma y Esc cancela.
-- Figuras: el panel incluye Linea, Rectangulo, Elipse, Flecha, Flecha curva,
-  Pentagono y Hexagono. Ambos aparecen en Configuracion > Atajos, pero se entregan
-  Sin asignar y no ocupan combinaciones predeterminadas.
+- Figuras: Linea, Rectangulo, Elipse, Flecha, Flecha curva, Pentagono, Hexagono,
+  Tacha (X), Chulito, Advertencia y Prohibido. Un clic coloca un simbolo; arrastrar
+  ajusta su tamano. Shift mantiene ejes iguales. Usan el color y grosor actuales.
+- Todas las figuras tienen una accion propia en Configuracion > Atajos. Los dos
+  poligonos y los cuatro simbolos llegan Sin asignar. Pulsa el lapiz de la accion
+  y presiona la combinacion que emitira tu macropad (por ejemplo F13-F16).
+  Se aceptan F1-F24 solas o combinaciones con Ctrl, Alt, Shift o Win.
+  Cada simbolo se borra, deshace o rehace como un solo objeto.
 
 ATAJOS
 ------
@@ -96,7 +101,7 @@ Configuracion.
 
 SOPORTE
 -------
-Producto de Power Elite Studio. Version 2.11.0.
+Producto de Power Elite Studio. Version 2.12.0.
 Sitio oficial: https://powerelite.studio/
 Codigo fuente: https://github.com/powerelitestudio/elite-pen
 

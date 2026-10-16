@@ -95,6 +95,10 @@ const wchar_t* tool_name(Tool tool) noexcept {
         case Tool::Zoom: return L"Zoom";
         case Tool::Pentagon: return L"Pentagono";
         case Tool::Hexagon: return L"Hexagono";
+        case Tool::Cross: return L"Tacha (X)";
+        case Tool::Checkmark: return L"Chulito";
+        case Tool::Warning: return L"Advertencia";
+        case Tool::Prohibition: return L"Prohibido";
     }
     return L"Herramienta";
 }
@@ -210,6 +214,41 @@ std::vector<PointF> polygon_vertices(PointF first, PointF opposite,
         const float angle = kStartAngle + step * static_cast<float>(index);
         result.push_back({center_x + std::cos(angle) * radius_x,
                           center_y + std::sin(angle) * radius_y});
+    }
+    return result;
+}
+
+SymbolGeometry symbol_geometry(Tool tool, PointF first, PointF opposite) noexcept {
+    const RectF rect{std::min(first.x, opposite.x), std::min(first.y, opposite.y),
+                     std::max(first.x, opposite.x), std::max(first.y, opposite.y)};
+    const auto at = [&rect](float x, float y) {
+        return PointF{rect.left + x * rect.width(), rect.top + y * rect.height()};
+    };
+    SymbolGeometry result;
+    const auto segment = [&result](PointF start, PointF end) {
+        result.segments[result.segment_count++] = {start, end};
+    };
+    switch (tool) {
+        case Tool::Cross:
+            segment(at(0, 0), at(1, 1));
+            segment(at(0, 1), at(1, 0));
+            break;
+        case Tool::Checkmark:
+            segment(at(0, 0.55F), at(0.35F, 1));
+            segment(at(0.35F, 1), at(1, 0));
+            break;
+        case Tool::Warning:
+            segment(at(0.5F, 0), at(1, 1));
+            segment(at(1, 1), at(0, 1));
+            segment(at(0, 1), at(0.5F, 0));
+            segment(at(0.5F, 0.38F), at(0.5F, 0.64F));
+            result.dot = at(0.5F, 0.82F);
+            break;
+        case Tool::Prohibition:
+            result.ellipse = rect;
+            segment(at(0.14644661F, 0.14644661F), at(0.85355339F, 0.85355339F));
+            break;
+        default: break;
     }
     return result;
 }
@@ -348,6 +387,27 @@ bool hit_test(const Drawable& item, PointF point, float tolerance) noexcept {
     if (!item.bounds().contains(point)) return false;
 
     if (item.kind == Tool::Text) return item.bounds().contains(point);
+    if (is_symbol_tool(item.kind)) {
+        if (item.points.size() < 2) return false;
+        const auto geometry = symbol_geometry(
+            item.kind, item.points.front(), item.points.back());
+        const float radius = tolerance + item.width * 0.5F;
+        for (std::size_t index = 0; index < geometry.segment_count; ++index) {
+            const auto& segment = geometry.segments[index];
+            if (squared_distance_to_segment(point, segment.start, segment.end) <=
+                radius * radius) return true;
+        }
+        if (geometry.dot && distance(point, *geometry.dot) <=
+                tolerance + item.width * 0.65F) return true;
+        if (!geometry.ellipse) return false;
+        // Reuse the ellipse's pixel-based outline test without connecting its
+        // perimeter to the prohibition slash or treating the interior as filled.
+        Drawable outline;
+        outline.kind = Tool::Ellipse;
+        outline.width = item.width;
+        outline.points = item.points;
+        return hit_test(outline, point, tolerance);
+    }
     if (item.kind == Tool::CurvedArrow) return curved_arrow_hit(item, point, tolerance);
     if (tool_polygon_sides(item.kind) != 0)
         return polygon_hit(item, point, tolerance);

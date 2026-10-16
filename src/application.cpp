@@ -544,6 +544,8 @@ std::wstring hotkey_text(HotkeyBinding binding) {
     } else if (binding.virtual_key >= '0' && binding.virtual_key <= '9') {
         key_name[0] = static_cast<wchar_t>(binding.virtual_key);
         key_name[1] = L'\0';
+    } else if (binding.virtual_key >= VK_F1 && binding.virtual_key <= VK_F24) {
+        swprintf_s(key_name, L"F%u", binding.virtual_key - VK_F1 + 1);
     } else {
         switch (binding.virtual_key) {
             case VK_SPACE: wcscpy_s(key_name, L"Espacio"); break;
@@ -601,6 +603,10 @@ constexpr std::array<HotkeyInfo, kHotkeyActionCount> kHotkeyInfo{{
     {L"Colores (+)", L"Alternativa para abrir el selector completo"},
     {L"Pentagono", L"Activa figura de cinco lados"},
     {L"Hexagono", L"Activa figura de seis lados"},
+    {L"Tacha (X)", L"Marca un error o descarta"},
+    {L"Chulito", L"Marca correcto o terminado"},
+    {L"Advertencia", L"Triangulo con exclamacion"},
+    {L"Prohibido", L"Circulo con barra diagonal"},
     {L"Zoom: pausar", L"Congela o reanuda para anotar"},
     {L"Zoom: completa", L"Cambia a pantalla completa"},
     {L"Zoom: lente", L"Cambia a lente movil"},
@@ -877,6 +883,7 @@ public:
     bool initialize();
     void show_settings();
     void apply_theme();
+    bool capture_registered_hotkey(HotkeyBinding binding);
 
 protected:
     LRESULT handle_message(UINT message, WPARAM wparam, LPARAM lparam) override;
@@ -889,7 +896,8 @@ private:
     void refresh_shortcut_rows();
     void show_tab(int tab);
     void begin_hotkey_capture(std::size_t index);
-    void finish_hotkey_capture(UINT virtual_key);
+    void finish_hotkey_capture(UINT virtual_key,
+                               std::optional<UINT> registered_modifiers = std::nullopt);
     void cancel_hotkey_capture();
     HWND title_{};
     HWND subtitle_{};
@@ -1466,27 +1474,29 @@ constexpr std::array<Color, 42> kExtendedColors{{
     {255, 128, 161, 255}, {92, 225, 230, 255}, {137, 245, 173, 255}
 }};
 
-constexpr std::array<Tool, 14> kTools{{
+constexpr std::array<Tool, 18> kTools{{
     Tool::Interact, Tool::Pen, Tool::Highlighter, Tool::Eraser, Tool::Line,
     Tool::Rectangle, Tool::Ellipse, Tool::Arrow, Tool::CurvedArrow, Tool::Text,
-    Tool::Screenshot, Tool::Zoom, Tool::Pentagon, Tool::Hexagon
+    Tool::Screenshot, Tool::Zoom, Tool::Pentagon, Tool::Hexagon,
+    Tool::Cross, Tool::Checkmark, Tool::Warning, Tool::Prohibition
 }};
 
-constexpr std::array<Tool, 7> kGeometryTools{{
+constexpr std::array<Tool, 11> kGeometryTools{{
     Tool::Line, Tool::Rectangle, Tool::Ellipse, Tool::Arrow, Tool::CurvedArrow,
-    Tool::Pentagon, Tool::Hexagon
+    Tool::Pentagon, Tool::Hexagon,
+    Tool::Cross, Tool::Checkmark, Tool::Warning, Tool::Prohibition
 }};
 
 constexpr bool uses_bounding_pair(Tool tool) noexcept {
     return tool == Tool::Line || tool == Tool::Rectangle || tool == Tool::Ellipse ||
            tool == Tool::Arrow || tool == Tool::CurvedArrow ||
            tool == Tool::Pentagon || tool == Tool::Hexagon ||
-           tool == Tool::Screenshot;
+           tool == Tool::Screenshot || is_symbol_tool(tool);
 }
 
 constexpr bool supports_equal_axes(Tool tool) noexcept {
     return tool == Tool::Rectangle || tool == Tool::Ellipse ||
-           tool == Tool::Pentagon || tool == Tool::Hexagon;
+           tool == Tool::Pentagon || tool == Tool::Hexagon || is_symbol_tool(tool);
 }
 
 RECT tool_window_item_bounds(bool geometry_only, std::size_t index) noexcept {
@@ -1513,7 +1523,11 @@ RECT tool_window_item_bounds(bool geometry_only, std::size_t index) noexcept {
     return {left, top, left + kItemWidth, top + 52};
 }
 
-constexpr RECT kToolWindowSettingsBounds{15, 388, 351, 430};
+constexpr int kToolWindowRows = static_cast<int>((kTools.size() + 1) / 2);
+constexpr int kToolWindowGeometryRows = static_cast<int>((kGeometryTools.size() + 3) / 4);
+constexpr int kToolWindowSettingsTop = 52 + kToolWindowRows * 48;
+constexpr RECT kToolWindowSettingsBounds{
+    15, kToolWindowSettingsTop, 351, kToolWindowSettingsTop + 42};
 
 bool point_in_circle(POINT point, float cx, float cy, float radius) {
     const float dx = static_cast<float>(point.x) - cx;
@@ -1691,6 +1705,30 @@ void draw_arrow_head(ID2D1DeviceContext* context, ID2D1Brush* brush, PointF befo
                       D2D1::Point2F(head.right.x, head.right.y), brush, width);
 }
 
+void draw_symbol(ID2D1DeviceContext* context, ID2D1SolidColorBrush* brush,
+                 ID2D1StrokeStyle* stroke_style, Tool tool, PointF first,
+                 PointF opposite, float width) {
+    const auto geometry = symbol_geometry(tool, first, opposite);
+    for (std::size_t index = 0; index < geometry.segment_count; ++index) {
+        const auto& segment = geometry.segments[index];
+        context->DrawLine(D2D1::Point2F(segment.start.x, segment.start.y),
+                          D2D1::Point2F(segment.end.x, segment.end.y),
+                          brush, width, stroke_style);
+    }
+    if (geometry.ellipse) {
+        const auto& rect = *geometry.ellipse;
+        context->DrawEllipse(D2D1::Ellipse(
+            D2D1::Point2F((rect.left + rect.right) * 0.5F,
+                          (rect.top + rect.bottom) * 0.5F),
+            rect.width() * 0.5F, rect.height() * 0.5F), brush, width, stroke_style);
+    }
+    if (geometry.dot) {
+        context->FillEllipse(D2D1::Ellipse(
+            D2D1::Point2F(geometry.dot->x, geometry.dot->y),
+            width * 0.65F, width * 0.65F), brush);
+    }
+}
+
 void draw_drawable(GraphicsDevice& graphics, ID2D1DeviceContext* context,
                    DrawableRenderResources& resources, const Drawable& drawable,
                    float offset_x, float offset_y,
@@ -1708,6 +1746,14 @@ void draw_drawable(GraphicsDevice& graphics, ID2D1DeviceContext* context,
         return D2D1::Point2F((point.x - offset_x) * scale,
                              (point.y - offset_y) * scale);
     };
+
+    if (is_symbol_tool(drawable.kind) && drawable.points.size() >= 2) {
+        const auto a = local(drawable.points.front());
+        const auto b = local(drawable.points.back());
+        draw_symbol(context, brush, resources.stroke_style.Get(), drawable.kind,
+                     {a.x, a.y}, {b.x, b.y}, render_width);
+        return;
+    }
 
     if ((drawable.kind == Tool::Rectangle || drawable.kind == Tool::Screenshot) &&
         drawable.points.size() >= 2) {
@@ -2405,8 +2451,14 @@ void OverlayWindow::finish_gesture(PointF point, WPARAM keys) {
     }
     if (completed.points.size() >= 2 &&
         distance(completed.points.front(), completed.points.back()) < 2.0F) {
-        completed.points.resize(1);
+        if (is_symbol_tool(completed.kind)) {
+            const auto origin = completed.points.front();
+            completed.points.back() = {origin.x + 64.0F, origin.y + 64.0F};
+        } else {
+            completed.points.resize(1);
+        }
     }
+    completed.invalidate_bounds_cache();
     controller_.commit_drawable(std::move(completed));
     controller_.restack_palette();
 }
@@ -3697,7 +3749,8 @@ void PaletteWindow::render_linear(ID2D1DeviceContext* context, const UiTheme& th
                 active = current_tool == Tool::Line || current_tool == Tool::Rectangle ||
                          current_tool == Tool::Ellipse || current_tool == Tool::Arrow ||
                          current_tool == Tool::CurvedArrow ||
-                         current_tool == Tool::Pentagon || current_tool == Tool::Hexagon;
+                         current_tool == Tool::Pentagon || current_tool == Tool::Hexagon ||
+                         is_symbol_tool(current_tool);
                 break;
             case LinearAction::Text: active = current_tool == Tool::Text; break;
             case LinearAction::Board:
@@ -4091,7 +4144,9 @@ Tool ToolWindow::tool_at(std::size_t index) const noexcept {
 
 void ToolWindow::show_near(HWND anchor, bool geometry_only) {
     geometry_only_ = geometry_only;
-    const int panel_height = geometry_only_ ? 172 : 448;
+    const int panel_height = geometry_only_
+        ? 52 + kToolWindowGeometryRows * 60
+        : kToolWindowSettingsBounds.bottom + 18;
     RECT anchor_rect{};
     GetWindowRect(anchor, &anchor_rect);
     RECT desired{anchor_rect.right + 10, anchor_rect.top,
@@ -4106,7 +4161,8 @@ void ToolWindow::show_near(HWND anchor, bool geometry_only) {
     }
     desired.top = std::clamp(static_cast<int>(desired.top),
                              static_cast<int>(info.rcWork.top),
-                             static_cast<int>(info.rcWork.bottom) - panel_height);
+                             std::max(static_cast<int>(info.rcWork.top),
+                                      static_cast<int>(info.rcWork.bottom) - panel_height));
     SetWindowPos(window_, HWND_TOPMOST, desired.left, desired.top, 366, panel_height,
                  SWP_SHOWWINDOW | SWP_NOACTIVATE);
     invalidate();
@@ -4281,6 +4337,14 @@ void ToolWindow::render() {
                 }
                 break;
             }
+            case Tool::Cross:
+            case Tool::Checkmark:
+            case Tool::Warning:
+            case Tool::Prohibition:
+                draw_symbol(context, text.Get(), nullptr, panel_tool,
+                             {icon_x - 9.0F, icon_y - 9.0F},
+                             {icon_x + 9.0F, icon_y + 9.0F}, 1.8F);
+                break;
             case Tool::Line:
                 context->DrawLine(D2D1::Point2F(icon_x - 8, icon_y + 7),
                                   D2D1::Point2F(icon_x + 8, icon_y - 7), text.Get(), 2.0F);
@@ -4362,7 +4426,8 @@ void ToolWindow::render() {
             settings_hovered ? hover_surface.Get() : raised.Get());
         context->DrawRoundedRectangle(settings_item,
             settings_hovered ? muted.Get() : border.Get(), 0.9F);
-        constexpr D2D1_POINT_2F gear_center{35, 409};
+        constexpr D2D1_POINT_2F gear_center{
+            35, static_cast<float>(kToolWindowSettingsTop + 21)};
         context->DrawEllipse(D2D1::Ellipse(gear_center, 6.0F, 6.0F), accent.Get(), 1.8F);
         context->FillEllipse(D2D1::Ellipse(gear_center, 2.0F, 2.0F), accent.Get());
         for (int index = 0; index < 8; ++index) {
@@ -4375,7 +4440,8 @@ void ToolWindow::render() {
         }
         if (item_format) {
             context->DrawTextW(L"Configuracion", 13, item_format.Get(),
-                               D2D1::RectF(55, 398, 220, 424), text.Get());
+                               D2D1::RectF(55, kToolWindowSettingsTop + 10,
+                                            220, kToolWindowSettingsTop + 36), text.Get());
         }
     }
     std::wstring error;
@@ -4591,7 +4657,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.11.0",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.12.0",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
@@ -4745,7 +4811,7 @@ bool SettingsWindow::initialize() {
                                     reinterpret_cast<HMENU>(4300),
                                     GetModuleHandleW(nullptr), nullptr);
     help_ = CreateWindowW(L"STATIC",
-        L"Ayuda de Elite Pen 2.11.0. Anotación, pizarra, captura y zoom para Windows. "
+        L"Ayuda de Elite Pen 2.12.0. Anotación, pizarra, captura y zoom para Windows. "
         L"Código abierto bajo Apache License 2.0. Desarrollado por Power Elite Studio.",
         WS_CHILD | SS_OWNERDRAW, 24, 119, 540, 400, window_,
         reinterpret_cast<HMENU>(4105), GetModuleHandleW(nullptr), nullptr);
@@ -4982,7 +5048,7 @@ void SettingsWindow::paint_help(HDC dc, RECT bounds) {
     SelectObject(dc, small_font_);
     SetTextColor(dc, theme_colorref(theme.text_muted));
     RECT version{bounds.left, bounds.top + 73, bounds.right, bounds.top + 94};
-    DrawTextW(dc, L"Version 2.11.0 · Windows 10 y 11 · x64", -1, &version,
+    DrawTextW(dc, L"Version 2.12.0 · Windows 10 y 11 · x64", -1, &version,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
 
     SelectObject(dc, body_font_);
@@ -5165,7 +5231,18 @@ void SettingsWindow::cancel_hotkey_capture() {
     refresh_shortcut_rows();
 }
 
-void SettingsWindow::finish_hotkey_capture(UINT virtual_key) {
+bool SettingsWindow::capture_registered_hotkey(HotkeyBinding binding) {
+    if (!IsWindowVisible(window_) || active_tab_ != 1 || capturing_hotkey_ < 0 ||
+        binding.virtual_key == 0) return false;
+    if (!IsWindowEnabled(window_)) return true;
+    // Windows routes an already registered combination as WM_HOTKEY instead of
+    // WM_KEYDOWN. Capture it in the editor rather than activating its old tool.
+    finish_hotkey_capture(binding.virtual_key, binding.modifiers);
+    return true;
+}
+
+void SettingsWindow::finish_hotkey_capture(
+        UINT virtual_key, std::optional<UINT> registered_modifiers) {
     if (capturing_hotkey_ < 0) return;
     if (virtual_key == VK_ESCAPE) {
         cancel_hotkey_capture();
@@ -5181,6 +5258,7 @@ void SettingsWindow::finish_hotkey_capture(UINT virtual_key) {
     if ((GetKeyState(VK_MENU) & 0x8000) != 0) modifiers |= MOD_ALT;
     if ((GetKeyState(VK_LWIN) & 0x8000) != 0 || (GetKeyState(VK_RWIN) & 0x8000) != 0)
         modifiers |= MOD_WIN;
+    if (registered_modifiers) modifiers = *registered_modifiers;
     const std::size_t capture_index = static_cast<std::size_t>(capturing_hotkey_);
     if (virtual_key == VK_DELETE || virtual_key == VK_BACK) {
         if (!controller_.set_hotkey_binding(
@@ -6319,8 +6397,16 @@ void ZoomInkWindow::finish_gesture(PointF point, WPARAM keys) {
     }
     if (completed.points.size() >= 2 && distance(
             completed.points.front(), completed.points.back()) <
-            annotation_length(2.0F))
-        completed.points.resize(1);
+            annotation_length(2.0F)) {
+        if (is_symbol_tool(completed.kind)) {
+            const auto origin = completed.points.front();
+            const float size = annotation_length(64.0F);
+            completed.points.back() = {origin.x + size, origin.y + size};
+        } else {
+            completed.points.resize(1);
+        }
+    }
+    completed.invalidate_bounds_cache();
     (edit_mode_ ? edit_document_ : document_).add(std::move(completed));
     controller_.update_overlay_interaction();
     invalidate();
@@ -8551,6 +8637,9 @@ void Controller::toggle_geometry_panel() {
 }
 
 void Controller::execute_hotkey(HotkeyAction action) {
+    const auto index = static_cast<std::size_t>(action);
+    if (settings_ && index < preferences_.hotkeys.size() &&
+        settings_->capture_registered_hotkey(preferences_.hotkeys[index])) return;
     switch (action) {
         case HotkeyAction::Interact:
             set_tool(state_.tool == Tool::Interact ? Tool::Pen : Tool::Interact);
@@ -8572,6 +8661,10 @@ void Controller::execute_hotkey(HotkeyAction action) {
         case HotkeyAction::CurvedArrow: set_tool(Tool::CurvedArrow); break;
         case HotkeyAction::Pentagon: set_tool(Tool::Pentagon); break;
         case HotkeyAction::Hexagon: set_tool(Tool::Hexagon); break;
+        case HotkeyAction::Cross: set_tool(Tool::Cross); break;
+        case HotkeyAction::Checkmark: set_tool(Tool::Checkmark); break;
+        case HotkeyAction::Warning: set_tool(Tool::Warning); break;
+        case HotkeyAction::Prohibition: set_tool(Tool::Prohibition); break;
         case HotkeyAction::Text: set_tool(Tool::Text); break;
         case HotkeyAction::Screenshot: set_tool(Tool::Screenshot); break;
         case HotkeyAction::ColorPanel: toggle_color_panel(); break;

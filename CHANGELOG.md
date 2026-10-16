@@ -1,5 +1,22 @@
 # Historial de cambios
 
+## 2.12.0 — 2026-10-16
+
+- Figuras incorpora Tacha (X), Chulito, Advertencia y Prohibido como símbolos
+  vectoriales con color y grosor configurables: un clic coloca el símbolo y
+  arrastrar ajusta su tamaño; Shift conserva ejes iguales.
+- Cada símbolo tiene una acción global configurable en Configuración > Atajos,
+  compatible con teclas F1–F24 o combinaciones emitidas por un macropad.
+  Se entregan sin asignar y conservan las personalizaciones anteriores.
+- F1–F24 muestran su nombre completo; el editor captura también combinaciones ya
+  registradas sin activar su herramienta anterior durante la asignación.
+- Los símbolos funcionan en escritorio, pizarras, zoom congelado y Zoom editable.
+  Cada uno se borra, deshace o rehace de una vez, incluidos sus trazos separados.
+- El panel de Figuras muestra once opciones en tres filas; el panel completo
+  ajusta su altura para mantener accesibles las herramientas y Configuración.
+- Pruebas cubren geometría, borrado, historial, preferencias y el recorrido real
+  de asignación y activación con F13–F16 desde modo cursor.
+
 ## 2.11.0 — 2026-10-15
 
 - Configuración > General incorpora Extra grande · 200 % y Gigante · 300 %.
