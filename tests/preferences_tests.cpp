@@ -82,8 +82,14 @@ int main() {
     check(fresh.geometry_size == 1 && !fresh.geometry_pinned &&
           !fresh.geometry_visible && !fresh.has_geometry_position,
           "figures start at 100 percent as an optional transient panel");
-    check(kHotkeyActionCount == 46 && kGlobalHotkeyActionCount == 36,
-          "symbols have four global actions while all ten zoom actions stay contextual");
+    check(kHotkeyActionCount == 55 && kGlobalHotkeyActionCount == 45,
+          "emoji panel and eight favorite actions are global; ten zoom actions stay contextual");
+    check(fresh.emoji_size == 1 && !fresh.emoji_pinned && !fresh.emoji_visible &&
+          !fresh.has_emoji_position && fresh.emoji_favorites == kDefaultEmojiFavorites,
+          "emoji panel starts optional at 100 percent with eight useful defaults");
+    for (std::size_t index = static_cast<std::size_t>(HotkeyAction::EmojiPanel);
+         index < static_cast<std::size_t>(HotkeyAction::ZoomFreeze); ++index)
+        check(fresh.hotkeys[index] == HotkeyBinding{}, "emoji shortcuts start unassigned");
     for (auto action : {HotkeyAction::Cross, HotkeyAction::Checkmark,
                         HotkeyAction::Warning, HotkeyAction::Prohibition}) {
         check(fresh.hotkeys[static_cast<std::size_t>(action)] == HotkeyBinding{},
@@ -182,6 +188,17 @@ int main() {
     expected.has_geometry_position = true;
     expected.geometry_x = -2880;
     expected.geometry_y = 260;
+    expected.emoji_size = 5;
+    expected.emoji_pinned = true;
+    expected.emoji_visible = true;
+    expected.has_emoji_position = true;
+    expected.emoji_x = -440;
+    expected.emoji_y = -1040;
+    expected.selected_emoji = 71;
+    expected.emoji_favorites = {71, 24, -1, 49, 13, 5, 1, 0};
+    for (std::size_t slot = 0; slot < kEmojiFavoriteCount; ++slot)
+        expected.hotkeys[static_cast<std::size_t>(HotkeyAction::EmojiFavorite1) + slot] =
+            {0, VK_F17 + static_cast<UINT>(slot)};
     expected.zoom_factor = 6.0F;
     expected.zoom_view = 2;
     expected.zoom_lens_diameter = 760;
@@ -209,6 +226,10 @@ int main() {
     check(store.save(expected), "preferences save atomically");
     const Preferences actual = store.load();
     check(actual.theme == expected.theme, "appearance theme round trip");
+    check(actual.emoji_size == 5 && actual.emoji_pinned && actual.emoji_visible &&
+          actual.has_emoji_position && actual.emoji_x == -440 && actual.emoji_y == -1040 &&
+          actual.selected_emoji == 71 && actual.emoji_favorites == expected.emoji_favorites,
+          "emoji panel, selection, empty slots and all favorite IDs survive restart");
     check(actual.control_mode == expected.control_mode,
           "control presentation mode round trip");
     check(actual.confirm_clear == expected.confirm_clear, "boolean preference round trip");
@@ -288,6 +309,31 @@ int main() {
     expected.geometry_size = -1;
     check(store.save(expected) && store.load().geometry_size == 0,
           "negative figures sizes clamp to compact");
+
+    for (int index = 0; index < 6; ++index) {
+        const auto size = emoji_panel_pixel_size(index);
+        const float scale = geometry_panel_scale(index);
+        check(size.cx == figure_widths[static_cast<std::size_t>(index)] &&
+              size.cy == std::lround(kEmojiPanelDesignHeight * scale),
+              "emoji dimensions scale all controls through 300 percent");
+        for (std::size_t cell = 0; cell < kEmojisPerPage; ++cell) {
+            const auto bounds = emoji_catalog_bounds(cell);
+            const POINT pixel{static_cast<LONG>((bounds.left + 26) * scale),
+                              static_cast<LONG>((bounds.top + 18) * scale)};
+            check(point_in_rect(geometry_panel_logical_point(pixel, index), bounds),
+                  "catalog cells remain selectable at every panel size");
+        }
+    }
+    expected.emoji_size = 99;
+    expected.selected_emoji = 999;
+    expected.emoji_favorites = {-2, 999, -1, 24, 71, 0, 1, 2};
+    check(store.save(expected), "malformed emoji settings fixture saves");
+    const auto sanitized = store.load();
+    check(sanitized.emoji_size == 5 && sanitized.selected_emoji == 0 &&
+          sanitized.emoji_favorites[0] == kDefaultEmojiFavorites[0] &&
+          sanitized.emoji_favorites[1] == kDefaultEmojiFavorites[1] &&
+          sanitized.emoji_favorites[2] == -1 && sanitized.emoji_favorites[4] == 71,
+          "invalid IDs recover individually without damaging valid or empty favorites");
 
     if (failures == 0) std::cout << "Elite Pen preferences: all tests passed\n";
     return failures == 0 ? 0 : 1;

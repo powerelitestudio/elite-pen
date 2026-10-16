@@ -20,6 +20,31 @@ inline constexpr RECT kGeometrySizeBounds{120, 8, 205, 36};
 inline constexpr RECT kGeometryPinBounds{211, 8, 305, 36};
 inline constexpr RECT kGeometryCloseBounds{313, 8, 349, 36};
 inline constexpr RECT kToolsFiguresBounds{260, 8, 349, 36};
+inline constexpr RECT kToolsEmojisBounds{172, 8, 254, 36};
+inline constexpr int kEmojiPanelDesignHeight = 336;
+
+inline SIZE emoji_panel_pixel_size(int index) noexcept {
+    const float scale = kGeometryPanelScales[static_cast<std::size_t>(std::clamp(
+        index, 0, static_cast<int>(kGeometryPanelScales.size()) - 1))];
+    return {static_cast<LONG>(std::lround(366 * scale)),
+            static_cast<LONG>(std::lround(kEmojiPanelDesignHeight * scale))};
+}
+
+inline RECT emoji_favorite_bounds(std::size_t slot) noexcept {
+    const LONG left = 15 + static_cast<LONG>(slot) * 42;
+    return {left, 64, left + 39, 106};
+}
+
+inline RECT emoji_catalog_bounds(std::size_t cell) noexcept {
+    const LONG left = 15 + static_cast<LONG>(cell % 6) * 56;
+    const LONG top = 140 + static_cast<LONG>(cell / 6) * 39;
+    return {left, top, left + 52, top + 36};
+}
+
+inline RECT emoji_page_bounds(std::size_t page) noexcept {
+    const LONG left = 15 + static_cast<LONG>(page) * 113;
+    return {left, 112, left + 108, 136};
+}
 
 inline float geometry_panel_scale(int index) noexcept {
     return kGeometryPanelScales[static_cast<std::size_t>(std::clamp(

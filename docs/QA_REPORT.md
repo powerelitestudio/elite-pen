@@ -1,4 +1,42 @@
-# Informe de calidad — Elite Pen 2.13.0
+# Informe de calidad — Elite Pen 2.14.0
+
+## Emojis, favoritos y panel fijo — 2.14.0
+
+Validación local: 2026-10-16.
+
+- Compilación Release sin errores ni advertencias del compilador. Núcleo,
+  preferencias y rendimiento CPU aprobados en Debug y Release. Se validan 72 IDs
+  únicos, secuencias completas, coordenadas negativas, borrado e historial por
+  objeto, favoritos vacíos, recuperación de IDs inválidos y compatibilidad de atajos.
+- Smoke completo de interfaz aprobado: Herramientas > Emojis, tres categorías,
+  seis escalas de 80 % a 300 %, selección escalada, pin, arrastre, cierre y desfijado.
+  El menú de clic derecho se abre y acciona con entrada real de ratón, guarda un
+  emoji diferente en favorito 1 y ese cambio sobrevive al reinicio.
+- Los editores de Configuración asignan F17–F24 a los ocho favoritos. Eventos
+  globales de teclado activan cada emoji desde Cursor; cada clic añade el glifo
+  correcto, con un paso de deshacer, rehacer y borrado completo. No se programa ni
+  se valida físicamente un macropad externo.
+- Se prueban emojis en Zoom editable y congelado. Con zoom vivo, un clic físico
+  simulado selecciona el favorito desde el panel fijado sin congelar la vista;
+  el panel conserva su lugar por encima del zoom y se excluye de Magnifier.
+- El ejecutable instalado se copia a una sesión portable aislada: el panel restaura
+  300 %, fijación y posición (-440, -1056) en DISPLAY5 tras reiniciar. Dimensiones
+  1098×1008 en la tercera pantalla detectada de 2400×1080; el área de trabajo mantiene
+  accesible el panel. No se modifica la resolución ni el escalado de Windows.
+- Capturas de las tres categorías y ocho emojis colocados en una pizarra confirman
+  los colores nativos. La muestra de lienzo contiene 2.763 muestras cromáticas
+  comprobadas automáticamente; también se inspecciona visualmente el resultado.
+- Rendimiento GPU, 5.000 trazos / 240 cuadros: población 351,858 ms, primer render
+  74,182 ms, cuadro en caché 1,593 ms y dibujo activo 0,987 ms. Zoom editable:
+  primer Lápiz 70,929 ms, Mano 0,124 ms y Lápiz caliente 19,833 ms. Memoria 330,06 MiB.
+  Todos los límites del benchmark se cumplen.
+- La instalación se respalda antes de sustituir sus archivos. El SHA-256 del
+  ejecutable instalado, la distribución portable y el build validado coincide:
+  `EA953F40D755E55BCC714DC25FC43EF2FAF19C1C63D188D655FA241D35EF060E`.
+  El INI real mantiene exactamente su hash durante actualización y validación.
+
+Las evidencias detalladas permanecen en `artifacts/emoji-update-2.14.0-20261016-161957/`,
+ignoradas por Git. La actualización de código no publica por sí sola una nueva Release.
 
 ## Panel de figuras ampliable y fijo — 2.13.0
 

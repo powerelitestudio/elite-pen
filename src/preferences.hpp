@@ -1,6 +1,7 @@
 #pragma once
 
 #include "elite_pen/core.hpp"
+#include "elite_pen/emoji.hpp"
 
 #include <windows.h>
 
@@ -69,6 +70,15 @@ enum class HotkeyAction : std::uint8_t {
     Checkmark,
     Warning,
     Prohibition,
+    EmojiPanel,
+    EmojiFavorite1,
+    EmojiFavorite2,
+    EmojiFavorite3,
+    EmojiFavorite4,
+    EmojiFavorite5,
+    EmojiFavorite6,
+    EmojiFavorite7,
+    EmojiFavorite8,
     ZoomFreeze,
     ZoomFullscreen,
     ZoomLens,
@@ -121,6 +131,8 @@ inline constexpr std::array<HotkeyBinding, kHotkeyActionCount> kDefaultHotkeys{{
     {0, 0},
     {0, 0},
     {0, 0}, {0, 0}, {0, 0}, {0, 0},
+    {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},
+    {0, 0}, {0, 0}, {0, 0}, {0, 0},
     {0, 'P'},
     {0, 'F'},
     {0, 'L'},
@@ -151,6 +163,8 @@ inline constexpr std::array<HotkeyBinding, kHotkeyActionCount> kLegacyDefaultHot
     {0, 0}, {0, 0}, {0, 0},
     {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},
     {0, 0}, {0, 0},
+    {0, 0}, {0, 0}, {0, 0}, {0, 0},
+    {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},
     {0, 0}, {0, 0}, {0, 0}, {0, 0},
     {0, 'P'},
     {0, 'F'},
@@ -184,6 +198,14 @@ struct Preferences {
     bool has_geometry_position{false};
     int geometry_x{};
     int geometry_y{};
+    int emoji_size{1};
+    bool emoji_pinned{false};
+    bool emoji_visible{false};
+    bool has_emoji_position{false};
+    int emoji_x{};
+    int emoji_y{};
+    int selected_emoji{0};
+    std::array<int, kEmojiFavoriteCount> emoji_favorites{kDefaultEmojiFavorites};
     float zoom_factor{2.0F};
     int zoom_view{0};
     int zoom_lens_diameter{520};

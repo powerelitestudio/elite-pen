@@ -109,7 +109,8 @@ enum class Tool : std::uint8_t {
     Cross,
     Checkmark,
     Warning,
-    Prohibition
+    Prohibition,
+    Emoji
 };
 
 [[nodiscard]] const wchar_t* tool_name(Tool tool) noexcept;

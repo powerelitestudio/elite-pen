@@ -89,6 +89,8 @@ constexpr UINT kQaQueryZoomLensDiameterMessage = WM_APP + 125;
 constexpr UINT kQaSetZoomSourceCursorMessage = WM_APP + 126;
 constexpr UINT kQaQueryZoomNativeSourceMessage = WM_APP + 127;
 constexpr UINT kQaQueryHistoryHookMessage = WM_APP + 128;
+constexpr UINT kQaQuerySelectedEmojiMessage = WM_APP + 129;
+constexpr UINT kQaQueryLastEmojiMessage = WM_APP + 130;
 constexpr ULONG_PTR kQaHistoryKeyTag = 0x4550484BU;
 constexpr UINT_PTR kTrayId = 1;
 constexpr std::array<float, 5> kThicknessSteps{2.0F, 4.0F, 7.0F, 12.0F, 20.0F};
@@ -607,6 +609,15 @@ constexpr std::array<HotkeyInfo, kHotkeyActionCount> kHotkeyInfo{{
     {L"Chulito", L"Marca correcto o terminado"},
     {L"Advertencia", L"Triangulo con exclamacion"},
     {L"Prohibido", L"Circulo con barra diagonal"},
+    {L"Emojis", L"Abre el panel de emojis y favoritos"},
+    {L"Emoji favorito 1", L"Selecciona el emoji del espacio 1"},
+    {L"Emoji favorito 2", L"Selecciona el emoji del espacio 2"},
+    {L"Emoji favorito 3", L"Selecciona el emoji del espacio 3"},
+    {L"Emoji favorito 4", L"Selecciona el emoji del espacio 4"},
+    {L"Emoji favorito 5", L"Selecciona el emoji del espacio 5"},
+    {L"Emoji favorito 6", L"Selecciona el emoji del espacio 6"},
+    {L"Emoji favorito 7", L"Selecciona el emoji del espacio 7"},
+    {L"Emoji favorito 8", L"Selecciona el emoji del espacio 8"},
     {L"Zoom: pausar", L"Congela o reanuda para anotar"},
     {L"Zoom: completa", L"Cambia a pantalla completa"},
     {L"Zoom: lente", L"Cambia a lente movil"},
@@ -857,6 +868,32 @@ private:
     [[nodiscard]] Tool tool_at(std::size_t index) const noexcept;
     bool geometry_only_{};
     int hovered_item_{-1};
+    bool dragging_{};
+    POINT drag_cursor_{};
+    POINT drag_origin_{};
+};
+
+class EmojiWindow final : public WindowBase {
+public:
+    explicit EmojiWindow(Controller& controller) : WindowBase(controller) {}
+    bool initialize(GraphicsDevice& graphics);
+    void show_near(HWND anchor);
+    void hide();
+    void restore_layout();
+    [[nodiscard]] bool visible() const noexcept { return IsWindowVisible(window_) != FALSE; }
+
+protected:
+    LRESULT handle_message(UINT message, WPARAM wparam, LPARAM lparam) override;
+    void render() override;
+
+private:
+    void remember_position();
+    void show_size_menu();
+    void show_favorite_menu(int id, int favorite_slot, POINT point);
+    [[nodiscard]] POINT logical_point(LPARAM point) const noexcept;
+    [[nodiscard]] int hit_cell(POINT point) const noexcept;
+    int page_{};
+    int hovered_{-1};
     bool dragging_{};
     POINT drag_cursor_{};
     POINT drag_origin_{};
@@ -1251,6 +1288,9 @@ public:
     void restack_panels();
     [[nodiscard]] bool panel_contains_screen_point(POINT point) const;
     [[nodiscard]] ToolWindow* geometry_panel() const noexcept { return geometry_.get(); }
+    [[nodiscard]] EmojiWindow* emoji_panel() const noexcept { return emojis_.get(); }
+    void toggle_emoji_panel();
+    void select_emoji(int id);
     [[nodiscard]] bool route_palette_command(PointF screen_point);
     void set_tool(Tool tool);
     void set_color(Color color);
@@ -1320,6 +1360,7 @@ private:
     std::unique_ptr<ColorWindow> colors_;
     std::unique_ptr<ToolWindow> tools_;
     std::unique_ptr<ToolWindow> geometry_;
+    std::unique_ptr<EmojiWindow> emojis_;
     std::unique_ptr<TextInputWindow> text_input_;
     std::unique_ptr<SettingsWindow> settings_;
     std::unique_ptr<ZoomWindow> zoom_;
@@ -1504,12 +1545,13 @@ constexpr bool uses_bounding_pair(Tool tool) noexcept {
     return tool == Tool::Line || tool == Tool::Rectangle || tool == Tool::Ellipse ||
            tool == Tool::Arrow || tool == Tool::CurvedArrow ||
            tool == Tool::Pentagon || tool == Tool::Hexagon ||
-           tool == Tool::Screenshot || is_symbol_tool(tool);
+           tool == Tool::Screenshot || tool == Tool::Emoji || is_symbol_tool(tool);
 }
 
 constexpr bool supports_equal_axes(Tool tool) noexcept {
     return tool == Tool::Rectangle || tool == Tool::Ellipse ||
-           tool == Tool::Pentagon || tool == Tool::Hexagon || is_symbol_tool(tool);
+           tool == Tool::Pentagon || tool == Tool::Hexagon || tool == Tool::Emoji ||
+           is_symbol_tool(tool);
 }
 
 RECT tool_window_item_bounds(bool geometry_only, std::size_t index) noexcept {
@@ -1671,11 +1713,44 @@ struct CachedTextFormat {
     ComPtr<IDWriteTextFormat> format;
 };
 
+ComPtr<IDWriteTextFormat> create_emoji_format(GraphicsDevice& graphics) {
+    ComPtr<IDWriteTextFormat> format;
+    graphics.dwrite()->CreateTextFormat(L"Segoe UI Emoji", nullptr,
+        DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+        64.0F, L"es-CO", format.GetAddressOf());
+    if (format) {
+        format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
+        format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    }
+    return format;
+}
+
+void draw_emoji(ID2D1DeviceContext* context, IDWriteTextFormat* format,
+                ID2D1SolidColorBrush* brush, const wchar_t* glyph,
+                D2D1_RECT_F bounds, float opacity = 1.0F) {
+    if (!format || !glyph || !glyph[0]) return;
+    const float side = std::min(bounds.right - bounds.left, bounds.bottom - bounds.top);
+    if (side <= 0.0F) return;
+    D2D1_MATRIX_3X2_F original;
+    context->GetTransform(&original);
+    const float left = (bounds.left + bounds.right - side) * 0.5F;
+    const float top = (bounds.top + bounds.bottom - side) * 0.5F;
+    context->SetTransform(D2D1::Matrix3x2F::Scale(side / 80.0F, side / 80.0F) *
+        D2D1::Matrix3x2F::Translation(left, top) * original);
+    brush->SetOpacity(opacity);
+    context->DrawTextW(glyph, static_cast<UINT32>(wcslen(glyph)), format,
+        D2D1::RectF(0, 0, 80, 80), brush, D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+    brush->SetOpacity(1.0F);
+    context->SetTransform(original);
+}
+
 struct DrawableRenderResources {
     ComPtr<ID2D1SolidColorBrush> brush;
     ComPtr<ID2D1SolidColorBrush> screenshot_shade;
     ComPtr<ID2D1StrokeStyle> stroke_style;
     std::vector<CachedTextFormat> text_formats;
+    ComPtr<IDWriteTextFormat> emoji_format;
 
     bool initialize(GraphicsDevice& graphics, ID2D1DeviceContext* context) {
         if (FAILED(context->CreateSolidColorBrush(
@@ -1690,6 +1765,7 @@ struct DrawableRenderResources {
         graphics.d2d_factory()->CreateStrokeStyle(
             properties, nullptr, 0, stroke_style.GetAddressOf());
         text_formats.reserve(5);
+        emoji_format = create_emoji_format(graphics);
         return true;
     }
 
@@ -1760,6 +1836,15 @@ void draw_drawable(GraphicsDevice& graphics, ID2D1DeviceContext* context,
         return D2D1::Point2F((point.x - offset_x) * scale,
                              (point.y - offset_y) * scale);
     };
+
+    if (drawable.kind == Tool::Emoji && drawable.points.size() >= 2) {
+        const auto a = local(drawable.points.front());
+        const auto b = local(drawable.points.back());
+        draw_emoji(context, resources.emoji_format.Get(), brush, drawable.text.c_str(),
+            D2D1::RectF(std::min(a.x, b.x), std::min(a.y, b.y),
+                        std::max(a.x, b.x), std::max(a.y, b.y)), opacity);
+        return;
+    }
 
     if (is_symbol_tool(drawable.kind) && drawable.points.size() >= 2) {
         const auto a = local(drawable.points.front());
@@ -2384,8 +2469,11 @@ void OverlayWindow::begin_gesture(PointF point, float pressure) {
     Drawable drawable;
     drawable.kind = tool;
     drawable.color = controller_.state().color;
+    if (tool == Tool::Emoji)
+        drawable.text = kEmojis[static_cast<std::size_t>(controller_.preferences().selected_emoji)].glyph;
     drawable.width = controller_.state().effective_width() *
         std::clamp(pressure, 0.35F, 1.45F);
+    if (tool == Tool::Emoji) drawable.width = 1.0F;
     drawable.points.push_back(point);
     if (uses_bounding_pair(tool)) {
         drawable.points.push_back(point);
@@ -2409,7 +2497,7 @@ void OverlayWindow::update_gesture(PointF point, WPARAM keys) {
     preview->invalidate_bounds_cache();
     const Tool tool = preview->kind;
     if (uses_bounding_pair(tool)) {
-        if ((keys & MK_SHIFT) && supports_equal_axes(tool)) {
+        if ((tool == Tool::Emoji || (keys & MK_SHIFT)) && supports_equal_axes(tool)) {
             const PointF origin = preview->points.front();
             const float dx = point.x - origin.x;
             const float dy = point.y - origin.y;
@@ -2465,7 +2553,7 @@ void OverlayWindow::finish_gesture(PointF point, WPARAM keys) {
     }
     if (completed.points.size() >= 2 &&
         distance(completed.points.front(), completed.points.back()) < 2.0F) {
-        if (is_symbol_tool(completed.kind)) {
+        if (is_symbol_tool(completed.kind) || completed.kind == Tool::Emoji) {
             const auto origin = completed.points.front();
             completed.points.back() = {origin.x + 64.0F, origin.y + 64.0F};
         } else {
@@ -3161,6 +3249,15 @@ LRESULT PaletteWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
     switch (message) {
         case kQaQueryToolMessage:
             return static_cast<LRESULT>(controller_.state().tool);
+        case kQaQuerySelectedEmojiMessage:
+            return controller_.preferences().selected_emoji;
+        case kQaQueryLastEmojiMessage: {
+            const auto& items = controller_.state().document.items();
+            if (items.empty() || items.back().kind != Tool::Emoji) return -1;
+            for (std::size_t id = 0; id < kEmojis.size(); ++id)
+                if (items.back().text == kEmojis[id].glyph) return static_cast<LRESULT>(id);
+            return -1;
+        }
         case kQaQueryColorMessage:
             return static_cast<LRESULT>(controller_.state().color.argb());
         case kQaQueryThicknessMessage:
@@ -4318,6 +4415,13 @@ LRESULT ToolWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
             }
         }
         if (!geometry_only_) {
+            if (PtInRect(&kToolsEmojisBounds, point)) {
+                hide();
+                if (!controller_.emoji_panel() || !controller_.emoji_panel()->visible())
+                    controller_.toggle_emoji_panel();
+                controller_.restack_palette();
+                return 0;
+            }
             if (PtInRect(&kToolsFiguresBounds, point)) {
                 hide();
                 const auto* geometry = controller_.geometry_panel();
@@ -4355,6 +4459,8 @@ LRESULT ToolWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
                 next = static_cast<int>(tool_count());
             if (PtInRect(&kToolsFiguresBounds, point))
                 next = static_cast<int>(tool_count()) + 1;
+            if (PtInRect(&kToolsEmojisBounds, point))
+                next = static_cast<int>(tool_count()) + 2;
         } else {
             if (PtInRect(&kGeometrySizeBounds, point)) next = static_cast<int>(tool_count()) + 1;
             if (PtInRect(&kGeometryPinBounds, point)) next = static_cast<int>(tool_count()) + 2;
@@ -4438,6 +4544,12 @@ void ToolWindow::render() {
         context->DrawTextW(title, static_cast<UINT32>(wcslen(title)), title_format.Get(),
                            D2D1::RectF(30, 13, 220, 36), text.Get());
         if (!geometry_only_) {
+            const auto emoji_button = D2D1::RoundedRect(D2D1::RectF(172, 8, 254, 36), 6, 6);
+            context->FillRoundedRectangle(emoji_button,
+                hovered_item_ == static_cast<int>(tool_count()) + 2 ? hover_surface.Get() : raised.Get());
+            context->DrawRoundedRectangle(emoji_button, border.Get(), 0.8F);
+            context->DrawTextW(L"Emojis", 6, title_format.Get(),
+                D2D1::RectF(188, 13, 252, 36), accent.Get());
             const auto button = D2D1::RoundedRect(D2D1::RectF(260, 8, 349, 36), 6, 6);
             context->FillRoundedRectangle(button,
                 hovered_item_ == static_cast<int>(tool_count()) + 1 ? hover_surface.Get() : raised.Get());
@@ -4656,6 +4768,331 @@ void ToolWindow::render() {
     if (!surface_.end_draw(error)) controller_.report_runtime_error(error);
 }
 
+bool EmojiWindow::initialize(GraphicsDevice& graphics) {
+    const RECT bounds{0, 0, 366, kEmojiPanelDesignHeight};
+    if (!create(L"ElitePen.Emojis", L"Emojis — Elite Pen",
+        WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED,
+        WS_POPUP, bounds)) return false;
+    SetLayeredWindowAttributes(window_, 0, 255, LWA_ALPHA);
+    if (!initialize_surface(graphics)) return false;
+#ifndef ELITE_PEN_DEBUG
+    if (controller_.preferences().exclude_palette_from_capture)
+        SetWindowDisplayAffinity(window_, WDA_EXCLUDEFROMCAPTURE);
+#endif
+    return true;
+}
+
+void EmojiWindow::show_near(HWND anchor) {
+    auto& p = controller_.preferences();
+    const auto size = emoji_panel_pixel_size(p.emoji_size);
+    RECT anchor_bounds{};
+    GetWindowRect(anchor, &anchor_bounds);
+    POINT desired{anchor_bounds.right + 10, anchor_bounds.top};
+    if (p.has_emoji_position) desired = {p.emoji_x, p.emoji_y};
+    MONITORINFO info{};
+    info.cbSize = sizeof(info);
+    GetMonitorInfoW(MonitorFromPoint(desired, MONITOR_DEFAULTTONEAREST), &info);
+    if (!p.has_emoji_position && desired.x + size.cx > info.rcWork.right)
+        desired.x = anchor_bounds.left - size.cx - 10;
+    desired = control_position_in_work_area(desired, info.rcWork,
+        static_cast<int>(size.cx), static_cast<int>(size.cy));
+    SetWindowPos(window_, HWND_TOPMOST, desired.x, desired.y, size.cx, size.cy,
+        SWP_SHOWWINDOW | SWP_NOACTIVATE);
+    p.emoji_visible = true;
+    controller_.save_preferences();
+    invalidate();
+}
+
+void EmojiWindow::hide() {
+    ShowWindow(window_, SW_HIDE);
+    if (controller_.preferences().emoji_visible) {
+        controller_.preferences().emoji_visible = false;
+        controller_.save_preferences();
+    }
+}
+
+void EmojiWindow::restore_layout() {
+    if (visible() && controller_.palette()) show_near(controller_.palette()->hwnd());
+}
+
+void EmojiWindow::remember_position() {
+    RECT bounds{};
+    if (!GetWindowRect(window_, &bounds)) return;
+    MONITORINFO info{};
+    info.cbSize = sizeof(info);
+    GetMonitorInfoW(MonitorFromRect(&bounds, MONITOR_DEFAULTTONEAREST), &info);
+    const auto position = control_position_in_work_area({bounds.left, bounds.top}, info.rcWork,
+        static_cast<int>(bounds.right - bounds.left), static_cast<int>(bounds.bottom - bounds.top));
+    SetWindowPos(window_, nullptr, position.x, position.y, 0, 0,
+        SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    auto& p = controller_.preferences();
+    p.has_emoji_position = true;
+    p.emoji_x = position.x;
+    p.emoji_y = position.y;
+    controller_.save_preferences();
+}
+
+POINT EmojiWindow::logical_point(LPARAM point) const noexcept {
+    return geometry_panel_logical_point({GET_X_LPARAM(point), GET_Y_LPARAM(point)},
+        controller_.preferences().emoji_size);
+}
+
+int EmojiWindow::hit_cell(POINT point) const noexcept {
+    for (std::size_t slot = 0; slot < kEmojiFavoriteCount; ++slot) {
+        const auto bounds = emoji_favorite_bounds(slot);
+        if (PtInRect(&bounds, point)) return static_cast<int>(slot);
+    }
+    for (std::size_t cell = 0; cell < kEmojisPerPage; ++cell) {
+        const auto bounds = emoji_catalog_bounds(cell);
+        if (PtInRect(&bounds, point)) return static_cast<int>(cell + kEmojiFavoriteCount);
+    }
+    return -1;
+}
+
+void EmojiWindow::show_size_menu() {
+    HMENU menu = CreatePopupMenu();
+    if (!menu) return;
+    const auto& p = controller_.preferences();
+    for (std::size_t index = 0; index < kControlSizeLabels.size(); ++index)
+        AppendMenuW(menu, MF_STRING | (static_cast<int>(index) == p.emoji_size ? MF_CHECKED : 0),
+            5600 + index, kControlSizeLabels[index]);
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING | (p.emoji_pinned ? MF_CHECKED : 0), 5700, L"Mantener abierto");
+    AppendMenuW(menu, MF_STRING, 5701, L"Restablecer posición junto a la paleta");
+    const float scale = geometry_panel_scale(p.emoji_size);
+    POINT position{static_cast<LONG>(130 * scale), static_cast<LONG>(36 * scale)};
+    ClientToScreen(window_, &position);
+    HWND previous = GetForegroundWindow();
+    SetForegroundWindow(window_);
+    const UINT command = static_cast<UINT>(TrackPopupMenu(menu, TPM_RETURNCMD | TPM_NONOTIFY,
+        position.x, position.y, 0, window_, nullptr));
+    DestroyMenu(menu);
+    PostMessageW(window_, WM_NULL, 0, 0);
+    if (previous && previous != window_ && IsWindow(previous)) SetForegroundWindow(previous);
+    if (command) SendMessageW(window_, WM_COMMAND, command, 0);
+}
+
+void EmojiWindow::show_favorite_menu(int id, int favorite_slot, POINT point) {
+    HMENU menu = CreatePopupMenu();
+    if (!menu) return;
+    const auto& p = controller_.preferences();
+    if (valid_emoji(id)) {
+        for (std::size_t slot = 0; slot < kEmojiFavoriteCount; ++slot) {
+            const int current = p.emoji_favorites[slot];
+            const std::wstring title = L"Guardar en favorito " + std::to_wstring(slot + 1) +
+                L" · " + (valid_emoji(current) ? kEmojis[static_cast<std::size_t>(current)].name : L"Vacío");
+            AppendMenuW(menu, MF_STRING, 5900 + slot, title.c_str());
+        }
+    }
+    if (favorite_slot >= 0) {
+        if (valid_emoji(id)) AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+        AppendMenuW(menu, MF_STRING, 5999, L"Vaciar este favorito");
+    }
+    HWND previous = GetForegroundWindow();
+    SetForegroundWindow(window_);
+    const UINT command = static_cast<UINT>(TrackPopupMenu(menu, TPM_RETURNCMD | TPM_NONOTIFY,
+        point.x, point.y, 0, window_, nullptr));
+    DestroyMenu(menu);
+    PostMessageW(window_, WM_NULL, 0, 0);
+    if (previous && previous != window_ && IsWindow(previous)) SetForegroundWindow(previous);
+    if (command >= 5900 && command < 5900 + kEmojiFavoriteCount)
+        SendMessageW(window_, WM_COMMAND, command, id);
+    else if (command == 5999 && favorite_slot >= 0)
+        SendMessageW(window_, WM_COMMAND, 5900 + static_cast<WPARAM>(favorite_slot), -1);
+}
+
+LRESULT EmojiWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
+    auto& p = controller_.preferences();
+    if (message == WM_COMMAND) {
+        const UINT command = LOWORD(wparam);
+        if (command >= 5600 && command < 5600 + kControlSizeLabels.size()) {
+            remember_position();
+            p.emoji_size = static_cast<int>(command - 5600);
+            restore_layout();
+        } else if (command == 5700) {
+            p.emoji_pinned = !p.emoji_pinned;
+            p.emoji_visible = visible();
+            remember_position();
+        } else if (command == 5701) {
+            p.has_emoji_position = false;
+            restore_layout();
+        } else if (command >= 5800 && command < 5800 + kEmojiPageNames.size()) {
+            page_ = static_cast<int>(command - 5800);
+        } else if (command >= 5900 && command < 5900 + kEmojiFavoriteCount &&
+                   (valid_emoji(static_cast<int>(lparam)) || lparam == -1)) {
+            p.emoji_favorites[command - 5900] = static_cast<int>(lparam);
+        } else return 0;
+        controller_.save_preferences();
+        invalidate();
+        return 0;
+    }
+    if (message == WM_LBUTTONDOWN) {
+        const POINT point = logical_point(lparam);
+        if (PtInRect(&kGeometrySizeBounds, point)) { show_size_menu(); return 0; }
+        if (PtInRect(&kGeometryPinBounds, point)) { SendMessageW(window_, WM_COMMAND, 5700, 0); return 0; }
+        if (PtInRect(&kGeometryCloseBounds, point)) { hide(); return 0; }
+        if (point.y < 41) {
+            RECT bounds{};
+            GetWindowRect(window_, &bounds);
+            drag_origin_ = {bounds.left, bounds.top};
+            GetCursorPos(&drag_cursor_);
+            dragging_ = true;
+            SetCapture(window_);
+            return 0;
+        }
+        for (std::size_t page = 0; page < kEmojiPageNames.size(); ++page) {
+            const auto bounds = emoji_page_bounds(page);
+            if (PtInRect(&bounds, point)) {
+                page_ = static_cast<int>(page);
+                hovered_ = -1;
+                invalidate();
+                return 0;
+            }
+        }
+        const int hit = hit_cell(point);
+        if (hit >= 0) {
+            const int id = hit < static_cast<int>(kEmojiFavoriteCount)
+                ? p.emoji_favorites[static_cast<std::size_t>(hit)]
+                : page_ * static_cast<int>(kEmojisPerPage) + hit - static_cast<int>(kEmojiFavoriteCount);
+            if (valid_emoji(id)) controller_.select_emoji(id);
+        }
+        return 0;
+    }
+    if (message == WM_RBUTTONDOWN) {
+        const int hit = hit_cell(logical_point(lparam));
+        if (hit < 0) { show_size_menu(); return 0; }
+        const bool favorite = hit < static_cast<int>(kEmojiFavoriteCount);
+        const int id = favorite ? p.emoji_favorites[static_cast<std::size_t>(hit)]
+            : page_ * static_cast<int>(kEmojisPerPage) + hit - static_cast<int>(kEmojiFavoriteCount);
+        POINT point{GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+        ClientToScreen(window_, &point);
+        show_favorite_menu(id, favorite ? hit : -1, point);
+        return 0;
+    }
+    if (message == WM_MOUSEMOVE) {
+        if (dragging_) {
+            POINT cursor{};
+            GetCursorPos(&cursor);
+            SetWindowPos(window_, HWND_TOPMOST, drag_origin_.x + cursor.x - drag_cursor_.x,
+                drag_origin_.y + cursor.y - drag_cursor_.y, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
+        } else {
+            const int next = hit_cell(logical_point(lparam));
+            if (next != hovered_) { hovered_ = next; invalidate(); }
+            TRACKMOUSEEVENT tracking{sizeof(tracking), TME_LEAVE, window_, 0};
+            TrackMouseEvent(&tracking);
+        }
+        return 0;
+    }
+    if (message == WM_MOUSELEAVE) { hovered_ = -1; invalidate(); return 0; }
+    if ((message == WM_LBUTTONUP || message == WM_CAPTURECHANGED) && dragging_) {
+        dragging_ = false;
+        if (GetCapture() == window_) ReleaseCapture();
+        remember_position();
+        return 0;
+    }
+    if (message == WM_EXITSIZEMOVE) { remember_position(); return 0; }
+    if (message == WM_CLOSE) { hide(); return 0; }
+    return WindowBase::handle_message(message, wparam, lparam);
+}
+
+void EmojiWindow::render() {
+    auto* context = surface_.begin_draw(D2D1::ColorF(0, 0.0F));
+    if (!context) return;
+    const auto& p = controller_.preferences();
+    const float scale = geometry_panel_scale(p.emoji_size);
+    context->SetTransform(D2D1::Matrix3x2F::Scale(scale, scale));
+    const auto& theme = current_ui_theme();
+    ComPtr<ID2D1SolidColorBrush> panel, border, text, muted, accent, raised, selected;
+    context->CreateSolidColorBrush(theme_color(theme.surface_1, 0.985F), panel.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.line), border.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.text), text.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.text_muted), muted.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.violet), accent.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.surface_2), raised.GetAddressOf());
+    context->CreateSolidColorBrush(theme_color(theme.light ? 0xE5E0FA : 0x29233F), selected.GetAddressOf());
+    const auto background = D2D1::RoundedRect(D2D1::RectF(2, 2, 364, 334), 18, 18);
+    context->FillRoundedRectangle(background, panel.Get());
+    context->DrawRoundedRectangle(background, border.Get(), 1.15F);
+    ComPtr<IDWriteTextFormat> title, small;
+    controller_.graphics().dwrite()->CreateTextFormat(L"Segoe UI Variable Text", nullptr,
+        DWRITE_FONT_WEIGHT_SEMI_BOLD, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+        12.5F, L"es-CO", title.GetAddressOf());
+    controller_.graphics().dwrite()->CreateTextFormat(L"Segoe UI Variable Text", nullptr,
+        DWRITE_FONT_WEIGHT_NORMAL, DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL,
+        10.0F, L"es-CO", small.GetAddressOf());
+    const auto emoji_format = create_emoji_format(controller_.graphics());
+    const auto label = [&](const std::wstring& value, D2D1_RECT_F bounds, bool dim = false) {
+        if (title) context->DrawTextW(value.c_str(), static_cast<UINT32>(value.size()),
+            title.Get(), bounds, dim ? muted.Get() : text.Get());
+    };
+    const auto button = [&](RECT bounds, bool active, bool hovered = false) {
+        const auto rect = D2D1::RoundedRect(D2D1::RectF(static_cast<float>(bounds.left),
+            static_cast<float>(bounds.top), static_cast<float>(bounds.right),
+            static_cast<float>(bounds.bottom)), 6, 6);
+        context->FillRoundedRectangle(rect, active || hovered ? selected.Get() : raised.Get());
+        context->DrawRoundedRectangle(rect, active ? accent.Get() : border.Get(), 0.8F);
+    };
+    context->FillRoundedRectangle(D2D1::RoundedRect(D2D1::RectF(17, 17, 21, 31), 2, 2), accent.Get());
+    label(L"EMOJIS", D2D1::RectF(30, 13, 115, 36));
+    button(kGeometrySizeBounds, false);
+    button(kGeometryPinBounds, p.emoji_pinned);
+    button(kGeometryCloseBounds, false);
+    label(std::to_wstring(static_cast<int>(std::lround(scale * 100))) + L" %",
+        D2D1::RectF(130, 13, 186, 35));
+    context->DrawLine(D2D1::Point2F(188, 20), D2D1::Point2F(192, 24), muted.Get(), 1.4F);
+    context->DrawLine(D2D1::Point2F(192, 24), D2D1::Point2F(196, 20), muted.Get(), 1.4F);
+    label(p.emoji_pinned ? L"Fijado" : L"Fijar", D2D1::RectF(233, 13, 303, 35));
+    context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(223, 22), 2.5F, 2.5F),
+        p.emoji_pinned ? accent.Get() : muted.Get());
+    context->DrawLine(D2D1::Point2F(326, 17), D2D1::Point2F(336, 27), text.Get(), 1.6F);
+    context->DrawLine(D2D1::Point2F(336, 17), D2D1::Point2F(326, 27), text.Get(), 1.6F);
+    label(L"FAVORITOS", D2D1::RectF(16, 44, 135, 63), true);
+    if (small) context->DrawTextW(L"Atajos en Configuración", 23, small.Get(),
+        D2D1::RectF(204, 47, 351, 63), muted.Get());
+    for (std::size_t cell = 0; cell < kEmojiFavoriteCount + kEmojisPerPage; ++cell) {
+        const bool favorite = cell < kEmojiFavoriteCount;
+        const int id = favorite ? p.emoji_favorites[cell]
+            : page_ * static_cast<int>(kEmojisPerPage) + static_cast<int>(cell - kEmojiFavoriteCount);
+        const RECT bounds = favorite ? emoji_favorite_bounds(cell)
+            : emoji_catalog_bounds(cell - kEmojiFavoriteCount);
+        const bool active = valid_emoji(id) && controller_.state().tool == Tool::Emoji && p.selected_emoji == id;
+        button(bounds, active, hovered_ == static_cast<int>(cell));
+        const float left = static_cast<float>(bounds.left);
+        const float top = static_cast<float>(bounds.top);
+        const float right = static_cast<float>(bounds.right);
+        const float bottom = static_cast<float>(bounds.bottom);
+        if (valid_emoji(id)) draw_emoji(context, emoji_format.Get(), text.Get(),
+            kEmojis[static_cast<std::size_t>(id)].glyph,
+            D2D1::RectF(left + 6, top + (favorite ? 9.0F : 2.0F), right - 3, bottom - 2));
+        else label(L"+", D2D1::RectF(left + 15, top + 16, right, bottom), true);
+        if (favorite && small) {
+            const auto number = std::to_wstring(cell + 1);
+            context->DrawTextW(number.c_str(), static_cast<UINT32>(number.size()), small.Get(),
+                D2D1::RectF(left + 3, top + 1, right, top + 15), muted.Get());
+        }
+    }
+    for (std::size_t page = 0; page < kEmojiPageNames.size(); ++page) {
+        const auto bounds = emoji_page_bounds(page);
+        button(bounds, page_ == static_cast<int>(page));
+        label(kEmojiPageNames[page], D2D1::RectF(static_cast<float>(bounds.left + 10),
+            115, static_cast<float>(bounds.right), 135));
+    }
+    int description = p.selected_emoji;
+    if (hovered_ >= 0) description = hovered_ < static_cast<int>(kEmojiFavoriteCount)
+        ? p.emoji_favorites[static_cast<std::size_t>(hovered_)]
+        : page_ * static_cast<int>(kEmojisPerPage) + hovered_ - static_cast<int>(kEmojiFavoriteCount);
+    label(valid_emoji(description) ? kEmojis[static_cast<std::size_t>(description)].name : L"Favorito vacío",
+        D2D1::RectF(16, 299, 350, 318));
+    if (small) {
+        const std::wstring help = L"Clic: colocar · Arrastra: tamaño · Clic derecho: favoritos";
+        context->DrawTextW(help.c_str(), static_cast<UINT32>(help.size()), small.Get(),
+            D2D1::RectF(16, 319, 355, 334), muted.Get());
+    }
+    context->SetTransform(D2D1::Matrix3x2F::Identity());
+    std::wstring error;
+    if (!surface_.end_draw(error)) controller_.report_runtime_error(error);
+}
+
 bool TextInputWindow::initialize(GraphicsDevice& graphics) {
     const RECT bounds{0, 0, 640, 420};
     // DirectComposition supplies the alpha channel. A legacy layered backing
@@ -4865,7 +5302,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.13.0",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.14.0",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
@@ -5017,7 +5454,7 @@ bool SettingsWindow::initialize() {
                                     reinterpret_cast<HMENU>(4300),
                                     GetModuleHandleW(nullptr), nullptr);
     help_ = CreateWindowW(L"STATIC",
-        L"Ayuda de Elite Pen 2.13.0. Anotación, pizarra, captura y zoom para Windows. "
+        L"Ayuda de Elite Pen 2.14.0. Anotación, pizarra, captura y zoom para Windows. "
         L"Código abierto bajo Apache License 2.0. Desarrollado por Power Elite Studio.",
         WS_CHILD | SS_OWNERDRAW, 24, 119, 540, 400, window_,
         reinterpret_cast<HMENU>(4105), GetModuleHandleW(nullptr), nullptr);
@@ -5160,7 +5597,14 @@ void SettingsWindow::paint_shortcuts(HDC dc, RECT bounds) {
                   DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
         SetTextColor(dc, theme_colorref(theme.text_muted));
         RECT description{bounds.left + 126, y, bounds.left + 318, y + 16};
-        DrawTextW(dc, kHotkeyInfo[index].description, -1, &description,
+        std::wstring detail = kHotkeyInfo[index].description;
+        if (index >= static_cast<std::size_t>(HotkeyAction::EmojiFavorite1) &&
+            index <= static_cast<std::size_t>(HotkeyAction::EmojiFavorite8)) {
+            const int id = controller_.preferences().emoji_favorites[
+                index - static_cast<std::size_t>(HotkeyAction::EmojiFavorite1)];
+            detail = valid_emoji(id) ? kEmojis[static_cast<std::size_t>(id)].name : L"Favorito vacío";
+        }
+        DrawTextW(dc, detail.c_str(), -1, &description,
                   DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS);
     }
     SelectObject(dc, small_font_);
@@ -5254,7 +5698,7 @@ void SettingsWindow::paint_help(HDC dc, RECT bounds) {
     SelectObject(dc, small_font_);
     SetTextColor(dc, theme_colorref(theme.text_muted));
     RECT version{bounds.left, bounds.top + 73, bounds.right, bounds.top + 94};
-    DrawTextW(dc, L"Version 2.13.0 · Windows 10 y 11 · x64", -1, &version,
+    DrawTextW(dc, L"Version 2.14.0 · Windows 10 y 11 · x64", -1, &version,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
 
     SelectObject(dc, body_font_);
@@ -6499,8 +6943,11 @@ void ZoomInkWindow::begin_gesture(PointF point, float pressure) {
     drawable.kind = tool;
     drawable.color = controller_.state().color;
     drawable.reference_scale = edit_mode_ ? edit_transform_.scale : 1.0F;
+    if (tool == Tool::Emoji)
+        drawable.text = kEmojis[static_cast<std::size_t>(controller_.preferences().selected_emoji)].glyph;
     drawable.width = annotation_length(controller_.state().effective_width() *
         std::clamp(pressure, 0.35F, 1.45F));
+    if (tool == Tool::Emoji) drawable.width = annotation_length(1.0F);
     drawable.points.push_back(point);
     if (uses_bounding_pair(tool))
         drawable.points.push_back(point);
@@ -6524,7 +6971,7 @@ void ZoomInkWindow::update_gesture(PointF point, WPARAM keys) {
     preview_->invalidate_bounds_cache();
     const Tool tool = preview_->kind;
     if (uses_bounding_pair(tool)) {
-        if ((keys & MK_SHIFT) != 0 && supports_equal_axes(tool)) {
+        if ((tool == Tool::Emoji || (keys & MK_SHIFT) != 0) && supports_equal_axes(tool)) {
             const PointF origin = preview_->points.front();
             const float dx = point.x - origin.x;
             const float dy = point.y - origin.y;
@@ -6604,7 +7051,7 @@ void ZoomInkWindow::finish_gesture(PointF point, WPARAM keys) {
     if (completed.points.size() >= 2 && distance(
             completed.points.front(), completed.points.back()) <
             annotation_length(2.0F)) {
-        if (is_symbol_tool(completed.kind)) {
+        if (is_symbol_tool(completed.kind) || completed.kind == Tool::Emoji) {
             const auto origin = completed.points.front();
             const float size = annotation_length(64.0F);
             completed.points.back() = {origin.x + size, origin.y + size};
@@ -7657,6 +8104,7 @@ bool ZoomWindow::show_zoom() {
         if (edit_toolbar_) excluded.push_back(edit_toolbar_->hwnd());
         if (controller_.palette()) excluded.push_back(controller_.palette()->hwnd());
         if (controller_.geometry_panel()) excluded.push_back(controller_.geometry_panel()->hwnd());
+        if (controller_.emoji_panel()) excluded.push_back(controller_.emoji_panel()->hwnd());
         mag_set_filter_(magnifier_, MW_FILTERMODE_EXCLUDE,
                         static_cast<int>(excluded.size()), excluded.data());
     }
@@ -8584,6 +9032,11 @@ bool Controller::initialize(std::wstring& error) {
         return false;
     }
     text_input_ = std::make_unique<TextInputWindow>(*this);
+    emojis_ = std::make_unique<EmojiWindow>(*this);
+    if (!emojis_->initialize(graphics_)) {
+        error = L"No se pudo crear el panel de emojis.";
+        return false;
+    }
     if (!text_input_->initialize(graphics_)) {
         error = L"No se pudo crear el editor de texto.";
         return false;
@@ -8604,6 +9057,8 @@ bool Controller::initialize(std::wstring& error) {
     }
     if (preferences_.geometry_pinned && preferences_.geometry_visible)
         geometry_->toggle_geometry_near(palette_->hwnd());
+    if (preferences_.emoji_pinned && preferences_.emoji_visible)
+        emojis_->show_near(palette_->hwnd());
     invalidate_all();
     return true;
 }
@@ -8635,6 +9090,7 @@ void Controller::shutdown() {
     text_input_.reset();
     tools_.reset();
     geometry_.reset();
+    emojis_.reset();
     colors_.reset();
     overlays_.clear();
     palette_.reset();
@@ -8665,6 +9121,7 @@ void Controller::invalidate_all() {
     invalidate_document();
     if (palette_) palette_->invalidate();
     if (geometry_ && geometry_->visible()) geometry_->invalidate();
+    if (emojis_ && emojis_->visible()) emojis_->invalidate();
     if (zoom_) zoom_->invalidate_ink();
 }
 
@@ -8676,6 +9133,9 @@ void Controller::restack_palette() {
 }
 
 void Controller::restack_panels() {
+    if (emojis_ && emojis_->visible())
+        SetWindowPos(emojis_->hwnd(), HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     if (geometry_ && geometry_->visible())
         SetWindowPos(geometry_->hwnd(), HWND_TOPMOST, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -8687,7 +9147,8 @@ bool Controller::panel_contains_screen_point(POINT point) const {
         return window && IsWindowVisible(window) && GetWindowRect(window, &bounds) &&
                PtInRect(&bounds, point);
     };
-    return contains(geometry_ ? geometry_->hwnd() : nullptr) ||
+    return contains(emojis_ ? emojis_->hwnd() : nullptr) ||
+           contains(geometry_ ? geometry_->hwnd() : nullptr) ||
            contains(tools_ ? tools_->hwnd() : nullptr) ||
            contains(colors_ ? colors_->hwnd() : nullptr) ||
            contains(settings_ ? settings_->hwnd() : nullptr);
@@ -8723,6 +9184,7 @@ void Controller::set_tool(Tool tool) {
     update_overlay_interaction();
     if (palette_) palette_->invalidate();
     if (geometry_ && geometry_->visible()) geometry_->invalidate();
+    if (emojis_ && emojis_->visible()) emojis_->invalidate();
 }
 
 void Controller::set_color(Color color) {
@@ -8877,10 +9339,36 @@ void Controller::toggle_geometry_panel() {
     else geometry_->toggle_geometry_near(palette_->hwnd());
 }
 
+void Controller::toggle_emoji_panel() {
+    if (!emojis_ || !palette_) return;
+    const bool was_visible = emojis_->visible();
+    close_panels();
+    if (was_visible) emojis_->hide();
+    else emojis_->show_near(palette_->hwnd());
+    restack_palette();
+}
+
+void Controller::select_emoji(int id) {
+    if (!valid_emoji(id)) return;
+    preferences_.selected_emoji = id;
+    save_preferences();
+    set_tool(Tool::Emoji);
+    if (emojis_ && !preferences_.emoji_pinned) emojis_->hide();
+    if (emojis_) emojis_->invalidate();
+}
+
 void Controller::execute_hotkey(HotkeyAction action) {
     const auto index = static_cast<std::size_t>(action);
     if (settings_ && index < preferences_.hotkeys.size() &&
         settings_->capture_registered_hotkey(preferences_.hotkeys[index])) return;
+    if (action >= HotkeyAction::EmojiFavorite1 && action <= HotkeyAction::EmojiFavorite8) {
+        const auto slot = index - static_cast<std::size_t>(HotkeyAction::EmojiFavorite1);
+        if (valid_emoji(preferences_.emoji_favorites[slot]))
+            select_emoji(preferences_.emoji_favorites[slot]);
+        else if (palette_)
+            palette_->show_notification(L"Favorito vacío", L"Asigna un emoji con clic derecho en el panel Emojis.");
+        return;
+    }
     switch (action) {
         case HotkeyAction::Interact:
             set_tool(state_.tool == Tool::Interact ? Tool::Pen : Tool::Interact);
@@ -8910,6 +9398,7 @@ void Controller::execute_hotkey(HotkeyAction action) {
         case HotkeyAction::Screenshot: set_tool(Tool::Screenshot); break;
         case HotkeyAction::ColorPanel: toggle_color_panel(); break;
         case HotkeyAction::GeometryPanel: toggle_geometry_panel(); break;
+        case HotkeyAction::EmojiPanel: toggle_emoji_panel(); break;
         case HotkeyAction::ToolPanel: toggle_tool_panel(); break;
         case HotkeyAction::Settings: show_settings_window(); break;
         case HotkeyAction::PaletteCollapse:
@@ -8943,6 +9432,7 @@ bool Controller::matches_hotkey(HotkeyAction action, WPARAM virtual_key) const {
 }
 
 void Controller::close_panels() {
+    if (emojis_ && !preferences_.emoji_pinned) emojis_->hide();
     if (colors_) colors_->hide();
     if (tools_) tools_->hide();
     if (geometry_ && !preferences_.geometry_pinned) geometry_->hide();
@@ -9253,6 +9743,7 @@ void Controller::rebuild_overlays() {
     create_overlays(error);
     if (!error.empty()) report_runtime_error(error);
     if (geometry_) geometry_->restore_geometry_layout();
+    if (emojis_) emojis_->restore_layout();
     if (palette_) SetWindowPos(palette_->hwnd(), HWND_TOPMOST, 0, 0, 0, 0,
                                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     invalidate_all();
@@ -9288,6 +9779,7 @@ void Controller::apply_capture_preference() {
     if (colors_ && colors_->hwnd()) SetWindowDisplayAffinity(colors_->hwnd(), affinity);
     if (tools_ && tools_->hwnd()) SetWindowDisplayAffinity(tools_->hwnd(), affinity);
     if (geometry_ && geometry_->hwnd()) SetWindowDisplayAffinity(geometry_->hwnd(), affinity);
+    if (emojis_ && emojis_->hwnd()) SetWindowDisplayAffinity(emojis_->hwnd(), affinity);
     if (text_input_ && text_input_->hwnd()) SetWindowDisplayAffinity(text_input_->hwnd(), affinity);
 }
 
@@ -9332,6 +9824,7 @@ void Controller::set_theme(AppTheme theme) {
     if (colors_) colors_->invalidate();
     if (tools_) tools_->invalidate();
     if (geometry_) geometry_->invalidate();
+    if (emojis_) emojis_->invalidate();
     if (text_input_) text_input_->invalidate();
     if (zoom_) zoom_->apply_theme();
     if (state_.cursor_highlight) invalidate_document();

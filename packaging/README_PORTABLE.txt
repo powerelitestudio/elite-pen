@@ -1,4 +1,4 @@
-ELITE PEN 2.13.0 — EDICION PORTABLE
+ELITE PEN 2.14.0 — EDICION PORTABLE
 ================================
 
 Elite Pen es la herramienta de anotacion, pizarra y ampliacion de pantalla de
@@ -41,6 +41,17 @@ CONTROLES PRINCIPALES
   paleta. Pulsa Fijar para dejarlo abierto y arrastra por FIGURAS para moverlo a
   otra pantalla. Recuerda tamano y posicion; si queda fijado y visible, reaparece
   al iniciar. La X lo oculta. Desactiva Fijado para cerrar al elegir una figura.
+
+EMOJIS, FAVORITOS Y MACROPAD
+--------------------------
+- Herramientas > Emojis: 72 emojis de colores en tres categorias.
+- Clic en un emoji y despues en pantalla para colocarlo; arrastra para darle tamano.
+- Clic derecho en un emoji: Guardar en favorito 1-8. Tambien puedes vaciar favoritos.
+- Configuracion > Atajos: asigna teclas a Emojis o Emoji favorito 1-8; el macropad
+  puede emitir esas mismas teclas. F1-F24 y combinaciones admitidas, sin asignar al inicio.
+- Porcentaje en la cabecera: 80-300%, independiente de la paleta y de Figuras.
+- Fijar lo mantiene abierto; arrastra EMOJIS a otro monitor. Tamano, posicion,
+  favoritos y panel fijado visible se recuerdan al reiniciar. X lo oculta.
 
 ATAJOS
 ------
@@ -106,7 +117,7 @@ Configuracion.
 
 SOPORTE
 -------
-Producto de Power Elite Studio. Version 2.13.0.
+Producto de Power Elite Studio. Version 2.14.0.
 Sitio oficial: https://powerelite.studio/
 Codigo fuente: https://github.com/powerelitestudio/elite-pen
 

@@ -1,5 +1,24 @@
 # Historial de cambios
 
+## 2.14.0 — 2026-10-16
+
+- Herramientas > Emojis abre un catálogo de 72 emojis de colores en tres categorías:
+  Símbolos, Caras y Gestos y clase. Usa Segoe UI Emoji de Windows sin descargas.
+- Ocho favoritos numerados: clic derecho en cualquier emoji permite guardarlo en
+  el espacio elegido; clic derecho en un favorito permite vaciarlo. Los cambios
+  se conservan entre sesiones y se reflejan en las descripciones de Configuración.
+- Nueve acciones globales nuevas, sin asignar: abrir Emojis y seleccionar cada
+  favorito. Admiten F1–F24 y combinaciones para macropads, con detección de conflictos.
+- Panel independiente con seis tamaños del 80 % al 300 %, botón Fijar, cierre,
+  posición entre monitores y restauración si quedó fijado y visible.
+- Un clic coloca un emoji de 64 px; arrastrar ajusta su tamaño manteniendo sus
+  proporciones. Conserva sus colores aunque cambie el color o grosor del lápiz.
+  Funciona en escritorio, pizarras, zoom congelado y Zoom editable; borrar,
+  deshacer y rehacer operan sobre el emoji completo.
+- Preferencias anteriores conservadas por nombre; nuevos IDs, favoritos vacíos
+  y tamaños inválidos se validan al cargar. La interfaz prueba F17–F24, catálogo,
+  favoritos, las seis escalas, historial y restauración entre sesiones.
+
 ## 2.13.0 — 2026-10-16
 
 - Panel de Figuras con seis tamaños independientes de la paleta, del 80 % al

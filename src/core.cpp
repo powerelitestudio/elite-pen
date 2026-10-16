@@ -99,6 +99,7 @@ const wchar_t* tool_name(Tool tool) noexcept {
         case Tool::Checkmark: return L"Chulito";
         case Tool::Warning: return L"Advertencia";
         case Tool::Prohibition: return L"Prohibido";
+        case Tool::Emoji: return L"Emoji";
     }
     return L"Herramienta";
 }
@@ -386,7 +387,8 @@ bool hit_test(const Drawable& item, PointF point, float tolerance) noexcept {
     if (item.points.empty()) return false;
     if (!item.bounds().contains(point)) return false;
 
-    if (item.kind == Tool::Text) return item.bounds().contains(point);
+    if (item.kind == Tool::Text || item.kind == Tool::Emoji)
+        return item.bounds().contains(point);
     if (is_symbol_tool(item.kind)) {
         if (item.points.size() < 2) return false;
         const auto geometry = symbol_geometry(

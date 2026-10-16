@@ -10,9 +10,9 @@ pantalla para Windows, desarrollada por [Power Elite Studio](https://powerelite.
 Permite explicar sobre cualquier aplicación sin convertir la presentación en una
 sucesión de ventanas y menús.
 
-> **Estado:** acceso anticipado. La versión 2.13.0 incorpora un panel de Figuras
-> con tamaño independiente del 80 % al 300 %, posición guardada y modo fijo opcional.
-> Incluye los símbolos Tacha, Chulito, Advertencia y Prohibido con sus atajos. Los reportes
+> **Estado:** acceso anticipado. La versión 2.14.0 incorpora 72 emojis de colores,
+> ocho favoritos y atajos configurables para el macropad. Su panel independiente
+> se amplía del 80 % al 300 %, se mueve entre monitores y puede quedar fijo. Los reportes
 > de errores y casos de compatibilidad son bienvenidos.
 
 Ofrece dos presentaciones del mismo motor: `Paleta`, inspirada en una paleta de
@@ -27,13 +27,26 @@ reconfigurar su fuente cuando el puntero permanece quieto. El benchmark automati
 valida 5.000 trazos, cuadros en caché, dibujo activo, paneo del Zoom editable,
 memoria y rutas de compatibilidad.
 
+## Emojis y macropad
+
+1. Abre **Herramientas > Emojis** y elige un emoji. Un clic lo coloca; arrastrar
+   define su tamaño. Sus colores son independientes del lápiz.
+2. Haz clic derecho sobre cualquier emoji y elige **Guardar en favorito 1–8**.
+   Puedes reemplazar o vaciar esos espacios sin perder sus atajos.
+3. En **Configuración > Atajos**, asigna una combinación a **Emoji favorito 1–8**
+   o a **Emojis** para abrir el panel. Programa esa combinación en tu macropad.
+   Cada atajo selecciona el favorito; después lo colocas con clic o arrastre.
+4. En la cabecera del panel elige **80 %–300 %**, pulsa **Fijar** y arrastra
+   **EMOJIS** al monitor deseado. Recuerda tamaño y posición al volver a abrir.
+   **X** lo cierra incluso fijado; **Fijar** desactivado recupera el cierre al elegir.
+
 ## Descargar y ejecutar
 
 Los paquetes oficiales listos para usar se publican en
 [GitHub Releases](https://github.com/powerelitestudio/elite-pen/releases):
 
 La distribución publicada que se enlaza a continuación es 2.10.3. Los símbolos y
-tamaños nuevos están en el código 2.13.0 y pueden compilarse con los scripts del repositorio.
+tamaños nuevos y los emojis están en el código 2.14.0 y pueden compilarse con los scripts del repositorio.
 
 - [Descargar portable 2.10.3](https://github.com/powerelitestudio/elite-pen/releases/download/v2.10.3/Elite.Pen.Portable.2.10.3.zip):
   descomprime la carpeta y ejecuta `Elite Pen.exe`.

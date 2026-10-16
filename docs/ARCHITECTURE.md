@@ -58,6 +58,30 @@ y factor mientras recibe gestos y libera esa instantánea al volver a navegar. L
 vista transforma bloques GPU ya rasterizados en vez de reconstruir geometría durante
 el paneo. La congelación `P` continúa usando su documento y su instantánea originales.
 
+## Emojis — 2.14.0
+
+`elite_pen/emoji.hpp` declara 72 secuencias Unicode con IDs estables y ocho espacios
+de favoritos. Solo se añaden IDs al final. Preferencias valida los índices al cargar,
+conserva los espacios vacíos (-1) y guarda atajos por sus claves, sin mover los de
+las versiones anteriores. Nueve acciones globales preceden las diez contextuales.
+
+`Tool::Emoji` se añade al final del enum y `Drawable::text` conserva una copia de
+su secuencia. Dos puntos definen la caja; los eventos de entrada normal y ZoomInk
+producen cuadrados de 64 px al hacer clic y convierten longitudes en Zoom editable.
+El borrador selecciona la caja y el historial trata todo el emoji como una operación.
+El renderizador compartido usa un formato Segoe UI Emoji de 64 DIPs, alineación central
+y una transformación de caja; Direct2D recibe ENABLE_COLOR_FONT. Se conservan las
+cachés GPU existentes y no se descargan ni redistribuyen fuentes o imágenes.
+
+`EmojiWindow` es una superficie DirectComposition independiente. Reutiliza las seis
+escalas y límites seguros de los controles flotantes; invierte la transformación para
+clics, muestra tres páginas de catálogo y ocho favoritos. Su tamaño base es 366×336.
+El controlador integra su HWND en exclusión Magnifier, detección de clics de panel,
+orden topmost, tema y política de captura. Fijación, visibilidad y posición se guardan
+por separado para que un cierre explícito no reaparezca al reiniciar.
+
+Referencia de la API de color: https://learn.microsoft.com/windows/win32/directwrite/color-fonts
+
 ## Decisiones
 
 ### ADR-001: C++ nativo y DirectComposition

@@ -1,4 +1,5 @@
 #include "elite_pen/core.hpp"
+#include "elite_pen/emoji.hpp"
 
 #include <array>
 #include <cstdlib>
@@ -481,6 +482,35 @@ void test_symbols() {
           "freehand tools do not acquire symbol geometry");
 }
 
+void test_emojis() {
+    check(kEmojis.size() == 72 && !valid_emoji(-1) && !valid_emoji(72),
+          "catalog IDs validate persisted favorites");
+    for (std::size_t id = 0; id < kEmojis.size(); ++id) {
+        check(kEmojis[id].glyph[0] && kEmojis[id].name[0], "every emoji has a glyph and a name");
+        for (std::size_t previous = 0; previous < id; ++previous)
+            check(std::wstring_view(kEmojis[id].glyph) != kEmojis[previous].glyph,
+                  "emoji IDs identify distinct glyph sequences");
+    }
+    Drawable emoji;
+    emoji.kind = Tool::Emoji;
+    emoji.width = 1;
+    emoji.points = {{-180, -140}, {-244, -204}};
+    emoji.text = kEmojis[3].glyph;
+    check(is_drawing_tool(Tool::Emoji) &&
+          gesture_tool(Tool::Emoji, true, true, true, true) == Tool::Emoji,
+          "emojis remain a dedicated drawing tool under keyboard modifiers");
+    check(hit_test(emoji, {-212, -172}) && !hit_test(emoji, {-100, -100}),
+          "emoji erasing supports reversed drags and negative monitor coordinates");
+    Document document;
+    document.add(emoji);
+    check(document.undo() && document.empty() && document.redo() &&
+          document.items().back().text == kEmojis[3].glyph,
+          "undo and redo preserve the complete multi-codepoint emoji");
+    check(document.erase_at({-212, -172}) && document.empty() && document.undo() &&
+          document.items().back().text == emoji.text,
+          "erasing an emoji removes and restores one complete annotation");
+}
+
 void test_history_limit() {
     Document document(2);
     document.add(line({0, 0}, {1, 1}));
@@ -500,6 +530,7 @@ int main() {
     test_compound_erase();
     test_hit_testing();
     test_symbols();
+    test_emojis();
     test_simplification();
     test_modifier_gestures();
     test_history_limit();

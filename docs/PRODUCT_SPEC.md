@@ -170,6 +170,34 @@ recta sigue el eje de su segmento; la curva sigue la tangente final de una Bézi
 arco amplio. Su escala óptica es independiente del tamaño mínimo accesible usado al
 dibujar sobre el lienzo, evitando recortes o puntas desproporcionadas en el panel.
 
+### Emojis de colores y favoritos — 2.14.0
+
+Herramientas > Emojis abre un panel separado con 72 emojis en tres categorías y
+ocho favoritos numerados. Clic derecho en un emoji ofrece Guardar en favorito 1–8;
+en un favorito también permite vaciarlo. Los espacios son estables: reemplazar su
+emoji conserva el atajo asociado. Los predeterminados son Bien, Correcto, Error,
+Advertencia, Prohibido, Idea, Objetivo y Corazón.
+
+Configuración > Atajos incluye Emojis y Emoji favorito 1–8. Son nueve acciones
+globales sin asignación inicial, compatibles con las mismas F1–F24 y combinaciones
+de modificadores de las demás herramientas. Activar un favorito selecciona su emoji;
+después se coloca con clic o arrastre. Un espacio vacío no cambia la herramienta.
+
+El panel tiene seis escalas independientes 80/100/125/150/200/300 %. La base es
+366 × 336 px y 300 % ocupa 1098 × 1008 px. Fijar mantiene el panel accesible al
+seleccionar emojis, herramientas, configuración y zoom. Se arrastra por EMOJIS y
+guarda posición, escala, selección, favoritos, fijación y visibilidad. Solo reaparece
+al iniciar si quedó fijado y visible. X lo oculta incluso fijado. Desfijarlo devuelve
+el cierre tras seleccionar. Restablecer posición se ofrece en el menú de tamaño.
+
+Cada anotación Emoji guarda la secuencia Unicode completa y dos esquinas. El clic
+crea un cuadrado de 64 px visuales; el arrastre conserva la proporción. Segoe UI Emoji
+y Direct2D con ENABLE_COLOR_FONT conservan los colores originales; no se redistribuyen
+fuentes ni imágenes de terceros. El diseño exacto depende de la fuente de Windows.
+Es independiente de color y grosor del lápiz. El borrador selecciona la caja del emoji
+y deshacer/rehacer conserva toda su secuencia. Las tres rutas de documento (escritorio,
+zoom congelado y Zoom editable) comparten el renderizador y el historial por objetos.
+
 ## 3. Documento e historial
 
 - Cada monitor comparte un solo documento en coordenadas del escritorio virtual.

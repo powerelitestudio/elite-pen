@@ -110,6 +110,21 @@ Preferences PreferencesStore::load() const {
     result.has_geometry_position = read_int(path_, L"HasGeometryPosition", 0) != 0;
     result.geometry_x = read_int(path_, L"GeometryX", 0);
     result.geometry_y = read_int(path_, L"GeometryY", 0);
+    result.emoji_size = std::clamp(read_int(path_, L"EmojiSize", 1), 0,
+                                  static_cast<int>(kGeometryPanelScales.size()) - 1);
+    result.emoji_pinned = read_int(path_, L"EmojiPinned", 0) != 0;
+    result.emoji_visible = read_int(path_, L"EmojiVisible", 0) != 0;
+    result.has_emoji_position = read_int(path_, L"HasEmojiPosition", 0) != 0;
+    result.emoji_x = read_int(path_, L"EmojiX", 0);
+    result.emoji_y = read_int(path_, L"EmojiY", 0);
+    const int selected = read_int(path_, L"SelectedEmoji", 0);
+    result.selected_emoji = valid_emoji(selected) ? selected : 0;
+    for (std::size_t slot = 0; slot < kEmojiFavoriteCount; ++slot) {
+        const auto key = L"EmojiFavorite" + std::to_wstring(slot + 1);
+        const int id = read_int(path_, key.c_str(), kDefaultEmojiFavorites[slot]);
+        result.emoji_favorites[slot] = valid_emoji(id) || id == -1
+            ? id : kDefaultEmojiFavorites[slot];
+    }
     result.zoom_factor = std::clamp(read_float(path_, L"ZoomFactor", 2.0F), 1.25F, 8.0F);
     result.zoom_view = std::clamp(read_int(path_, L"ZoomView", 0), 0, 2);
     result.zoom_lens_diameter = std::clamp(
@@ -129,6 +144,9 @@ Preferences PreferencesStore::load() const {
         L"HotkeyColorPanelAlternate",
         L"HotkeyPentagon", L"HotkeyHexagon",
         L"HotkeyCross", L"HotkeyCheckmark", L"HotkeyWarning", L"HotkeyProhibition",
+        L"HotkeyEmojiPanel", L"HotkeyEmojiFavorite1", L"HotkeyEmojiFavorite2",
+        L"HotkeyEmojiFavorite3", L"HotkeyEmojiFavorite4", L"HotkeyEmojiFavorite5",
+        L"HotkeyEmojiFavorite6", L"HotkeyEmojiFavorite7", L"HotkeyEmojiFavorite8",
         L"HotkeyZoomFreeze", L"HotkeyZoomFullscreen", L"HotkeyZoomLens",
         L"HotkeyZoomDocked", L"HotkeyZoomCycleView", L"HotkeyZoomInvert",
         L"HotkeyZoomOverview", L"HotkeyZoomIn", L"HotkeyZoomOut",
@@ -177,6 +195,15 @@ bool PreferencesStore::save(const Preferences& preferences) const {
     content << "HasGeometryPosition=" << (preferences.has_geometry_position ? 1 : 0) << "\r\n";
     content << "GeometryX=" << preferences.geometry_x << "\r\n";
     content << "GeometryY=" << preferences.geometry_y << "\r\n";
+    content << "EmojiSize=" << preferences.emoji_size << "\r\n";
+    content << "EmojiPinned=" << (preferences.emoji_pinned ? 1 : 0) << "\r\n";
+    content << "EmojiVisible=" << (preferences.emoji_visible ? 1 : 0) << "\r\n";
+    content << "HasEmojiPosition=" << (preferences.has_emoji_position ? 1 : 0) << "\r\n";
+    content << "EmojiX=" << preferences.emoji_x << "\r\n";
+    content << "EmojiY=" << preferences.emoji_y << "\r\n";
+    content << "SelectedEmoji=" << preferences.selected_emoji << "\r\n";
+    for (std::size_t slot = 0; slot < kEmojiFavoriteCount; ++slot)
+        content << "EmojiFavorite" << slot + 1 << '=' << preferences.emoji_favorites[slot] << "\r\n";
     content << "ZoomFactor=" << preferences.zoom_factor << "\r\n";
     content << "ZoomView=" << preferences.zoom_view << "\r\n";
     content << "ZoomLensDiameter=" << preferences.zoom_lens_diameter << "\r\n";
@@ -197,6 +224,9 @@ bool PreferencesStore::save(const Preferences& preferences) const {
         "HotkeyColorPanelAlternate",
         "HotkeyPentagon", "HotkeyHexagon",
         "HotkeyCross", "HotkeyCheckmark", "HotkeyWarning", "HotkeyProhibition",
+        "HotkeyEmojiPanel", "HotkeyEmojiFavorite1", "HotkeyEmojiFavorite2",
+        "HotkeyEmojiFavorite3", "HotkeyEmojiFavorite4", "HotkeyEmojiFavorite5",
+        "HotkeyEmojiFavorite6", "HotkeyEmojiFavorite7", "HotkeyEmojiFavorite8",
         "HotkeyZoomFreeze", "HotkeyZoomFullscreen", "HotkeyZoomLens",
         "HotkeyZoomDocked", "HotkeyZoomCycleView", "HotkeyZoomInvert",
         "HotkeyZoomOverview", "HotkeyZoomIn", "HotkeyZoomOut",

@@ -1,7 +1,7 @@
 # Publicación abierta de Elite Pen
 
-Desarrollo 2.13.0 (16 de octubre de 2026): añade tamaño independiente de Figuras
-del 80 % al 300 %, fijación opcional y posición persistente entre monitores.
+Desarrollo 2.14.0 (16 de octubre de 2026): añade 72 emojis de colores, ocho favoritos,
+atajos de macropad y panel independiente del 80 % al 300 % con fijación y posición persistente.
 La publicación histórica descrita a continuación corresponde a 2.10.3; actualizar
 el código y generar paquetes locales no cambia por sí solo esa Release pública.
 

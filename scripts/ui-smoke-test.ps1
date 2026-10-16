@@ -222,6 +222,7 @@ function Wait-Window([string]$ClassName, [int]$TimeoutMilliseconds = 5000) {
         'ElitePen.Colors' { 'Colores — Elite Pen' }
         'ElitePen.Tools' { 'Herramientas — Elite Pen' }
         'ElitePen.Geometry' { 'Figuras — Elite Pen' }
+        'ElitePen.Emojis' { 'Emojis — Elite Pen' }
         'ElitePen.Settings' { 'Configuracion — Elite Pen' }
         'ElitePen.TextInput' { 'Insertar texto — Elite Pen' }
         'ElitePen.Zoom' { 'Zoom — Elite Pen' }
@@ -288,6 +289,18 @@ function Test-ZoomSymbols([IntPtr]$Palette, [IntPtr]$Ink, [IntPtr]$CounterWindow
             $CounterWindow, $CounterMessage, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64() -eq $before) `
             "Zoom did not undo symbol $symbolTool in one step."
     }
+    Select-Tool $Palette 1
+}
+
+function Test-ZoomEmojis([IntPtr]$Palette, [IntPtr]$Ink, [IntPtr]$CounterWindow, [int]$CounterMessage) {
+    $null = [ElitePenUiNative]::SendMessage($Palette, 0x0312, [IntPtr]38, [IntPtr]::Zero)
+    $before = [ElitePenUiNative]::SendMessage($CounterWindow, $CounterMessage, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64()
+    Click-Window $Ink 830 260
+    Assert-Ui ([ElitePenUiNative]::SendMessage($CounterWindow, $CounterMessage, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64() -eq ($before + 1)) `
+        'A zoom emoji click did not create one annotation.'
+    $null = [ElitePenUiNative]::SendMessage($Palette, 0x0312, [IntPtr]4, [IntPtr]::Zero)
+    Assert-Ui ([ElitePenUiNative]::SendMessage($CounterWindow, $CounterMessage, [IntPtr]::Zero, [IntPtr]::Zero).ToInt64() -eq $before) `
+        'A zoom emoji did not undo in one step.'
     Select-Tool $Palette 1
 }
 
@@ -574,6 +587,17 @@ try {
                    [ElitePenUiNative]::WindowText($firstHotkey) -eq 'F13') `
             'Re-entering a registered macropad key activated its old tool instead of capturing it.'
         Save-WindowImage $settings 'settings-symbol-shortcuts.png'
+        # Assign all eight emoji favorites to F17-F24 through the actual editors.
+        for ($slot = 0; $slot -lt 8; $slot++) {
+            $null = [ElitePenUiNative]::SendMessage($settings, 0x0115,
+                [IntPtr](((37 + $slot) -shl 16) -bor 4), $shortcutScrollbar)
+            $editor = [ElitePenUiNative]::GetDlgItem($settings, 4400)
+            $null = [ElitePenUiNative]::SendMessage($editor, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
+            $null = [ElitePenUiNative]::SendMessage($settings, 0x0100, [IntPtr](0x80 + $slot), [IntPtr]1)
+            Assert-Ui ([ElitePenUiNative]::WindowText([ElitePenUiNative]::GetDlgItem($settings, 4200)) -eq ('F' + (17 + $slot))) `
+                "Emoji favorite $slot could not receive its macropad function key."
+        }
+        Save-WindowImage $settings 'settings-emoji-shortcuts.png'
         $null = [ElitePenUiNative]::SendMessage($helpTab, 0x00F5, [IntPtr]::Zero, [IntPtr]::Zero)
         Assert-Ui ([ElitePenUiNative]::IsWindowVisible($helpPanel) -and
                    [ElitePenUiNative]::IsWindowVisible($helpWebsite) -and
@@ -1188,6 +1212,7 @@ try {
             'Editable zoom could not return to annotation after the Space regression check.'
 
         Test-ZoomSymbols $palette $zoomInk $zoom 0x8073
+        Test-ZoomEmojis $palette $zoomInk $zoom 0x8073
         Select-Tool $palette 1
         $editStart = [IntPtr]((220 -shl 16) -bor 300)
         $editFinish = [IntPtr]((300 -shl 16) -bor 450)
@@ -1410,6 +1435,7 @@ try {
             'Zoom surfaces covered the palette while annotation mode was active.'
         if ($zoomInk -ne [IntPtr]::Zero) {
             Test-ZoomSymbols $palette $zoomInk $zoomInk 0x8062
+            Test-ZoomEmojis $palette $zoomInk $zoomInk 0x8062
             Click-PaletteWindow $palette 169 53
             $start = [IntPtr]((220 -shl 16) -bor 300)
             $finish = [IntPtr]((290 -shl 16) -bor 430)
@@ -1574,6 +1600,116 @@ try {
         }
     }
 
+    # Emojis: real tools header, all pages and sizes, custom/empty favorites,
+    # real global F17-F24 keys and one-object undo/redo/erase on the desktop.
+    $null = [ElitePenUiNative]::SendMessage($palette,0x0312,[IntPtr]21,[IntPtr]::Zero)
+    $tools = Wait-Window 'ElitePen.Tools'
+    Click-Window $tools 213 22
+    $emojiPanel = Wait-Window 'ElitePen.Emojis'
+    Assert-Ui ($emojiPanel -ne [IntPtr]::Zero -and [ElitePenUiNative]::IsWindowVisible($emojiPanel)) `
+        'Tools > Emojis did not open the emoji panel.'
+    Click-Window $emojiPanel 260 22
+    $emojiScales = @(0.8,1.0,1.25,1.5,2.0,3.0)
+    for ($index=0; $index -lt 6; $index++) {
+        $null = [ElitePenUiNative]::SendMessage($emojiPanel,0x0111,[IntPtr](5600+$index),[IntPtr]::Zero)
+        $bounds = New-Object ElitePenUiNative+RECT
+        $null = [ElitePenUiNative]::GetWindowRect($emojiPanel,[ref]$bounds)
+        Assert-Ui (($bounds.Right-$bounds.Left) -eq [Math]::Round(366*$emojiScales[$index],[MidpointRounding]::AwayFromZero) -and
+                   ($bounds.Bottom-$bounds.Top) -eq [Math]::Round(336*$emojiScales[$index],[MidpointRounding]::AwayFromZero)) `
+            "Emoji size $index did not scale the complete panel."
+        Click-Window $emojiPanel ([int](41*$emojiScales[$index])) ([int](158*$emojiScales[$index]))
+        Assert-Ui ([ElitePenUiNative]::SendMessage($palette,0x805A,[IntPtr]::Zero,[IntPtr]::Zero).ToInt64() -eq 18 -and
+                   [ElitePenUiNative]::IsWindowVisible($emojiPanel)) `
+            "Emoji size $index lost hit testing or closed despite being pinned."
+    }
+    $null = [ElitePenUiNative]::SendMessage($emojiPanel,0x0111,[IntPtr]5601,[IntPtr]::Zero)
+    for ($page=0; $page -lt 3; $page++) {
+        Click-Window $emojiPanel (69+113*$page) 124
+        Click-Window $emojiPanel 41 158
+        Assert-Ui ([ElitePenUiNative]::SendMessage($palette,0x8081,[IntPtr]::Zero,[IntPtr]::Zero).ToInt64() -eq (24*$page)) `
+            "Emoji category $page did not select its first catalog entry."
+    }
+    # Right-click the graduation emoji and choose the first real menu item.
+    $menuCursor = New-Object ElitePenUiNative+POINT
+    $null = [ElitePenUiNative]::GetCursorPos([ref]$menuCursor)
+    $menuAnchor = New-Object ElitePenUiNative+RECT
+    $null = [ElitePenUiNative]::GetWindowRect($emojiPanel,[ref]$menuAnchor)
+    $null = [ElitePenUiNative]::SetCursorPos($menuAnchor.Left+321,$menuAnchor.Top+275)
+    [ElitePenUiNative]::mouse_event(0x0008,0,0,0,[UIntPtr]::Zero)
+    [ElitePenUiNative]::mouse_event(0x0010,0,0,0,[UIntPtr]::Zero)
+    $favoriteMenu = [IntPtr]::Zero
+    for ($attempt=0; $attempt -lt 40 -and $favoriteMenu -eq [IntPtr]::Zero; $attempt++) {
+        $favoriteMenu = [ElitePenUiNative]::FindWindowForProcess('#32768',$null,[uint32]$process.Id)
+        Start-Sleep -Milliseconds 50
+    }
+    Assert-Ui ($favoriteMenu -ne [IntPtr]::Zero) 'Right-click did not open the native favorite menu.'
+    if ($favoriteMenu -ne [IntPtr]::Zero) {
+        $menuBounds = New-Object ElitePenUiNative+RECT
+        $null = [ElitePenUiNative]::GetWindowRect($favoriteMenu,[ref]$menuBounds)
+        $null = [ElitePenUiNative]::SetCursorPos($menuBounds.Left+100,$menuBounds.Top+12)
+        [ElitePenUiNative]::mouse_event(0x0002,0,0,0,[UIntPtr]::Zero)
+        [ElitePenUiNative]::mouse_event(0x0004,0,0,0,[UIntPtr]::Zero)
+        Start-Sleep -Milliseconds 150
+    }
+    $null = [ElitePenUiNative]::SetCursorPos($menuCursor.X,$menuCursor.Y)
+    $savedIni = Get-Content -LiteralPath (Join-Path $qaSandbox 'data\settings.ini') -Raw
+    Assert-Ui ($savedIni -match '(?m)^EmojiFavorite1=71\r?$') `
+        'The real right-click menu did not save the selected emoji in favorite 1.'
+    $favoriteIds = @(71,1,2,3,4,5,6,7)
+    $overlay = Wait-Window 'ElitePen.Overlay'
+    for ($slot=0; $slot -lt 8; $slot++) {
+        Select-Tool $palette 0
+        [ElitePenUiNative]::keybd_event([byte](0x80+$slot),0,0,[UIntPtr]::Zero)
+        [ElitePenUiNative]::keybd_event([byte](0x80+$slot),0,2,[UIntPtr]::Zero)
+        Start-Sleep -Milliseconds 100
+        Assert-Ui ([ElitePenUiNative]::SendMessage($palette,0x805A,[IntPtr]::Zero,[IntPtr]::Zero).ToInt64() -eq 18 -and
+                   [ElitePenUiNative]::SendMessage($palette,0x8081,[IntPtr]::Zero,[IntPtr]::Zero).ToInt64() -eq $favoriteIds[$slot]) `
+            "Macropad F$(17+$slot) did not activate its assigned favorite from cursor mode."
+        $before = [ElitePenUiNative]::SendMessage($palette,0x805E,[IntPtr]::Zero,[IntPtr]::Zero).ToInt64()
+        Click-Window $overlay (300+80*$slot) 300
+        Assert-Ui ([ElitePenUiNative]::SendMessage($palette,0x805E,[IntPtr]::Zero,[IntPtr]::Zero).ToInt64() -eq ($before+1) -and
+                   [ElitePenUiNative]::SendMessage($palette,0x8082,[IntPtr]::Zero,[IntPtr]::Zero).ToInt64() -eq $favoriteIds[$slot]) `
+            'Emoji stamping did not preserve the selected glyph as one annotation.'
+        $null = [ElitePenUiNative]::SendMessage($palette,0x0312,[IntPtr]4,[IntPtr]::Zero)
+        Assert-Ui ([ElitePenUiNative]::SendMessage($palette,0x805E,[IntPtr]::Zero,[IntPtr]::Zero).ToInt64() -eq $before) `
+            'Emoji undo did not remove precisely one object.'
+        $null = [ElitePenUiNative]::SendMessage($palette,0x0312,[IntPtr]5,[IntPtr]::Zero)
+        Select-Tool $palette 3
+        Click-Window $overlay (332+80*$slot) 332
+        Assert-Ui ([ElitePenUiNative]::SendMessage($palette,0x805E,[IntPtr]::Zero,[IntPtr]::Zero).ToInt64() -eq $before) `
+            'Emoji redo or whole-object erasing failed.'
+    }
+    $null = [ElitePenUiNative]::SendMessage($emojiPanel,0x0111,[IntPtr]5907,[IntPtr](-1))
+    $selectedBeforeEmpty = [ElitePenUiNative]::SendMessage($palette,0x8081,[IntPtr]::Zero,[IntPtr]::Zero)
+    Click-Window $emojiPanel 328 85
+    Assert-Ui ([ElitePenUiNative]::SendMessage($palette,0x8081,[IntPtr]::Zero,[IntPtr]::Zero) -eq $selectedBeforeEmpty) `
+        'An empty favorite changed the selected emoji.'
+    $null = [ElitePenUiNative]::SendMessage($emojiPanel,0x0111,[IntPtr]5907,[IntPtr]7)
+    # Drag sizing and a colored native panel preview.
+    Click-Window $emojiPanel 41 85
+    $null = [ElitePenUiNative]::SendMessage($overlay,0x0201,[IntPtr]1,[IntPtr]((400 -shl 16) -bor 500))
+    $null = [ElitePenUiNative]::SendMessage($overlay,0x0200,[IntPtr]1,[IntPtr]((550 -shl 16) -bor 650))
+    $null = [ElitePenUiNative]::SendMessage($overlay,0x0202,[IntPtr]0,[IntPtr]((550 -shl 16) -bor 650))
+    Save-WindowImage $emojiPanel 'emojis-100.png'
+    $emojiCursor = New-Object ElitePenUiNative+POINT
+    $null = [ElitePenUiNative]::GetCursorPos([ref]$emojiCursor)
+    $null = [ElitePenUiNative]::SetWindowPos($emojiPanel,[IntPtr](-1),500,50,0,0,0x0011)
+    $null = [ElitePenUiNative]::SetCursorPos(560,70)
+    $null = [ElitePenUiNative]::SendMessage($emojiPanel,0x0201,[IntPtr]1,[IntPtr]((20 -shl 16) -bor 60))
+    $null = [ElitePenUiNative]::SetCursorPos(600,110)
+    $null = [ElitePenUiNative]::SendMessage($emojiPanel,0x0200,[IntPtr]1,[IntPtr]((60 -shl 16) -bor 100))
+    $null = [ElitePenUiNative]::SendMessage($emojiPanel,0x0202,[IntPtr]0,[IntPtr]((20 -shl 16) -bor 60))
+    $emojiDragged = New-Object ElitePenUiNative+RECT
+    $null = [ElitePenUiNative]::GetWindowRect($emojiPanel,[ref]$emojiDragged)
+    Assert-Ui ($emojiDragged.Left -eq 540 -and $emojiDragged.Top -eq 90) 'Dragging EMOJIS did not move and save the panel.'
+    $null = [ElitePenUiNative]::SetCursorPos($emojiCursor.X,$emojiCursor.Y)
+    $null = [ElitePenUiNative]::SendMessage($emojiPanel,0x0111,[IntPtr]5605,[IntPtr]::Zero)
+    $null = [ElitePenUiNative]::SetWindowPos($emojiPanel,[IntPtr](-1),800,40,0,0,0x0011)
+    $null = [ElitePenUiNative]::SendMessage($emojiPanel,0x0232,[IntPtr]::Zero,[IntPtr]::Zero)
+    $emojiBeforeRestart = New-Object ElitePenUiNative+RECT
+    $null = [ElitePenUiNative]::GetWindowRect($emojiPanel,[ref]$emojiBeforeRestart)
+    Save-WindowImage $emojiPanel 'emojis-pinned-300.png'
+
     # A separate, optionally pinned panel must work at all six sizes without
     # changing the painter palette, and must survive tools, zoom and restart.
     $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]20, [IntPtr]::Zero)
@@ -1641,6 +1777,17 @@ try {
     Assert-Ui ([ElitePenUiNative]::SendMessage($zoom,0x8061,[IntPtr]::Zero,[IntPtr]::Zero).ToInt64() -eq 0 -and
                [ElitePenUiNative]::SendMessage($palette,0x805A,[IntPtr]::Zero,[IntPtr]::Zero).ToInt64() -eq 14) `
         'Clicking a pinned figure froze live zoom or failed to select the figure.'
+    Assert-Ui ([ElitePenUiNative]::IsWindowVisible($emojiPanel) -and
+               [ElitePenUiNative]::IsAboveClass($emojiPanel,'ElitePen.Zoom')) `
+        'Live zoom covered the pinned emoji panel.'
+    $null = [ElitePenUiNative]::SetCursorPos($emojiBeforeRestart.Left+123,$emojiBeforeRestart.Top+255)
+    [ElitePenUiNative]::mouse_event(0x0002,0,0,0,[UIntPtr]::Zero)
+    [ElitePenUiNative]::mouse_event(0x0004,0,0,0,[UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 120
+    Assert-Ui ([ElitePenUiNative]::SendMessage($zoom,0x8061,[IntPtr]::Zero,[IntPtr]::Zero).ToInt64() -eq 0 -and
+               [ElitePenUiNative]::SendMessage($palette,0x805A,[IntPtr]::Zero,[IntPtr]::Zero).ToInt64() -eq 18 -and
+               [ElitePenUiNative]::SendMessage($palette,0x8081,[IntPtr]::Zero,[IntPtr]::Zero).ToInt64() -eq 71) `
+        'Clicking a pinned emoji froze live zoom or failed to select the favorite.'
     $null = [ElitePenUiNative]::SendMessage($zoom,0x0100,[IntPtr]27,[IntPtr]::Zero)
     $null = [ElitePenUiNative]::SetCursorPos($savedCursor.X,$savedCursor.Y)
     $null = [ElitePenUiNative]::SendMessage($geometryPanel,0x0111,[IntPtr]4605,[IntPtr]::Zero)
@@ -1666,6 +1813,25 @@ try {
                $restoredBounds.Left -eq $beforeRestart.Left -and
                $restoredBounds.Top -eq $beforeRestart.Top) `
         'Pinned figures did not restore visibility, 300 percent scale and position after restart.'
+    $emojiPanel = Wait-Window 'ElitePen.Emojis'
+    $emojiRestored = New-Object ElitePenUiNative+RECT
+    $null = [ElitePenUiNative]::GetWindowRect($emojiPanel,[ref]$emojiRestored)
+    Assert-Ui ([ElitePenUiNative]::IsWindowVisible($emojiPanel) -and
+               ($emojiRestored.Right-$emojiRestored.Left) -eq 1098 -and
+               ($emojiRestored.Bottom-$emojiRestored.Top) -eq 1008 -and
+               $emojiRestored.Left -eq $emojiBeforeRestart.Left -and $emojiRestored.Top -eq $emojiBeforeRestart.Top) `
+        'Emoji panel did not restore its pinned visibility, 300 percent size and monitor position.'
+    [ElitePenUiNative]::keybd_event([byte]0x80,0,0,[UIntPtr]::Zero)
+    [ElitePenUiNative]::keybd_event([byte]0x80,0,2,[UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 100
+    Assert-Ui ([ElitePenUiNative]::SendMessage($palette,0x8081,[IntPtr]::Zero,[IntPtr]::Zero).ToInt64() -eq 71) `
+        'The custom emoji favorite or its global shortcut was lost after restart.'
+    Click-Window $emojiPanel (331*3) (22*3)
+    Assert-Ui (-not [ElitePenUiNative]::IsWindowVisible($emojiPanel)) 'The scaled emoji close button did not hide the pinned panel.'
+    $null = [ElitePenUiNative]::SendMessage($palette,0x0312,[IntPtr]37,[IntPtr]::Zero)
+    Click-Window $emojiPanel (260*3) (22*3)
+    Click-Window $emojiPanel (41*3) (85*3)
+    Assert-Ui (-not [ElitePenUiNative]::IsWindowVisible($emojiPanel)) 'Unpinning emojis did not restore close after selection.'
     Click-Window $geometryPanel (331 * 3) (22 * 3)
     Assert-Ui (-not [ElitePenUiNative]::IsWindowVisible($geometryPanel)) `
         'The scaled close button did not hide the pinned panel.'
