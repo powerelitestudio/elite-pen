@@ -79,6 +79,9 @@ int main() {
     check(std::filesystem::path(store.path()).parent_path() == data,
           "portable settings stay beside the executable");
     const Preferences fresh = store.load();
+    check(fresh.geometry_size == 1 && !fresh.geometry_pinned &&
+          !fresh.geometry_visible && !fresh.has_geometry_position,
+          "figures start at 100 percent as an optional transient panel");
     check(kHotkeyActionCount == 46 && kGlobalHotkeyActionCount == 36,
           "symbols have four global actions while all ten zoom actions stay contextual");
     for (auto action : {HotkeyAction::Cross, HotkeyAction::Checkmark,
@@ -173,6 +176,12 @@ int main() {
     expected.palette_y = 73;
     expected.palette_size = 3;
     expected.palette_collapsed = true;
+    expected.geometry_size = 5;
+    expected.geometry_pinned = true;
+    expected.geometry_visible = true;
+    expected.has_geometry_position = true;
+    expected.geometry_x = -2880;
+    expected.geometry_y = 260;
     expected.zoom_factor = 6.0F;
     expected.zoom_view = 2;
     expected.zoom_lens_diameter = 760;
@@ -207,6 +216,9 @@ int main() {
           actual.palette_y == expected.palette_y, "negative monitor coordinates round trip");
     check(actual.palette_size == expected.palette_size && actual.palette_collapsed,
           "palette size and hibernation round trip");
+    check(actual.geometry_size == 5 && actual.geometry_pinned && actual.geometry_visible &&
+          actual.has_geometry_position && actual.geometry_x == -2880 && actual.geometry_y == 260,
+          "pinned figures retain an independent size and negative monitor position");
     check(actual.zoom_factor == expected.zoom_factor && actual.zoom_view == expected.zoom_view &&
           actual.zoom_lens_diameter == expected.zoom_lens_diameter && actual.zoom_invert,
           "zoom preferences round trip");
@@ -251,6 +263,31 @@ int main() {
     expected.palette_size = 99;
     check(store.save(expected) && store.load().palette_size == 5,
           "unknown future sizes clamp to the largest supported size");
+
+    const std::array<LONG, 6> figure_widths{293, 366, 458, 549, 732, 1098};
+    const std::array<LONG, 6> figure_heights{186, 232, 290, 348, 464, 696};
+    expected.palette_size = 3;
+    for (std::size_t index = 0; index < kGeometryPanelScales.size(); ++index) {
+        expected.geometry_size = static_cast<int>(index);
+        check(store.save(expected) && store.load().geometry_size == static_cast<int>(index) &&
+              store.load().palette_size == 3,
+              "each figures size persists independently of the painter palette");
+        const auto size = geometry_panel_pixel_size(static_cast<int>(index));
+        check(size.cx == figure_widths[index] && size.cy == figure_heights[index],
+              "all six figures sizes scale the entire panel");
+        const float scale = kGeometryPanelScales[index];
+        const auto point = geometry_panel_logical_point(
+            {static_cast<LONG>(std::lround(260 * scale)),
+             static_cast<LONG>(std::lround(22 * scale))}, static_cast<int>(index));
+        check(point_in_rect(point, kGeometryPinBounds),
+              "scaled pin hit testing uses the same logical layout as rendering");
+    }
+    expected.geometry_size = 99;
+    check(store.save(expected) && store.load().geometry_size == 5,
+          "unknown future figures sizes clamp to giant");
+    expected.geometry_size = -1;
+    check(store.save(expected) && store.load().geometry_size == 0,
+          "negative figures sizes clamp to compact");
 
     if (failures == 0) std::cout << "Elite Pen preferences: all tests passed\n";
     return failures == 0 ? 0 : 1;

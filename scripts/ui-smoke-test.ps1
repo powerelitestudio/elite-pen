@@ -221,6 +221,7 @@ function Wait-Window([string]$ClassName, [int]$TimeoutMilliseconds = 5000) {
         'ElitePen.Overlay' { 'Elite Pen Overlay' }
         'ElitePen.Colors' { 'Colores — Elite Pen' }
         'ElitePen.Tools' { 'Herramientas — Elite Pen' }
+        'ElitePen.Geometry' { 'Figuras — Elite Pen' }
         'ElitePen.Settings' { 'Configuracion — Elite Pen' }
         'ElitePen.TextInput' { 'Insertar texto — Elite Pen' }
         'ElitePen.Zoom' { 'Zoom — Elite Pen' }
@@ -833,11 +834,13 @@ try {
 
     # Eleven figures, including the four symbols, occupy three balanced rows.
     $null = [ElitePenUiNative]::SendMessage(
-        $palette, 0x0312, [IntPtr]20, [IntPtr]::Zero)
-    $geometryPanel = Wait-Window 'ElitePen.Tools' 1000
+        $palette, 0x0312, [IntPtr]21, [IntPtr]::Zero)
+    $fullTools = Wait-Window 'ElitePen.Tools'
+    Click-Window $fullTools 300 22
+    $geometryPanel = Wait-Window 'ElitePen.Geometry' 1000
     Assert-Ui ($geometryPanel -ne [IntPtr]::Zero -and
                [ElitePenUiNative]::IsWindowVisible($geometryPanel)) `
-        'Geometry panel did not open from its existing shortcut.'
+        'The Figures button in the full tool menu did not open its independent panel.'
     if ($geometryPanel -ne [IntPtr]::Zero) {
         $geometryBounds = New-Object ElitePenUiNative+RECT
         $null = [ElitePenUiNative]::GetWindowRect($geometryPanel, [ref]$geometryBounds)
@@ -852,7 +855,7 @@ try {
 
         $null = [ElitePenUiNative]::SendMessage(
             $palette, 0x0312, [IntPtr]20, [IntPtr]::Zero)
-        $geometryPanel = Wait-Window 'ElitePen.Tools' 1000
+        $geometryPanel = Wait-Window 'ElitePen.Geometry' 1000
         Click-Window $geometryPanel 217 129
         $selectedHexagon = [ElitePenUiNative]::SendMessage(
             $palette, 0x805A, [IntPtr]::Zero, [IntPtr]::Zero)
@@ -1571,6 +1574,106 @@ try {
         }
     }
 
+    # A separate, optionally pinned panel must work at all six sizes without
+    # changing the painter palette, and must survive tools, zoom and restart.
+    $null = [ElitePenUiNative]::SendMessage($palette, 0x0312, [IntPtr]20, [IntPtr]::Zero)
+    $geometryPanel = Wait-Window 'ElitePen.Geometry'
+    $paletteBeforeFigures = New-Object ElitePenUiNative+RECT
+    $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$paletteBeforeFigures)
+    Click-Window $geometryPanel 260 22
+    $figureScales = @(0.8, 1.0, 1.25, 1.5, 2.0, 3.0)
+    for ($index = 0; $index -lt $figureScales.Count; $index++) {
+        $null = [ElitePenUiNative]::SendMessage(
+            $geometryPanel, 0x0111, [IntPtr](4600 + $index), [IntPtr]::Zero)
+        $figureBounds = New-Object ElitePenUiNative+RECT
+        $null = [ElitePenUiNative]::GetWindowRect($geometryPanel, [ref]$figureBounds)
+        $expectedWidth = [int][Math]::Round(366 * $figureScales[$index], [MidpointRounding]::AwayFromZero)
+        $expectedHeight = [int][Math]::Round(232 * $figureScales[$index], [MidpointRounding]::AwayFromZero)
+        Assert-Ui (($figureBounds.Right - $figureBounds.Left) -eq $expectedWidth -and
+                   ($figureBounds.Bottom - $figureBounds.Top) -eq $expectedHeight) `
+            "Figures size $index did not scale the full panel."
+        Click-Window $geometryPanel ([int](183 * $figureScales[$index])) ([int](189 * $figureScales[$index]))
+        Assert-Ui ([ElitePenUiNative]::SendMessage($palette,0x805A,[IntPtr]::Zero,[IntPtr]::Zero).ToInt64() -eq 16 -and
+                   [ElitePenUiNative]::IsWindowVisible($geometryPanel)) `
+            "Pinned figures lost scaled hit testing or closed after selection at size $index."
+    }
+    $paletteAfterFigures = New-Object ElitePenUiNative+RECT
+    $null = [ElitePenUiNative]::GetWindowRect($palette, [ref]$paletteAfterFigures)
+    Assert-Ui (($paletteAfterFigures.Right - $paletteAfterFigures.Left) -eq
+               ($paletteBeforeFigures.Right - $paletteBeforeFigures.Left) -and
+               ($paletteAfterFigures.Bottom - $paletteAfterFigures.Top) -eq
+               ($paletteBeforeFigures.Bottom - $paletteBeforeFigures.Top)) `
+        'Independent figures sizing unexpectedly resized the painter palette.'
+    Select-Tool $palette 1
+    Assert-Ui ([ElitePenUiNative]::IsWindowVisible($geometryPanel)) `
+        'Opening the full tool menu or choosing a non-figure hid the pinned panel.'
+    $null = [ElitePenUiNative]::SendMessage($palette,0x0312,[IntPtr]22,[IntPtr]::Zero)
+    Assert-Ui ([ElitePenUiNative]::IsWindowVisible($geometryPanel)) `
+        'Opening Settings hid the pinned panel.'
+    $null = [ElitePenUiNative]::SendMessage($settings,0x0100,[IntPtr]27,[IntPtr]::Zero)
+
+    # Restore standard scale, then drag the actual header using screen coordinates.
+    $null = [ElitePenUiNative]::SendMessage($geometryPanel,0x0111,[IntPtr]4601,[IntPtr]::Zero)
+    $null = [ElitePenUiNative]::SetWindowPos($geometryPanel,[IntPtr](-1),300,100,0,0,0x0011)
+    $savedCursor = New-Object ElitePenUiNative+POINT
+    $null = [ElitePenUiNative]::GetCursorPos([ref]$savedCursor)
+    $null = [ElitePenUiNative]::SetCursorPos(360,120)
+    $null = [ElitePenUiNative]::SendMessage($geometryPanel,0x0201,[IntPtr]1,[IntPtr]((20 -shl 16) -bor 60))
+    $null = [ElitePenUiNative]::SetCursorPos(400,160)
+    $null = [ElitePenUiNative]::SendMessage($geometryPanel,0x0200,[IntPtr]1,[IntPtr]((60 -shl 16) -bor 100))
+    $null = [ElitePenUiNative]::SendMessage($geometryPanel,0x0202,[IntPtr]0,[IntPtr]((20 -shl 16) -bor 60))
+    $draggedBounds = New-Object ElitePenUiNative+RECT
+    $null = [ElitePenUiNative]::GetWindowRect($geometryPanel,[ref]$draggedBounds)
+    Assert-Ui ($draggedBounds.Left -eq 340 -and $draggedBounds.Top -eq 140) `
+        'Dragging the figures header did not move and save its screen position.'
+
+    # Physical mouse input into the panel must not be intercepted as zoom freeze.
+    $null = [ElitePenUiNative]::SendMessage($palette,0x0312,[IntPtr]7,[IntPtr]::Zero)
+    $zoom = Wait-Window 'ElitePen.Zoom'
+    Start-Sleep -Milliseconds 230
+    Assert-Ui ([ElitePenUiNative]::IsWindowVisible($geometryPanel) -and
+               [ElitePenUiNative]::IsAboveClass($geometryPanel,'ElitePen.Zoom')) `
+        'Live zoom covered the pinned figures panel.'
+    $null = [ElitePenUiNative]::SetCursorPos($draggedBounds.Left + 285,$draggedBounds.Top + 129)
+    [ElitePenUiNative]::mouse_event(0x0002,0,0,0,[UIntPtr]::Zero)
+    [ElitePenUiNative]::mouse_event(0x0004,0,0,0,[UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 120
+    Assert-Ui ([ElitePenUiNative]::SendMessage($zoom,0x8061,[IntPtr]::Zero,[IntPtr]::Zero).ToInt64() -eq 0 -and
+               [ElitePenUiNative]::SendMessage($palette,0x805A,[IntPtr]::Zero,[IntPtr]::Zero).ToInt64() -eq 14) `
+        'Clicking a pinned figure froze live zoom or failed to select the figure.'
+    $null = [ElitePenUiNative]::SendMessage($zoom,0x0100,[IntPtr]27,[IntPtr]::Zero)
+    $null = [ElitePenUiNative]::SetCursorPos($savedCursor.X,$savedCursor.Y)
+    $null = [ElitePenUiNative]::SendMessage($geometryPanel,0x0111,[IntPtr]4605,[IntPtr]::Zero)
+    Save-WindowImage $geometryPanel 'geometry-pinned-300.png'
+    $beforeRestart = New-Object ElitePenUiNative+RECT
+    $null = [ElitePenUiNative]::GetWindowRect($geometryPanel,[ref]$beforeRestart)
+    $null = [ElitePenUiNative]::PostMessage($palette,0x800C,[IntPtr]::Zero,[IntPtr]::Zero)
+    Assert-Ui ($process.WaitForExit(10000)) 'Application did not exit cleanly for figures persistence QA.'
+    if (-not $process.HasExited) { $process.Kill(); $process.WaitForExit(3000) | Out-Null }
+    $process.Dispose()
+    $process = Start-Process -FilePath $executable -WindowStyle Hidden -PassThru
+    $script:qaProcessId = $process.Id
+    $palette = Wait-Window 'ElitePen.Palette'
+    $geometryPanel = Wait-Window 'ElitePen.Geometry'
+    for ($attempt = 0; $attempt -lt 100 -and -not [ElitePenUiNative]::IsWindowVisible($geometryPanel); $attempt++) {
+        Start-Sleep -Milliseconds 50
+    }
+    $restoredBounds = New-Object ElitePenUiNative+RECT
+    $null = [ElitePenUiNative]::GetWindowRect($geometryPanel,[ref]$restoredBounds)
+    Assert-Ui ([ElitePenUiNative]::IsWindowVisible($geometryPanel) -and
+               ($restoredBounds.Right - $restoredBounds.Left) -eq 1098 -and
+               ($restoredBounds.Bottom - $restoredBounds.Top) -eq 696 -and
+               $restoredBounds.Left -eq $beforeRestart.Left -and
+               $restoredBounds.Top -eq $beforeRestart.Top) `
+        'Pinned figures did not restore visibility, 300 percent scale and position after restart.'
+    Click-Window $geometryPanel (331 * 3) (22 * 3)
+    Assert-Ui (-not [ElitePenUiNative]::IsWindowVisible($geometryPanel)) `
+        'The scaled close button did not hide the pinned panel.'
+    $null = [ElitePenUiNative]::SendMessage($palette,0x0312,[IntPtr]20,[IntPtr]::Zero)
+    Click-Window $geometryPanel (260 * 3) (22 * 3)
+    Click-Window $geometryPanel (183 * 3) (189 * 3)
+    Assert-Ui (-not [ElitePenUiNative]::IsWindowVisible($geometryPanel)) `
+        'Unpinning did not restore automatic close after figure selection.'
     Assert-Ui (-not $process.HasExited) 'Application exited unexpectedly during UI checks.'
 } finally {
     $palette = if ($script:qaProcessId -gt 0) {

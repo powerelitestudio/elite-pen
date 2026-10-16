@@ -24,6 +24,13 @@ enum class ControlMode : std::uint8_t {
 // and append sizes so existing installed and portable preferences still match.
 inline constexpr std::array<float, 6> kPaletteScales{
     0.48F, 0.60F, 0.75F, 0.90F, 1.20F, 1.80F};
+inline constexpr std::array<float, 6> kGeometryPanelScales{
+    0.8F, 1.0F, 1.25F, 1.5F, 2.0F, 3.0F};
+inline constexpr std::array<const wchar_t*, 6> kControlSizeLabels{
+    L"Compacta · 80 %", L"Estándar · 100 %", L"Grande · 125 %",
+    L"Muy grande · 150 %", L"Extra grande · 200 %", L"Gigante · 300 %"};
+static_assert(kPaletteScales.size() == kControlSizeLabels.size() &&
+              kGeometryPanelScales.size() == kControlSizeLabels.size());
 
 enum class HotkeyAction : std::uint8_t {
     Interact,
@@ -171,6 +178,12 @@ struct Preferences {
     int palette_y{};
     int palette_size{1};
     bool palette_collapsed{false};
+    int geometry_size{1};
+    bool geometry_pinned{false};
+    bool geometry_visible{false};
+    bool has_geometry_position{false};
+    int geometry_x{};
+    int geometry_y{};
     float zoom_factor{2.0F};
     int zoom_view{0};
     int zoom_lens_diameter{520};

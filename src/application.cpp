@@ -834,10 +834,11 @@ private:
 class ToolWindow final : public WindowBase {
 public:
     explicit ToolWindow(Controller& controller) : WindowBase(controller) {}
-    bool initialize(GraphicsDevice& graphics);
+    bool initialize(GraphicsDevice& graphics, bool geometry_only = false);
     void toggle_near(HWND anchor);
     void toggle_geometry_near(HWND anchor);
-    void hide() { ShowWindow(window_, SW_HIDE); }
+    void hide();
+    void restore_geometry_layout();
     [[nodiscard]] bool visible() const noexcept { return IsWindowVisible(window_) != FALSE; }
     [[nodiscard]] bool geometry_only() const noexcept { return geometry_only_; }
 
@@ -847,10 +848,18 @@ protected:
 
 private:
     void show_near(HWND anchor, bool geometry_only);
+    void remember_geometry_position();
+    void show_geometry_menu();
+    void set_geometry_size(int size);
+    void toggle_geometry_pin();
+    [[nodiscard]] POINT logical_point(LPARAM point) const noexcept;
     [[nodiscard]] std::size_t tool_count() const noexcept;
     [[nodiscard]] Tool tool_at(std::size_t index) const noexcept;
     bool geometry_only_{};
     int hovered_item_{-1};
+    bool dragging_{};
+    POINT drag_cursor_{};
+    POINT drag_origin_{};
 };
 
 class TextInputWindow final : public WindowBase {
@@ -1239,6 +1248,9 @@ public:
     void invalidate_preview();
     void update_overlay_interaction();
     void restack_palette();
+    void restack_panels();
+    [[nodiscard]] bool panel_contains_screen_point(POINT point) const;
+    [[nodiscard]] ToolWindow* geometry_panel() const noexcept { return geometry_.get(); }
     [[nodiscard]] bool route_palette_command(PointF screen_point);
     void set_tool(Tool tool);
     void set_color(Color color);
@@ -1307,6 +1319,7 @@ private:
     std::unique_ptr<PaletteWindow> palette_;
     std::unique_ptr<ColorWindow> colors_;
     std::unique_ptr<ToolWindow> tools_;
+    std::unique_ptr<ToolWindow> geometry_;
     std::unique_ptr<TextInputWindow> text_input_;
     std::unique_ptr<SettingsWindow> settings_;
     std::unique_ptr<ZoomWindow> zoom_;
@@ -1525,6 +1538,7 @@ RECT tool_window_item_bounds(bool geometry_only, std::size_t index) noexcept {
 
 constexpr int kToolWindowRows = static_cast<int>((kTools.size() + 1) / 2);
 constexpr int kToolWindowGeometryRows = static_cast<int>((kGeometryTools.size() + 3) / 4);
+static_assert(kGeometryPanelDesignHeight == 52 + kToolWindowGeometryRows * 60);
 constexpr int kToolWindowSettingsTop = 52 + kToolWindowRows * 48;
 constexpr RECT kToolWindowSettingsBounds{
     15, kToolWindowSettingsTop, 351, kToolWindowSettingsTop + 42};
@@ -4111,11 +4125,14 @@ void ColorWindow::render() {
     if (!surface_.end_draw(error)) controller_.report_runtime_error(error);
 }
 
-bool ToolWindow::initialize(GraphicsDevice& graphics) {
-    const RECT bounds{0, 0, 366, 448};
+bool ToolWindow::initialize(GraphicsDevice& graphics, bool geometry_only) {
+    geometry_only_ = geometry_only;
+    const RECT bounds{0, 0, 366, geometry_only ? kGeometryPanelDesignHeight
+                                             : kToolWindowSettingsBounds.bottom + 18};
     constexpr DWORD ex_style = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE |
                                WS_EX_LAYERED;
-    if (!create(L"ElitePen.Tools", L"Herramientas — Elite Pen", ex_style, WS_POPUP,
+    if (!create(geometry_only ? L"ElitePen.Geometry" : L"ElitePen.Tools",
+                geometry_only ? L"Figuras — Elite Pen" : L"Herramientas — Elite Pen", ex_style, WS_POPUP,
                 bounds)) return false;
     SetLayeredWindowAttributes(window_, 0, 255, LWA_ALPHA);
     if (!initialize_surface(graphics)) return false;
@@ -4134,6 +4151,91 @@ void ToolWindow::toggle_geometry_near(HWND anchor) {
     show_near(anchor, true);
 }
 
+void ToolWindow::hide() {
+    ShowWindow(window_, SW_HIDE);
+    if (geometry_only_ && controller_.preferences().geometry_visible) {
+        controller_.preferences().geometry_visible = false;
+        controller_.save_preferences();
+    }
+}
+
+POINT ToolWindow::logical_point(LPARAM point) const noexcept {
+    const POINT pixels{GET_X_LPARAM(point), GET_Y_LPARAM(point)};
+    return geometry_only_
+        ? geometry_panel_logical_point(pixels, controller_.preferences().geometry_size)
+        : pixels;
+}
+
+void ToolWindow::remember_geometry_position() {
+    if (!geometry_only_) return;
+    RECT bounds{};
+    if (!GetWindowRect(window_, &bounds)) return;
+    MONITORINFO info{};
+    info.cbSize = sizeof(info);
+    GetMonitorInfoW(MonitorFromRect(&bounds, MONITOR_DEFAULTTONEAREST), &info);
+    const auto position = control_position_in_work_area(
+        {bounds.left, bounds.top}, info.rcWork,
+        static_cast<int>(bounds.right - bounds.left), static_cast<int>(bounds.bottom - bounds.top));
+    SetWindowPos(window_, nullptr, position.x, position.y, 0, 0,
+                 SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
+    auto& preferences = controller_.preferences();
+    preferences.has_geometry_position = true;
+    preferences.geometry_x = position.x;
+    preferences.geometry_y = position.y;
+    controller_.save_preferences();
+}
+
+void ToolWindow::restore_geometry_layout() {
+    if (geometry_only_ && visible() && controller_.palette())
+        show_near(controller_.palette()->hwnd(), true);
+}
+
+void ToolWindow::set_geometry_size(int size) {
+    if (!geometry_only_) return;
+    remember_geometry_position();
+    controller_.preferences().geometry_size = std::clamp(
+        size, 0, static_cast<int>(kGeometryPanelScales.size()) - 1);
+    restore_geometry_layout();
+    controller_.save_preferences();
+}
+
+void ToolWindow::toggle_geometry_pin() {
+    if (!geometry_only_) return;
+    auto& preferences = controller_.preferences();
+    preferences.geometry_pinned = !preferences.geometry_pinned;
+    preferences.geometry_visible = visible();
+    remember_geometry_position();
+    controller_.save_preferences();
+    invalidate();
+}
+
+void ToolWindow::show_geometry_menu() {
+    HMENU menu = CreatePopupMenu();
+    if (!menu) return;
+    const auto& preferences = controller_.preferences();
+    for (std::size_t index = 0; index < kControlSizeLabels.size(); ++index) {
+        const UINT flags = MF_STRING | (static_cast<int>(index) == preferences.geometry_size
+            ? MF_CHECKED : MF_UNCHECKED);
+        AppendMenuW(menu, flags, 4600 + index, kControlSizeLabels[index]);
+    }
+    AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    AppendMenuW(menu, MF_STRING | (preferences.geometry_pinned ? MF_CHECKED : MF_UNCHECKED),
+                 4700, L"Mantener abierto");
+    AppendMenuW(menu, MF_STRING, 4701, L"Restablecer posición junto a la paleta");
+    const float scale = geometry_panel_scale(preferences.geometry_size);
+    POINT position{static_cast<LONG>(std::lround(kGeometrySizeBounds.left * scale)),
+                    static_cast<LONG>(std::lround(kGeometrySizeBounds.bottom * scale))};
+    ClientToScreen(window_, &position);
+    HWND previous = GetForegroundWindow();
+    SetForegroundWindow(window_);
+    const UINT command = static_cast<UINT>(TrackPopupMenu(
+        menu, TPM_RETURNCMD | TPM_NONOTIFY, position.x, position.y, 0, window_, nullptr));
+    DestroyMenu(menu);
+    PostMessageW(window_, WM_NULL, 0, 0);
+    if (previous && previous != window_ && IsWindow(previous)) SetForegroundWindow(previous);
+    if (command) SendMessageW(window_, WM_COMMAND, command, 0);
+}
+
 std::size_t ToolWindow::tool_count() const noexcept {
     return geometry_only_ ? kGeometryTools.size() : kTools.size();
 }
@@ -4144,44 +4246,85 @@ Tool ToolWindow::tool_at(std::size_t index) const noexcept {
 
 void ToolWindow::show_near(HWND anchor, bool geometry_only) {
     geometry_only_ = geometry_only;
+    const SIZE geometry_size = geometry_panel_pixel_size(controller_.preferences().geometry_size);
+    const int panel_width = geometry_only_ ? static_cast<int>(geometry_size.cx) : 366;
     const int panel_height = geometry_only_
-        ? 52 + kToolWindowGeometryRows * 60
+        ? static_cast<int>(geometry_size.cy)
         : kToolWindowSettingsBounds.bottom + 18;
     RECT anchor_rect{};
     GetWindowRect(anchor, &anchor_rect);
-    RECT desired{anchor_rect.right + 10, anchor_rect.top,
-                 anchor_rect.right + 376, anchor_rect.top + panel_height};
-    HMONITOR monitor = MonitorFromRect(&anchor_rect, MONITOR_DEFAULTTONEAREST);
+    POINT desired{anchor_rect.right + 10, anchor_rect.top};
+    const auto& preferences = controller_.preferences();
+    const bool saved_position = geometry_only_ && preferences.has_geometry_position;
+    if (saved_position) desired = {preferences.geometry_x, preferences.geometry_y};
+    HMONITOR monitor = saved_position
+        ? MonitorFromPoint(desired, MONITOR_DEFAULTTONEAREST)
+        : MonitorFromRect(&anchor_rect, MONITOR_DEFAULTTONEAREST);
     MONITORINFO info{};
     info.cbSize = sizeof(info);
     GetMonitorInfoW(monitor, &info);
-    if (desired.right > info.rcWork.right) {
-        desired.left = anchor_rect.left - 376;
-        desired.right = desired.left + 366;
+    if (!saved_position && desired.x + panel_width > info.rcWork.right) {
+        desired.x = anchor_rect.left - panel_width - 10;
     }
-    desired.top = std::clamp(static_cast<int>(desired.top),
-                             static_cast<int>(info.rcWork.top),
-                             std::max(static_cast<int>(info.rcWork.top),
-                                      static_cast<int>(info.rcWork.bottom) - panel_height));
-    SetWindowPos(window_, HWND_TOPMOST, desired.left, desired.top, 366, panel_height,
+    desired = control_position_in_work_area(desired, info.rcWork, panel_width, panel_height);
+    SetWindowPos(window_, HWND_TOPMOST, desired.x, desired.y, panel_width, panel_height,
                  SWP_SHOWWINDOW | SWP_NOACTIVATE);
+    if (geometry_only_) {
+        controller_.preferences().geometry_visible = true;
+        controller_.save_preferences();
+    }
     invalidate();
 }
 
 LRESULT ToolWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
+    if (geometry_only_ && message == WM_COMMAND) {
+        const UINT command = LOWORD(wparam);
+        if (command >= 4600 && command < 4600 + kGeometryPanelScales.size()) {
+            set_geometry_size(static_cast<int>(command - 4600));
+            return 0;
+        }
+        if (command == 4700) { toggle_geometry_pin(); return 0; }
+        if (command == 4701) {
+            controller_.preferences().has_geometry_position = false;
+            restore_geometry_layout();
+            controller_.save_preferences();
+            return 0;
+        }
+    }
     if (message == WM_LBUTTONDOWN) {
-        const POINT point{GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+        const POINT point = logical_point(lparam);
+        if (geometry_only_) {
+            if (PtInRect(&kGeometrySizeBounds, point)) { show_geometry_menu(); return 0; }
+            if (PtInRect(&kGeometryPinBounds, point)) { toggle_geometry_pin(); return 0; }
+            if (PtInRect(&kGeometryCloseBounds, point)) { hide(); return 0; }
+            if (point.y < 41) {
+                RECT bounds{};
+                GetWindowRect(window_, &bounds);
+                drag_origin_ = {bounds.left, bounds.top};
+                GetCursorPos(&drag_cursor_);
+                dragging_ = true;
+                SetCapture(window_);
+                return 0;
+            }
+        }
         for (std::size_t index = 0; index < tool_count(); ++index) {
             const RECT item = tool_window_item_bounds(geometry_only_, index);
             if (PtInRect(&item, point)) {
                 const Tool tool = tool_at(index);
                 hovered_item_ = -1;
-                hide();
+                if (!geometry_only_ || !controller_.preferences().geometry_pinned) hide();
                 controller_.set_tool(tool);
                 return 0;
             }
         }
         if (!geometry_only_) {
+            if (PtInRect(&kToolsFiguresBounds, point)) {
+                hide();
+                const auto* geometry = controller_.geometry_panel();
+                if (!geometry || !geometry->visible()) controller_.toggle_geometry_panel();
+                controller_.restack_palette();
+                return 0;
+            }
             if (PtInRect(&kToolWindowSettingsBounds, point)) {
                 hovered_item_ = -1;
                 hide();
@@ -4192,7 +4335,16 @@ LRESULT ToolWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
         return 0;
     }
     if (message == WM_MOUSEMOVE) {
-        const POINT point{GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+        if (dragging_) {
+            POINT cursor{};
+            GetCursorPos(&cursor);
+            SetWindowPos(window_, HWND_TOPMOST,
+                drag_origin_.x + cursor.x - drag_cursor_.x,
+                drag_origin_.y + cursor.y - drag_cursor_.y, 0, 0,
+                SWP_NOSIZE | SWP_NOACTIVATE);
+            return 0;
+        }
+        const POINT point = logical_point(lparam);
         int next = -1;
         for (std::size_t index = 0; index < tool_count(); ++index) {
             const RECT item = tool_window_item_bounds(geometry_only_, index);
@@ -4201,6 +4353,12 @@ LRESULT ToolWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
         if (!geometry_only_) {
             if (PtInRect(&kToolWindowSettingsBounds, point))
                 next = static_cast<int>(tool_count());
+            if (PtInRect(&kToolsFiguresBounds, point))
+                next = static_cast<int>(tool_count()) + 1;
+        } else {
+            if (PtInRect(&kGeometrySizeBounds, point)) next = static_cast<int>(tool_count()) + 1;
+            if (PtInRect(&kGeometryPinBounds, point)) next = static_cast<int>(tool_count()) + 2;
+            if (PtInRect(&kGeometryCloseBounds, point)) next = static_cast<int>(tool_count()) + 3;
         }
         if (next != hovered_item_) { hovered_item_ = next; invalidate(); }
         TRACKMOUSEEVENT tracking{sizeof(tracking), TME_LEAVE, window_, 0};
@@ -4212,13 +4370,28 @@ LRESULT ToolWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
         invalidate();
         return 0;
     }
-    if (message == WM_RBUTTONDOWN) { hovered_item_ = -1; hide(); return 0; }
+    if ((message == WM_LBUTTONUP || message == WM_CAPTURECHANGED) && dragging_) {
+        dragging_ = false;
+        if (GetCapture() == window_) ReleaseCapture();
+        remember_geometry_position();
+        return 0;
+    }
+    if (geometry_only_ && message == WM_EXITSIZEMOVE) { remember_geometry_position(); return 0; }
+    if (message == WM_RBUTTONDOWN) {
+        hovered_item_ = -1;
+        if (geometry_only_) show_geometry_menu(); else hide();
+        return 0;
+    }
+    if (message == WM_CLOSE) { hide(); return 0; }
     return WindowBase::handle_message(message, wparam, lparam);
 }
 
 void ToolWindow::render() {
     auto* context = surface_.begin_draw(D2D1::ColorF(0, 0.0F));
     if (!context) return;
+    const float scale = geometry_only_
+        ? geometry_panel_scale(controller_.preferences().geometry_size) : 1.0F;
+    context->SetTransform(D2D1::Matrix3x2F::Scale(scale, scale));
     const auto& theme = current_ui_theme();
     ComPtr<ID2D1SolidColorBrush> panel;
     ComPtr<ID2D1SolidColorBrush> border;
@@ -4239,9 +4412,11 @@ void ToolWindow::render() {
     context->CreateSolidColorBrush(theme_color(theme.text_muted), muted.GetAddressOf());
     context->CreateSolidColorBrush(theme_color(theme.shadow, theme.light ? 0.18F : 0.45F),
                                    shadow.GetAddressOf());
-    const float panel_bottom = static_cast<float>(surface_.height()) - 2.0F;
+    const float logical_height = geometry_only_ ? static_cast<float>(kGeometryPanelDesignHeight)
+                                               : static_cast<float>(surface_.height());
+    const float panel_bottom = logical_height - 2.0F;
     context->FillRoundedRectangle(D2D1::RoundedRect(
-        D2D1::RectF(4, 5, 366, static_cast<float>(surface_.height())), 20, 20), shadow.Get());
+        D2D1::RectF(4, 5, 366, logical_height), 20, 20), shadow.Get());
     const auto background = D2D1::RoundedRect(
         D2D1::RectF(2, 2, 364, panel_bottom), 18, 18);
     context->FillRoundedRectangle(background, panel.Get());
@@ -4262,8 +4437,41 @@ void ToolWindow::render() {
             D2D1::RoundedRect(D2D1::RectF(17, 17, 21, 31), 2, 2), accent.Get());
         context->DrawTextW(title, static_cast<UINT32>(wcslen(title)), title_format.Get(),
                            D2D1::RectF(30, 13, 220, 36), text.Get());
-        context->DrawTextW(L"ELITE PEN", 9, title_format.Get(),
-                           D2D1::RectF(270, 13, 348, 36), muted.Get());
+        if (!geometry_only_) {
+            const auto button = D2D1::RoundedRect(D2D1::RectF(260, 8, 349, 36), 6, 6);
+            context->FillRoundedRectangle(button,
+                hovered_item_ == static_cast<int>(tool_count()) + 1 ? hover_surface.Get() : raised.Get());
+            context->DrawRoundedRectangle(button, border.Get(), 0.8F);
+            context->DrawTextW(L"Figuras", 7, title_format.Get(),
+                               D2D1::RectF(279, 13, 346, 36), accent.Get());
+        } else {
+            const auto draw_button = [&](RECT bounds, int hover_index, bool selected) {
+                const auto rect = D2D1::RoundedRect(D2D1::RectF(
+                    static_cast<float>(bounds.left), static_cast<float>(bounds.top),
+                    static_cast<float>(bounds.right), static_cast<float>(bounds.bottom)), 6, 6);
+                context->FillRoundedRectangle(rect, selected ? hover.Get()
+                    : (hovered_item_ == hover_index ? hover_surface.Get() : raised.Get()));
+                context->DrawRoundedRectangle(rect, selected ? accent.Get() : border.Get(), 0.8F);
+            };
+            const int count = static_cast<int>(tool_count());
+            draw_button(kGeometrySizeBounds, count + 1, false);
+            draw_button(kGeometryPinBounds, count + 2, controller_.preferences().geometry_pinned);
+            draw_button(kGeometryCloseBounds, count + 3, false);
+            wchar_t size_label[24]{};
+            swprintf_s(size_label, L"%d %%", static_cast<int>(std::lround(scale * 100.0F)));
+            context->DrawTextW(size_label, static_cast<UINT32>(wcslen(size_label)),
+                title_format.Get(), D2D1::RectF(130, 13, 184, 35), text.Get());
+            context->DrawLine(D2D1::Point2F(188, 20), D2D1::Point2F(192, 24), muted.Get(), 1.4F);
+            context->DrawLine(D2D1::Point2F(192, 24), D2D1::Point2F(196, 20), muted.Get(), 1.4F);
+            const bool pinned = controller_.preferences().geometry_pinned;
+            const wchar_t* pin_label = pinned ? L"Fijado" : L"Fijar";
+            context->FillEllipse(D2D1::Ellipse(D2D1::Point2F(223, 22), 2.5F, 2.5F),
+                                  pinned ? accent.Get() : muted.Get());
+            context->DrawTextW(pin_label, static_cast<UINT32>(wcslen(pin_label)),
+                title_format.Get(), D2D1::RectF(233, 13, 302, 35), pinned ? accent.Get() : text.Get());
+            context->DrawLine(D2D1::Point2F(326, 17), D2D1::Point2F(336, 27), text.Get(), 1.6F);
+            context->DrawLine(D2D1::Point2F(336, 17), D2D1::Point2F(326, 27), text.Get(), 1.6F);
+        }
     }
     for (std::size_t index = 0; index < tool_count(); ++index) {
         const Tool panel_tool = tool_at(index);
@@ -4657,7 +4865,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.12.0",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.13.0",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
@@ -4718,9 +4926,7 @@ bool SettingsWindow::initialize() {
                                   CBS_DROPDOWNLIST, 300, 280, 258, 220, window_,
                                   reinterpret_cast<HMENU>(4011),
                                   GetModuleHandleW(nullptr), nullptr);
-    for (const wchar_t* value : {L"Compacta · 80 %", L"Estándar · 100 %",
-                                  L"Grande · 125 %", L"Muy grande · 150 %",
-                                  L"Extra grande · 200 %", L"Gigante · 300 %"}) {
+    for (const wchar_t* value : kControlSizeLabels) {
         SendMessageW(palette_size_, CB_ADDSTRING, 0, reinterpret_cast<LPARAM>(value));
     }
     thickness_label_ = CreateWindowW(L"STATIC", L"Grosor inicial:", WS_CHILD | WS_VISIBLE,
@@ -4811,7 +5017,7 @@ bool SettingsWindow::initialize() {
                                     reinterpret_cast<HMENU>(4300),
                                     GetModuleHandleW(nullptr), nullptr);
     help_ = CreateWindowW(L"STATIC",
-        L"Ayuda de Elite Pen 2.12.0. Anotación, pizarra, captura y zoom para Windows. "
+        L"Ayuda de Elite Pen 2.13.0. Anotación, pizarra, captura y zoom para Windows. "
         L"Código abierto bajo Apache License 2.0. Desarrollado por Power Elite Studio.",
         WS_CHILD | SS_OWNERDRAW, 24, 119, 540, 400, window_,
         reinterpret_cast<HMENU>(4105), GetModuleHandleW(nullptr), nullptr);
@@ -5048,7 +5254,7 @@ void SettingsWindow::paint_help(HDC dc, RECT bounds) {
     SelectObject(dc, small_font_);
     SetTextColor(dc, theme_colorref(theme.text_muted));
     RECT version{bounds.left, bounds.top + 73, bounds.right, bounds.top + 94};
-    DrawTextW(dc, L"Version 2.12.0 · Windows 10 y 11 · x64", -1, &version,
+    DrawTextW(dc, L"Version 2.13.0 · Windows 10 y 11 · x64", -1, &version,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
 
     SelectObject(dc, body_font_);
@@ -7123,6 +7329,7 @@ LRESULT CALLBACK ZoomWindow::click_hook_proc(int code, WPARAM wparam, LPARAM lpa
         if (information && wparam == WM_LBUTTONDOWN) {
             PaletteWindow* palette = zoom->controller_.palette();
             if ((!palette || !palette->contains_screen_point(information->pt)) &&
+                !zoom->controller_.panel_contains_screen_point(information->pt) &&
                 !zoom->toolbar_contains(information->pt) &&
                 !zoom->click_freeze_pending_) {
                 zoom->click_freeze_pending_ = true;
@@ -7449,6 +7656,7 @@ bool ZoomWindow::show_zoom() {
         if (lens_frame_) excluded.push_back(lens_frame_->hwnd());
         if (edit_toolbar_) excluded.push_back(edit_toolbar_->hwnd());
         if (controller_.palette()) excluded.push_back(controller_.palette()->hwnd());
+        if (controller_.geometry_panel()) excluded.push_back(controller_.geometry_panel()->hwnd());
         mag_set_filter_(magnifier_, MW_FILTERMODE_EXCLUDE,
                         static_cast<int>(excluded.size()), excluded.data());
     }
@@ -7473,6 +7681,7 @@ bool ZoomWindow::show_zoom() {
     controller_.update_overlay_interaction();
     SetForegroundWindow(window_);
     SetFocus(window_);
+    bring_to_front();
     return true;
 }
 
@@ -7522,6 +7731,7 @@ bool ZoomWindow::toggle_freeze() {
         controller_.update_overlay_interaction();
         SetForegroundWindow(window_);
         SetFocus(window_);
+        bring_to_front();
         return true;
     }
     refresh_source();
@@ -7777,6 +7987,7 @@ void ZoomWindow::bring_to_front() {
     if (lens_frame_) lens_frame_->bring_to_front();
     if (target_) target_->bring_to_front();
     if (edit_toolbar_) edit_toolbar_->bring_to_front();
+    controller_.restack_panels();
     if (controller_.palette() && IsWindowVisible(controller_.palette()->hwnd())) {
         SetWindowPos(controller_.palette()->hwnd(), HWND_TOPMOST, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -8367,6 +8578,11 @@ bool Controller::initialize(std::wstring& error) {
         error = L"No se pudo crear el selector de herramientas.";
         return false;
     }
+    geometry_ = std::make_unique<ToolWindow>(*this);
+    if (!geometry_->initialize(graphics_, true)) {
+        error = L"No se pudo crear el panel de figuras.";
+        return false;
+    }
     text_input_ = std::make_unique<TextInputWindow>(*this);
     if (!text_input_->initialize(graphics_)) {
         error = L"No se pudo crear el editor de texto.";
@@ -8386,6 +8602,8 @@ bool Controller::initialize(std::wstring& error) {
         palette_->show_notification(L"Atajos de historial",
             L"No se pudo activar Ctrl+Z / Ctrl+Y. Usa los atajos globales de Configuración.");
     }
+    if (preferences_.geometry_pinned && preferences_.geometry_visible)
+        geometry_->toggle_geometry_near(palette_->hwnd());
     invalidate_all();
     return true;
 }
@@ -8416,6 +8634,7 @@ void Controller::shutdown() {
     settings_.reset();
     text_input_.reset();
     tools_.reset();
+    geometry_.reset();
     colors_.reset();
     overlays_.clear();
     palette_.reset();
@@ -8445,13 +8664,33 @@ void Controller::invalidate_preview() {
 void Controller::invalidate_all() {
     invalidate_document();
     if (palette_) palette_->invalidate();
+    if (geometry_ && geometry_->visible()) geometry_->invalidate();
     if (zoom_) zoom_->invalidate_ink();
 }
 
 void Controller::restack_palette() {
     if (!palette_) return;
+    restack_panels();
     SetWindowPos(palette_->hwnd(), HWND_TOPMOST, 0, 0, 0, 0,
                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+}
+
+void Controller::restack_panels() {
+    if (geometry_ && geometry_->visible())
+        SetWindowPos(geometry_->hwnd(), HWND_TOPMOST, 0, 0, 0, 0,
+                     SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+}
+
+bool Controller::panel_contains_screen_point(POINT point) const {
+    const auto contains = [point](HWND window) {
+        RECT bounds{};
+        return window && IsWindowVisible(window) && GetWindowRect(window, &bounds) &&
+               PtInRect(&bounds, point);
+    };
+    return contains(geometry_ ? geometry_->hwnd() : nullptr) ||
+           contains(tools_ ? tools_->hwnd() : nullptr) ||
+           contains(colors_ ? colors_->hwnd() : nullptr) ||
+           contains(settings_ ? settings_->hwnd() : nullptr);
 }
 
 void Controller::update_overlay_interaction() {
@@ -8483,6 +8722,7 @@ void Controller::set_tool(Tool tool) {
     close_panels();
     update_overlay_interaction();
     if (palette_) palette_->invalidate();
+    if (geometry_ && geometry_->visible()) geometry_->invalidate();
 }
 
 void Controller::set_color(Color color) {
@@ -8630,10 +8870,11 @@ void Controller::toggle_tool_panel() {
 }
 
 void Controller::toggle_geometry_panel() {
-    if (!tools_ || !palette_) return;
-    const bool was_visible = tools_->visible() && tools_->geometry_only();
+    if (!geometry_ || !palette_) return;
+    const bool was_visible = geometry_->visible();
     close_panels();
-    if (!was_visible) tools_->toggle_geometry_near(palette_->hwnd());
+    if (was_visible) geometry_->hide();
+    else geometry_->toggle_geometry_near(palette_->hwnd());
 }
 
 void Controller::execute_hotkey(HotkeyAction action) {
@@ -8704,6 +8945,7 @@ bool Controller::matches_hotkey(HotkeyAction action, WPARAM virtual_key) const {
 void Controller::close_panels() {
     if (colors_) colors_->hide();
     if (tools_) tools_->hide();
+    if (geometry_ && !preferences_.geometry_pinned) geometry_->hide();
 }
 
 void Controller::stop_transient_mode() {
@@ -9010,6 +9252,7 @@ void Controller::rebuild_overlays() {
     std::wstring error;
     create_overlays(error);
     if (!error.empty()) report_runtime_error(error);
+    if (geometry_) geometry_->restore_geometry_layout();
     if (palette_) SetWindowPos(palette_->hwnd(), HWND_TOPMOST, 0, 0, 0, 0,
                                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
     invalidate_all();
@@ -9044,6 +9287,7 @@ void Controller::apply_capture_preference() {
     if (palette_ && palette_->hwnd()) SetWindowDisplayAffinity(palette_->hwnd(), affinity);
     if (colors_ && colors_->hwnd()) SetWindowDisplayAffinity(colors_->hwnd(), affinity);
     if (tools_ && tools_->hwnd()) SetWindowDisplayAffinity(tools_->hwnd(), affinity);
+    if (geometry_ && geometry_->hwnd()) SetWindowDisplayAffinity(geometry_->hwnd(), affinity);
     if (text_input_ && text_input_->hwnd()) SetWindowDisplayAffinity(text_input_->hwnd(), affinity);
 }
 
@@ -9087,6 +9331,7 @@ void Controller::set_theme(AppTheme theme) {
     if (palette_) palette_->invalidate();
     if (colors_) colors_->invalidate();
     if (tools_) tools_->invalidate();
+    if (geometry_) geometry_->invalidate();
     if (text_input_) text_input_->invalidate();
     if (zoom_) zoom_->apply_theme();
     if (state_.cursor_highlight) invalidate_document();

@@ -1,4 +1,4 @@
-ELITE PEN 2.12.0 — EDICION PORTABLE
+ELITE PEN 2.13.0 — EDICION PORTABLE
 ================================
 
 Elite Pen es la herramienta de anotacion, pizarra y ampliacion de pantalla de
@@ -36,6 +36,11 @@ CONTROLES PRINCIPALES
   y presiona la combinacion que emitira tu macropad (por ejemplo F13-F16).
   Se aceptan F1-F24 solas o combinaciones con Ctrl, Alt, Shift o Win.
   Cada simbolo se borra, deshace o rehace como un solo objeto.
+- Panel de Figuras: abrelo desde el boton Figuras de Herramientas o Ctrl+Shift+G.
+  El porcentaje de su cabecera elige tamano de 80 % a 300 %, independiente de la
+  paleta. Pulsa Fijar para dejarlo abierto y arrastra por FIGURAS para moverlo a
+  otra pantalla. Recuerda tamano y posicion; si queda fijado y visible, reaparece
+  al iniciar. La X lo oculta. Desactiva Fijado para cerrar al elegir una figura.
 
 ATAJOS
 ------
@@ -101,7 +106,7 @@ Configuracion.
 
 SOPORTE
 -------
-Producto de Power Elite Studio. Version 2.12.0.
+Producto de Power Elite Studio. Version 2.13.0.
 Sitio oficial: https://powerelite.studio/
 Codigo fuente: https://github.com/powerelitestudio/elite-pen
 

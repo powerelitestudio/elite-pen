@@ -1,5 +1,20 @@
 # Historial de cambios
 
+## 2.13.0 — 2026-10-16
+
+- Panel de Figuras con seis tamaños independientes de la paleta, del 80 % al
+  300 %, que escalan juntos sus textos, iconos y zonas de selección.
+- Botón Fijar para mantenerlo abierto al elegir figuras o utilizar otras
+  herramientas, y cabecera arrastrable para colocarlo en otra pantalla.
+- Se conservan tamaño, posición y estado fijo entre sesiones. Un cierre explícito
+  impide que reaparezca automáticamente; las instalaciones anteriores empiezan
+  al 100 % sin fijación ni apertura automática.
+- Acceso Figuras en la cabecera de Herramientas; se conserva Ctrl+Shift+G.
+- El panel fijo convive con el menú completo y permanece sobre el zoom sin que
+  sus clics se interpreten como congelación de la imagen.
+- Pruebas de seis tamaños, selección escalada, arrastre, zoom y reinicio con
+  restauración de visibilidad y posición, además de las preferencias e historial.
+
 ## 2.12.0 — 2026-10-16
 
 - Figuras incorpora Tacha (X), Chulito, Advertencia y Prohibido como símbolos

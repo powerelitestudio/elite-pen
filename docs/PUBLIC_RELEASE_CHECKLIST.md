@@ -1,7 +1,7 @@
 # Publicación abierta de Elite Pen
 
-Desarrollo 2.12.0 (16 de octubre de 2026): añade cuatro símbolos vectoriales y
-atajos configurables para macropads; conserva Extra grande 200 % y Gigante 300 %.
+Desarrollo 2.13.0 (16 de octubre de 2026): añade tamaño independiente de Figuras
+del 80 % al 300 %, fijación opcional y posición persistente entre monitores.
 La publicación histórica descrita a continuación corresponde a 2.10.3; actualizar
 el código y generar paquetes locales no cambia por sí solo esa Release pública.
 

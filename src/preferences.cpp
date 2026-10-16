@@ -103,6 +103,13 @@ Preferences PreferencesStore::load() const {
     result.palette_size = std::clamp(read_int(path_, L"PaletteSize", 1), 0,
                                     static_cast<int>(kPaletteScales.size()) - 1);
     result.palette_collapsed = read_int(path_, L"PaletteCollapsed", 0) != 0;
+    result.geometry_size = std::clamp(read_int(path_, L"GeometrySize", 1), 0,
+                                     static_cast<int>(kGeometryPanelScales.size()) - 1);
+    result.geometry_pinned = read_int(path_, L"GeometryPinned", 0) != 0;
+    result.geometry_visible = read_int(path_, L"GeometryVisible", 0) != 0;
+    result.has_geometry_position = read_int(path_, L"HasGeometryPosition", 0) != 0;
+    result.geometry_x = read_int(path_, L"GeometryX", 0);
+    result.geometry_y = read_int(path_, L"GeometryY", 0);
     result.zoom_factor = std::clamp(read_float(path_, L"ZoomFactor", 2.0F), 1.25F, 8.0F);
     result.zoom_view = std::clamp(read_int(path_, L"ZoomView", 0), 0, 2);
     result.zoom_lens_diameter = std::clamp(
@@ -164,6 +171,12 @@ bool PreferencesStore::save(const Preferences& preferences) const {
     content << "PaletteY=" << preferences.palette_y << "\r\n";
     content << "PaletteSize=" << preferences.palette_size << "\r\n";
     content << "PaletteCollapsed=" << (preferences.palette_collapsed ? 1 : 0) << "\r\n";
+    content << "GeometrySize=" << preferences.geometry_size << "\r\n";
+    content << "GeometryPinned=" << (preferences.geometry_pinned ? 1 : 0) << "\r\n";
+    content << "GeometryVisible=" << (preferences.geometry_visible ? 1 : 0) << "\r\n";
+    content << "HasGeometryPosition=" << (preferences.has_geometry_position ? 1 : 0) << "\r\n";
+    content << "GeometryX=" << preferences.geometry_x << "\r\n";
+    content << "GeometryY=" << preferences.geometry_y << "\r\n";
     content << "ZoomFactor=" << preferences.zoom_factor << "\r\n";
     content << "ZoomView=" << preferences.zoom_view << "\r\n";
     content << "ZoomLensDiameter=" << preferences.zoom_lens_diameter << "\r\n";

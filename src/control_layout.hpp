@@ -14,6 +14,29 @@ inline constexpr int kPaletteDesignHeight = 280;
 inline constexpr int kLinearDesignWidth = 76;
 inline constexpr int kLinearDesignHeight = 676;
 inline constexpr int kLinearCollapsedHeight = 82;
+inline constexpr int kGeometryPanelDesignWidth = 366;
+inline constexpr int kGeometryPanelDesignHeight = 232;
+inline constexpr RECT kGeometrySizeBounds{120, 8, 205, 36};
+inline constexpr RECT kGeometryPinBounds{211, 8, 305, 36};
+inline constexpr RECT kGeometryCloseBounds{313, 8, 349, 36};
+inline constexpr RECT kToolsFiguresBounds{260, 8, 349, 36};
+
+inline float geometry_panel_scale(int index) noexcept {
+    return kGeometryPanelScales[static_cast<std::size_t>(std::clamp(
+        index, 0, static_cast<int>(kGeometryPanelScales.size()) - 1))];
+}
+
+inline SIZE geometry_panel_pixel_size(int index) noexcept {
+    const float scale = geometry_panel_scale(index);
+    return {static_cast<LONG>(std::lround(kGeometryPanelDesignWidth * scale)),
+             static_cast<LONG>(std::lround(kGeometryPanelDesignHeight * scale))};
+}
+
+inline POINT geometry_panel_logical_point(POINT point, int index) noexcept {
+    const float scale = geometry_panel_scale(index);
+    return {static_cast<LONG>(std::floor(static_cast<float>(point.x) / scale)),
+             static_cast<LONG>(std::floor(static_cast<float>(point.y) / scale))};
+}
 
 enum class LinearAction {
     Visibility,

@@ -1,6 +1,6 @@
-# Elite Pen 2.12.0 — contrato de producto
+# Elite Pen 2.13.0 — contrato de producto
 
-Estado: versión 2.12.0 implementada como software de código abierto bajo Apache
+Estado: versión 2.13.0 implementada como software de código abierto bajo Apache
 License 2.0 y preparada para distribución pública portable e instalada.
 
 ## 1. Identidad e interaccion principal
@@ -138,6 +138,23 @@ crece automáticamente con su número de herramientas y mantiene Configuración 
 Pentágono, Hexágono y los cuatro símbolos aparecen en Configuración > Atajos como
 acciones globales personalizables, pero se entregan `Sin asignar`. Los atajos previos
 se conservan por sus claves de preferencias, incluidos los diez contextuales de zoom.
+
+Figuras usa una ventana independiente para poder convivir con Herramientas. Su
+cabecera permite elegir 80, 100, 125, 150, 200 o 300 %, fijar el panel y cerrarlo.
+La escala transforma conjuntamente texto, iconos y zonas de clic. La base de 100 %
+es 366 × 232 px; a 300 % ocupa 1098 × 696 px. La paleta mantiene su propia escala.
+Se puede arrastrar por el título entre monitores, incluidas coordenadas negativas.
+Al redimensionar, restaurar o cambiar de pantallas, su origen se ajusta al área útil
+del monitor más cercano sin aplicar límites invertidos si el panel es mayor.
+
+`Fijar` conserva la ventana al seleccionar figuras, colores, otras herramientas,
+configuración y zoom. El estado se guarda por separado como GeometrySize,
+GeometryPinned, GeometryVisible, HasGeometryPosition y GeometryX/Y. Solo se restaura
+automáticamente cuando quedó fijado y visible; un cierre explícito se conserva.
+Las instalaciones anteriores arrancan con escala 100 %, sin fijación ni autoapertura.
+El menú de Herramientas ofrece un botón Figuras y se conserva Ctrl+Shift+G.
+El zoom mantiene el panel por encima de sus superficies, excluye esa ventana del
+Magnifier y no interpreta sus clics como una orden de congelar la imagen.
 
 Los símbolos son geometría vectorial nativa, sin dependencia de glifos emoji. Usan
 color y grosor actuales. Un clic coloca una figura de 64 px visuales; arrastrar define

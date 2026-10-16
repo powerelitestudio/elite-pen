@@ -1,4 +1,33 @@
-# Informe de calidad — Elite Pen 2.12.0
+# Informe de calidad — Elite Pen 2.13.0
+
+## Panel de figuras ampliable y fijo — 2.13.0
+
+Validación: 2026-10-16.
+
+- Núcleo, preferencias y rendimiento CPU aprobados en Debug y Release. Las seis
+  escalas de Figuras se guardan independientemente de la paleta; se verifican
+  dimensiones, conversión de zonas de clic, coordenadas negativas y valores futuros.
+  Las instalaciones anteriores conservan sus atajos y arrancan al 100 % sin fijación.
+- Smoke completo de interfaz aprobado con el binario Release final: acceso desde
+  Herramientas, los seis tamaños de 293 × 186 a 1098 × 696 px, selección escalada,
+  modo fijo, convivencia con otras herramientas y Configuración, y arrastre real
+  de la cabecera mediante coordenadas del escritorio.
+- Se cierra y reinicia el proceso limpiamente; el panel fijado recupera visibilidad,
+  posición y tamaño 300 %. Se prueban el botón de cierre escalado y la vuelta al
+  cierre automático al desactivar Fijado.
+- Una copia aislada del ejecutable instalado restaura el panel al 300 % en la tercera
+  pantalla detectada, situada sobre la principal: posición (-440, -1040), tamaño
+  1098 × 696 px. La posición se conserva tras reiniciar y el hash coincide con el build.
+- Con zoom vivo se verifica el orden de ventanas y se envía un clic físico simulado
+  al panel: cambia la figura sin congelar el zoom. La ventana de Figuras se excluye
+  de la fuente del Magnifier y respeta la preferencia de exclusión de capturas.
+- Rendimiento GPU de 5.000 trazos y 240 cuadros aprobado: caché 0,525 ms/cuadro,
+  dibujo activo 1,122 ms/cuadro, Mano editable 0,105 ms/cuadro y 243,49 MiB.
+  Población 307,536 ms; primer cuadro 54,578 ms; primer Lápiz editable 81,854 ms
+  y retorno caliente 21,929 ms. Todos dentro de los presupuestos existentes.
+- La instalación local se respalda y actualiza conservando los bytes de preferencias.
+  Las pruebas usan copias portables aisladas. No se declara una nueva validación
+  física de panel táctil, OBS, presión o de toda la matriz Windows 10/11.
 
 Fecha de validación de símbolos y atajos: 2026-10-16.
 

@@ -10,9 +10,9 @@ pantalla para Windows, desarrollada por [Power Elite Studio](https://powerelite.
 Permite explicar sobre cualquier aplicación sin convertir la presentación en una
 sucesión de ventanas y menús.
 
-> **Estado:** acceso anticipado. El código de la versión 2.12.0 incorpora Tacha,
-> Chulito, Advertencia y Prohibido con atajos configurables para macropads, además
-> de los tamaños Extra grande (200 %) y Gigante (300 %). Los reportes
+> **Estado:** acceso anticipado. La versión 2.13.0 incorpora un panel de Figuras
+> con tamaño independiente del 80 % al 300 %, posición guardada y modo fijo opcional.
+> Incluye los símbolos Tacha, Chulito, Advertencia y Prohibido con sus atajos. Los reportes
 > de errores y casos de compatibilidad son bienvenidos.
 
 Ofrece dos presentaciones del mismo motor: `Paleta`, inspirada en una paleta de
@@ -33,7 +33,7 @@ Los paquetes oficiales listos para usar se publican en
 [GitHub Releases](https://github.com/powerelitestudio/elite-pen/releases):
 
 La distribución publicada que se enlaza a continuación es 2.10.3. Los símbolos y
-tamaños nuevos están en el código 2.12.0 y pueden compilarse con los scripts del repositorio.
+tamaños nuevos están en el código 2.13.0 y pueden compilarse con los scripts del repositorio.
 
 - [Descargar portable 2.10.3](https://github.com/powerelitestudio/elite-pen/releases/download/v2.10.3/Elite.Pen.Portable.2.10.3.zip):
   descomprime la carpeta y ejecuta `Elite Pen.exe`.
@@ -145,6 +145,16 @@ Un clic coloca un símbolo de 64 píxeles; arrastrar define su tamaño. `Shift`
 durante el arrastre conserva ejes iguales en símbolos, polígonos, rectángulos y elipses.
 Cada símbolo es un solo objeto: borrarlo, deshacerlo o rehacerlo requiere una acción.
 Funcionan en el escritorio, las pizarras, el zoom congelado y el Zoom editable.
+
+Abre `Figuras` desde el botón de la cabecera de `Herramientas`, con `Ctrl+Shift+G`
+o desde la barra Lineal. El porcentaje de su cabecera permite elegir 80 %, 100 %,
+125 %, 150 %, 200 % o 300 % para todo el panel, incluidos iconos y zonas de toque.
+Su tamaño es independiente del de la paleta. `Fijar` lo mantiene abierto al elegir
+figuras y usar otras herramientas; arrastra por el título `FIGURAS` para llevarlo
+a otra pantalla. Se guardan tamaño, posición y estado fijo. Si lo dejas fijado y
+visible, vuelve a aparecer al iniciar Elite Pen. La `X` lo oculta y respeta esa
+decisión al reiniciar; el atajo de Figuras permite abrirlo y cerrarlo cuando quieras.
+Al desactivar `Fijado`, vuelve a cerrarse después de elegir una figura.
 
 Todas las figuras tienen su propia acción en `Configuración > Atajos`.
 Los dos polígonos y los cuatro símbolos se entregan `Sin asignar` para conservar
