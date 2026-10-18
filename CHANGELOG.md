@@ -1,5 +1,27 @@
 # Historial de cambios
 
+## 2.15.0 — 2026-10-17
+
+- Zoom de enfoque independiente del zoom clásico: selección rectangular o clic
+  rápido 2×, encuadre fijo en vivo y aumento hasta 8× sin deformar el contenido.
+  Acercar, cambiar de zona, ver contexto y salir animan origen y aumento juntos;
+  cinco velocidades entre 120 y 600 ms, con 280 ms iniciales.
+- Ocho zonas persistentes, cada una con su encuadre y hasta ocho máscaras opacas.
+  Se pueden guardar, reemplazar, recuperar, recorrer o vaciar sin tocar las demás.
+  Las áreas guardadas se recolocan si se desconecta su monitor.
+- Barra permanente de enfoque con selección, ocultación, aislamiento del exterior,
+  máscaras reversibles, vista completa, velocidad, zonas y cierre. Clic derecho
+  sobre una máscara la elimina; Esc cancela selección o sale con transición.
+- Veinticuatro acciones globales configurables para macropad: Ctrl+Shift+M abre
+  o cierra, Ctrl+Alt+M selecciona, Ctrl+Alt+Shift+M oculta, Ctrl+Alt+F1–F8 recupera
+  zonas y Ctrl+Alt+Shift+F1–F8 las guarda. Ctrl+Shift+PageDown/PageUp recorre zonas.
+  Máscaras, Aislar y Vista completa llegan sin asignar.
+- Conserva las claves y personalizaciones anteriores. Un nuevo atajo ocupado no
+  restablece los demás. La selección y las máscaras usan coordenadas de la fuente;
+  mover el cursor no desplaza el encuadre ni congela el contenido.
+- Pruebas de geometría, transiciones, preferencias y atajos reales en una sesión
+  portable aislada, con fuente animada, recuperación de zonas y reinicio.
+
 ## 2.14.0 — 2026-10-16
 
 - Herramientas > Emojis abre un catálogo de 72 emojis de colores en tres categorías:

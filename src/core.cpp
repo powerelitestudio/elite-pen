@@ -100,12 +100,13 @@ const wchar_t* tool_name(Tool tool) noexcept {
         case Tool::Warning: return L"Advertencia";
         case Tool::Prohibition: return L"Prohibido";
         case Tool::Emoji: return L"Emoji";
+        case Tool::Focus: return L"Zoom de enfoque";
     }
     return L"Herramienta";
 }
 
 bool is_drawing_tool(Tool tool) noexcept {
-    return tool != Tool::Interact && tool != Tool::Zoom;
+    return tool != Tool::Interact && tool != Tool::Zoom && tool != Tool::Focus;
 }
 
 Tool gesture_tool(Tool selected, bool shift, bool control,

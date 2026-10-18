@@ -222,8 +222,9 @@ zoom congelado y Zoom editable) comparten el renderizador y el historial por obj
 - El benchmark de lanzamiento exige, con 5.000 trazos en el equipo de referencia,
   menos de 8 ms de media por cuadro en caché, menos de 12 ms mientras se dibuja y
   menos de 350 MiB de memoria de trabajo.
-- El zoom no repite operaciones nativas si puntero, vista, aumento y modo general no
-  han cambiado. Las vistas con geometría fija solo actualizan la región fuente.
+- El zoom clásico evita reconfiguración si puntero, vista, aumento y modo general
+  no cambian. Enfoque conserva geometría y transformación, pero actualiza los
+  píxeles del control nativo incluso con origen fijo.
 - Zoom editable conserva una caché dispersa en coordenadas de la fuente; navegar no
   vuelve a recorrer ni rasterizar el historial vectorial. El benchmark de 5.000
   objetos exige menos de 8 ms de costo medio por cuadro de paneo para la capa añadida.
@@ -283,6 +284,36 @@ zoom congelado y Zoom editable) comparten el renderizador y el historial por obj
   al cruzar de monitor.
 - `Esc` sale del zoom y también abandona las pizarras blanca o negra, conservando las
   anotaciones vectoriales.
+
+### Zoom de enfoque — 2.15.0
+
+- Modo de presentación independiente, desde Herramientas o Ctrl+Shift+M. La
+  primera entrada elige monitor por cursor y solicita un rectángulo; clic sin
+  arrastre crea un encuadre rápido 2×. Reabrir usa el último encuadre.
+- El rectángulo se ajusta a la proporción del monitor sin deformación, con aumento
+  1–8×. Su fuente permanece fija al mover el cursor y su contenido continúa vivo.
+  Origen y aumento interpolan juntos con smoothstep. Velocidades: 120, 220, 280
+  (inicial), 420 y 600 ms. Entrada, cambio de zona, contexto y salida se animan.
+- Ocho zonas guardadas con encuadre y hasta ocho máscaras opacas cada una. Guardar
+  o reemplazar es explícito; recuperar una zona no modifica otras. Se conservan
+  tras reiniciar. Un monitor desconectado recupera el área en el disponible cercano.
+- Barra inferior permanente con Elegir zona, Ocultar área, Máscaras, Aislar, Vista
+  completa, Velocidad y Cerrar. Los espacios vacíos guardan el encuadre; clic derecho
+  permite reemplazar o vaciar. Sus dimensiones responden al DPI y al ancho disponible.
+- Aislar oscurece el exterior de la selección. Ocultar área convierte un arrastre
+  en máscara de coordenadas fuente; Máscaras alterna visibilidad sin eliminarlas.
+  Clic derecho sobre una máscara la elimina; el menú Velocidad permite borrarlas
+  todas. Cambiar de zona mantiene las máscaras de origen y destino en la transición.
+- Ctrl+Alt+M elige otra zona desde contexto, Ctrl+Alt+Shift+M oculta, Ctrl+Alt+F1–F8
+  recupera y Ctrl+Alt+Shift+F1–F8 guarda. Ctrl+Shift+PageDown/PageUp recorre las zonas
+  guardadas. Las 24 acciones admiten reasignación para macropad; Máscaras, Aislar y
+  Vista completa no tienen combinación inicial. No se sobrescriben atajos anteriores.
+- Esc cancela selección recuperando el encuadre anterior; fuera de selección sale
+  con transición. Ctrl+Shift+M también cierra. Los clics permanecen en presentación;
+  se usa Zoom editable para operar la aplicación ampliada. Las máscaras son una
+  ocultación visual reversible y desaparecen al devolver el escritorio.
+- Reutiliza Magnifier y la ruta DWM al detectar OBS. No modifica factor, inversión
+  ni vista del zoom clásico. El HUD queda debajo de la paleta y paneles fijados.
 
 ### Zoom editable
 

@@ -10,10 +10,10 @@ pantalla para Windows, desarrollada por [Power Elite Studio](https://powerelite.
 Permite explicar sobre cualquier aplicación sin convertir la presentación en una
 sucesión de ventanas y menús.
 
-> **Estado:** acceso anticipado. La versión 2.14.0 incorpora 72 emojis de colores,
-> ocho favoritos y atajos configurables para el macropad. Su panel independiente
-> se amplía del 80 % al 300 %, se mueve entre monitores y puede quedar fijo. Los reportes
-> de errores y casos de compatibilidad son bienvenidos.
+> **Estado:** acceso anticipado. La versión 2.15.0 incorpora Zoom de enfoque:
+> encuadre fijo en vivo, transiciones suaves, ocho zonas guardadas y áreas ocultas.
+> Sus atajos configurables permiten controlarlo desde un macropad. Conserva los
+> emojis, favoritos y paneles ampliables hasta el 300 % de las versiones anteriores.
 
 Ofrece dos presentaciones del mismo motor: `Paleta`, inspirada en una paleta de
 pintor, y `Lineal`, una barra vertical ultracompacta. `Paleta` es el modo
@@ -22,10 +22,48 @@ las preferencias tanto instaladas como portables.
 
 El motor conserva la tinta terminada en una superficie GPU y solo rasteriza el
 objeto recién añadido. El historial mueve los trazos sin duplicarlos, el borrador
-usa distancias al cuadrado y el simplificador de trazos es iterativo. El zoom evita
-reconfigurar su fuente cuando el puntero permanece quieto. El benchmark automatizado
+usa distancias al cuadrado y el simplificador de trazos es iterativo. El zoom conserva
+la geometría cuando el encuadre no cambia. El benchmark automatizado
 valida 5.000 trazos, cuadros en caché, dibujo activo, paneo del Zoom editable,
 memoria y rutas de compatibilidad.
+
+## Zoom de enfoque
+
+Pulsa **Ctrl+Shift+M** o abre **Herramientas > Zoom de enfoque**. La primera vez,
+arrastra un rectángulo sobre el monitor que contiene el cursor; un clic crea un
+acercamiento rápido de 2×. La imagen continúa viva, con el encuadre quieto aunque
+muevas el ratón. El acercamiento conserva las proporciones y llega hasta 8×.
+
+| Atajo inicial | Acción |
+| --- | --- |
+| Ctrl+Shift+M | Abrir el último encuadre o salir con transición |
+| Ctrl+Alt+M | Volver a la vista completa y elegir otra zona |
+| Ctrl+Alt+Shift+M | Arrastrar un área que se quiere ocultar |
+| Ctrl+Alt+Shift+F1–F8 | Guardar encuadre y máscaras en la zona 1–8 |
+| Ctrl+Alt+F1–F8 | Recuperar la zona 1–8 |
+| Ctrl+Shift+PageDown / PageUp | Ir a la zona guardada siguiente / anterior |
+| Esc | Cancelar la selección o salir del enfoque |
+
+La barra inferior permanece disponible durante el enfoque. **Aislar** oscurece lo
+que queda fuera de la selección; **Ocultar área** añade hasta ocho máscaras opacas
+por encuadre. Clic derecho sobre una máscara la quita. **Máscaras** permite mostrar
+u ocultar temporalmente todas y **Vista completa** alterna contexto y encuadre.
+**Velocidad** elige transiciones entre 120 y 600 ms y permite borrar las máscaras.
+
+Un espacio vacío **Guardar** conserva el encuadre actual. Clic derecho en una zona
+guardada permite reemplazarla o vaciarla. Las zonas y sus máscaras sobreviven al
+reinicio; cambiar de zona no sobrescribe las demás. Si falta un monitor, el área
+se recupera dentro del monitor disponible más cercano.
+
+En **Configuración > Atajos** puedes cambiar todas estas combinaciones y asignar
+teclas a Máscaras, Aislar y Vista completa, que llegan sin asignar. Programa las
+mismas combinaciones en el macropad. Las personalizaciones anteriores se conservan;
+si otra aplicación ocupa un nuevo atajo, Elite Pen avisa para poder reasignarlo.
+
+Este modo está pensado para presentar: sus clics eligen zonas y ocultaciones.
+Para interactuar con una aplicación ampliada, usa **Zoom editable**. Las máscaras
+son una ocultación visual reversible durante el enfoque; salir devuelve el escritorio.
+La compatibilidad de grabación mantiene la ruta DWM existente cuando OBS está abierto.
 
 ## Emojis y macropad
 
@@ -46,7 +84,7 @@ Los paquetes oficiales listos para usar se publican en
 [GitHub Releases](https://github.com/powerelitestudio/elite-pen/releases):
 
 La distribución publicada que se enlaza a continuación es 2.10.3. Los símbolos y
-tamaños nuevos y los emojis están en el código 2.14.0 y pueden compilarse con los scripts del repositorio.
+tamaños nuevos, emojis y Zoom de enfoque están en el código 2.15.0 y pueden compilarse con los scripts del repositorio.
 
 - [Descargar portable 2.10.3](https://github.com/powerelitestudio/elite-pen/releases/download/v2.10.3/Elite.Pen.Portable.2.10.3.zip):
   descomprime la carpeta y ejecuta `Elite Pen.exe`.
@@ -74,6 +112,7 @@ oficial y compara el SHA-256 publicado con cada versión.
 - Congelar el zoom, anotar sobre la imagen fija y reanudar sin perder esa tinta.
 - Entrar con `E` en Zoom editable, usar normalmente la aplicación ampliada en Mano y
   congelar con Lápiz para anotar sin perder el contexto.
+- Presentar zonas fijas en vivo con transiciones, máscaras y atajos del macropad.
 - Hibernar toda la interfaz en una unidad mínima que no estorba.
 - Usar tinta temporal y un halo de cursor para presentaciones.
 - Mantener una respuesta fluida en equipos de 2017 con graficos integrados.

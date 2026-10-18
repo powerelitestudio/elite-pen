@@ -1,4 +1,48 @@
-# Informe de calidad — Elite Pen 2.14.0
+# Informe de calidad — Elite Pen 2.15.0
+
+## Zoom de enfoque — 2.15.0
+
+Validación local: 2026-10-17.
+
+- Build Release final sin errores ni advertencias del compilador. Núcleo,
+  preferencias y rendimiento CPU aprobados en Debug y Release. La geometría cubre
+  proporciones, bordes, coordenadas negativas, límite 8×, transiciones intermedias,
+  monitores desconectados y escenas inválidas. Se verifican ocho zonas con máscaras,
+  valores corruptos y conservación de una personalización anterior Ctrl+Shift+M.
+- Prueba nativa aislada: Ctrl+Shift+M inicia selección, Ctrl+Alt+M cambia encuadre
+  y Ctrl+Alt+Shift+M añade una máscara. Ctrl+Alt+Shift+F1–F8 guarda ocho encuadres
+  distintos; Ctrl+Alt+F1–F8 los recupera. PageDown/PageUp recorre y envuelve la lista.
+  Se comprueban velocidad, contexto, cancelación, eliminación y visibilidad de
+  máscaras, salida animada y recuperación de encuadres con máscaras tras reiniciar.
+- El origen consultado con `MagGetWindowSource` coincide con el encuadre calculado.
+  Antes y después de mover el cursor de (20,20) a (1600,900), la fuente permanece
+  (280,200)–(920,600). Una fuente animada confirma rojo y verde en el mismo píxel
+  del zoom nativo mientras el ratón permanece quieto; se refresca el bitmap del
+  control sin cambiar encuadre ni factor.
+- La ruta DWM se ejercita con una ventana animada de prueba y Windows Graphics
+  Capture: el mismo píxel ampliado alterna rojo y verde mientras el origen permanece
+  fijo. Una máscara devuelve RGB (9,11,17) en el punto oculto. Se inspeccionan también
+  las capturas. El HUD usa NOREDIRECTIONBITMAP para evitar una capa negra sobre el
+  zoom; GDI por sí solo no demuestra los píxeles finales de Magnifier/DWM.
+- Smoke completo de interfaz aprobado, incluidos texto, capturas, pizarras, zoom
+  clásico y editable, figuras, emojis, favoritos y paneles fijados hasta el 300 %.
+- Rendimiento GPU, 5.000 trazos / 240 cuadros: población 213,208 ms, primer render
+  47,792 ms, cuadro en caché 0,862 ms y dibujo activo 0,827 ms. Zoom editable:
+  primer Lápiz 63,330 ms, Mano 0,137 ms y retorno caliente 16,313 ms. Memoria
+  273,78 MiB. Se cumplen todos los presupuestos existentes.
+- Instalación 2.15.0 respaldada antes de sustituir archivos y registro. El ejecutable
+  instalado, portable y build validado comparten SHA-256
+  `3D234736C261D8E6DA3A6FAD07705614C799E25EAFDBEEE59438748B23490A30`.
+  El archivo de preferencias real conserva exactamente su hash durante la actualización.
+- Una copia aislada del ejecutable recupera además la zona 8 en DISPLAY5, con
+  coordenadas negativas, sin que el cursor situado en la pantalla principal la
+  desplace a otro monitor. La ventana y la región nativa respetan ese monitor.
+
+Las pruebas de teclado emiten eventos reales de Windows desde una copia portable;
+no se programa ni se valida hardware físico de macropad. La prueba WGC no equivale
+a una nueva grabación de una escena real de OBS ni a toda la matriz Windows 10/11.
+Evidencias locales en `artifacts/focus-zoom-2.15.0-20261017/`, ignoradas por Git.
+Actualizar el código no publica por sí solo una nueva Release descargable.
 
 ## Emojis, favoritos y panel fijo — 2.14.0
 

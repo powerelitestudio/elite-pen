@@ -58,6 +58,37 @@ y factor mientras recibe gestos y libera esa instantánea al volver a navegar. L
 vista transforma bloques GPU ya rasterizados en vez de reconstruir geometría durante
 el paneo. La congelación `P` continúa usando su documento y su instantánea originales.
 
+## Zoom de enfoque — 2.15.0
+
+`elite_pen/focus.hpp` contiene geometría y escenas puras: ocho zonas de escritorio,
+ocho máscaras por escena, validación finita, recolocación entre monitores, ajuste
+de proporciones a 1–8× e interpolación smoothstep de rectángulos. Preferencias guarda
+`FocusLast`, `FocusZone1–8`, duración, aislamiento y visibilidad por claves propias.
+Las veinticuatro acciones nuevas preceden las diez contextuales; los nombres de
+las claves anteriores no cambian. Una nueva combinación que colisiona con una
+personalización anterior se deja vacía, conservando la personalización.
+
+`src/focus_zoom.inl` se incluye dentro de la implementación Win32 tras declarar
+las ventanas. `ZoomWindow` mantiene una máquina de estados de enfoque independiente
+de factor, vista e inversión clásicos. Su temporizador de 16 ms interpola origen y
+tamaño, sin depender del cursor ni capturar cuadros de CPU. Cuando el encuadre se
+estabiliza conserva geometría y factor, pero refresca los píxeles de Magnifier;
+DWM continúa vivo y actualiza el recorte si su ventana se mueve o desaparece.
+Al pasar entre zonas conserva las máscaras de origen y destino durante la transición.
+
+`FocusWindow` es un HUD DirectComposition por encima del zoom y por debajo de los
+paneles y la paleta. Convierte selección y máscaras desde viewport a escritorio;
+oscurece el exterior y dibuja máscaras opacas. Su barra permanente responde a DPI,
+ocho espacios de zona y menús de guardado y velocidad. Se excluye del Magnifier.
+La entrada permanece en el modo presentación para evitar entregar a la aplicación
+real clics con coordenadas ampliadas. Esc cancela selección antes de salir.
+
+`scripts/focus-zoom-smoke-test.ps1` usa una copia portable y una fuente animada
+independiente. Su opción `-Recordable` ejercita el compositor DWM existente sin
+necesitar iniciar OBS. Las variables de QA exigen instancia aislada; la ruta normal
+mantiene su selección de backend. Se distinguen los píxeles grabables de las consultas
+de `MagGetWindowSource`, porque GDI no captura la composición final de Magnifier.
+
 ## Emojis — 2.14.0
 
 `elite_pen/emoji.hpp` declara 72 secuencias Unicode con IDs estables y ocho espacios

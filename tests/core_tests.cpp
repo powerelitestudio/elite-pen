@@ -1,5 +1,6 @@
 #include "elite_pen/core.hpp"
 #include "elite_pen/emoji.hpp"
+#include "elite_pen/focus.hpp"
 
 #include <array>
 #include <cstdlib>
@@ -511,6 +512,37 @@ void test_emojis() {
           "erasing an emoji removes and restores one complete annotation");
 }
 
+void test_focus_frames() {
+    const RectF monitor{-1920, -1200, 0, 0};
+    const RectF area{-1500, -1000, -900, -600};
+    const auto source = fit_focus_source(area, monitor);
+    check(source.contains({area.left, area.top}) && source.contains({area.right, area.bottom}),
+          "focus source contains the selected region on negative-coordinate monitors");
+    check(std::abs(source.width() / source.height() - monitor.width() / monitor.height()) < 0.001F,
+          "focus source preserves the monitor aspect ratio without stretching");
+    const auto tiny = fit_focus_source({-1910, -1190, -1902, -1182}, monitor);
+    check(tiny.left >= monitor.left && tiny.top >= monitor.top && tiny.right <= monitor.right &&
+          tiny.bottom <= monitor.bottom && tiny.width() >= monitor.width() / 8,
+          "focus clamps edge selections and caps magnification at eight times");
+    const auto other = fit_focus_source({-800, -600, -100, -100}, monitor);
+    for (float t : {-1.0F, 0.0F, 0.1F, 0.25F, 0.5F, 0.75F, 0.9F, 1.0F, 2.0F}) {
+        const auto frame = interpolate_focus(source, other, t);
+        check(frame.left >= std::min(source.left, other.left) - 0.01F &&
+              frame.left <= std::max(source.left, other.left) + 0.01F &&
+              std::abs(frame.width() / frame.height() - monitor.width() / monitor.height()) < 0.001F,
+              "transitions stay bounded and preserve aspect throughout pan and zoom");
+    }
+    check(interpolate_focus(source, other, 0).left == source.left &&
+          interpolate_focus(source, other, 1).left == other.left,
+          "focus transitions finish at the exact requested frames");
+    const auto restored = clamp_focus_area({8000, 5000, 8600, 5400}, monitor);
+    check(restored.left >= monitor.left && restored.right <= monitor.right &&
+          restored.width() == 600 && restored.height() == 400,
+          "a disconnected monitor's saved selection moves into an available monitor");
+    check(!valid_focus_rect({0, 0, 1, 1}) && !valid_focus_rect({0, 0, 2000000, 400}) &&
+          !is_drawing_tool(Tool::Focus), "invalid focus scenes and tool drawing are rejected");
+}
+
 void test_history_limit() {
     Document document(2);
     document.add(line({0, 0}, {1, 1}));
@@ -531,6 +563,7 @@ int main() {
     test_hit_testing();
     test_symbols();
     test_emojis();
+    test_focus_frames();
     test_simplification();
     test_modifier_gestures();
     test_history_limit();

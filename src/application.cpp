@@ -618,6 +618,30 @@ constexpr std::array<HotkeyInfo, kHotkeyActionCount> kHotkeyInfo{{
     {L"Emoji favorito 6", L"Selecciona el emoji del espacio 6"},
     {L"Emoji favorito 7", L"Selecciona el emoji del espacio 7"},
     {L"Emoji favorito 8", L"Selecciona el emoji del espacio 8"},
+    {L"Zoom de enfoque", L"Abre o cierra el encuadre fijo"},
+    {L"Enfoque: elegir zona", L"Dibuja otro encuadre"},
+    {L"Enfoque: ocultar área", L"Dibuja una máscara opaca"},
+    {L"Enfoque: máscaras", L"Muestra u oculta las máscaras"},
+    {L"Enfoque: aislar", L"Oscurece lo que rodea el área"},
+    {L"Enfoque: vista completa", L"Alterna el contexto completo"},
+    {L"Enfoque: zona siguiente", L"Recorre zonas guardadas"},
+    {L"Enfoque: zona anterior", L"Recorre zonas guardadas"},
+    {L"Enfoque: zona 1", L"Recupera el encuadre y sus máscaras"},
+    {L"Enfoque: zona 2", L"Recupera el encuadre y sus máscaras"},
+    {L"Enfoque: zona 3", L"Recupera el encuadre y sus máscaras"},
+    {L"Enfoque: zona 4", L"Recupera el encuadre y sus máscaras"},
+    {L"Enfoque: zona 5", L"Recupera el encuadre y sus máscaras"},
+    {L"Enfoque: zona 6", L"Recupera el encuadre y sus máscaras"},
+    {L"Enfoque: zona 7", L"Recupera el encuadre y sus máscaras"},
+    {L"Enfoque: zona 8", L"Recupera el encuadre y sus máscaras"},
+    {L"Enfoque: guardar 1", L"Guarda el encuadre y sus máscaras"},
+    {L"Enfoque: guardar 2", L"Guarda el encuadre y sus máscaras"},
+    {L"Enfoque: guardar 3", L"Guarda el encuadre y sus máscaras"},
+    {L"Enfoque: guardar 4", L"Guarda el encuadre y sus máscaras"},
+    {L"Enfoque: guardar 5", L"Guarda el encuadre y sus máscaras"},
+    {L"Enfoque: guardar 6", L"Guarda el encuadre y sus máscaras"},
+    {L"Enfoque: guardar 7", L"Guarda el encuadre y sus máscaras"},
+    {L"Enfoque: guardar 8", L"Guarda el encuadre y sus máscaras"},
     {L"Zoom: pausar", L"Congela o reanuda para anotar"},
     {L"Zoom: completa", L"Cambia a pantalla completa"},
     {L"Zoom: lente", L"Cambia a lente movil"},
@@ -822,6 +846,7 @@ private:
     int hovered_linear_item_{-1};
     bool tracking_mouse_{};
     bool hotkeys_registered_{};
+    std::size_t failed_hotkey_index_{kHotkeyActionCount};
     std::array<HotkeyBinding, kHotkeyActionCount> registered_hotkeys_{kDefaultHotkeys};
 };
 
@@ -1133,6 +1158,38 @@ private:
     Command hovered_{Command::None};
 };
 
+class FocusWindow final : public WindowBase {
+public:
+    enum class Selection { None, Zone, Mask };
+    FocusWindow(Controller& controller, ZoomWindow& owner) : WindowBase(controller), owner_(owner) {}
+    bool initialize(GraphicsDevice& graphics);
+    void show_for(RECT bounds);
+    void hide() { select(Selection::None); ShowWindow(window_, SW_HIDE); }
+    void bring_to_front();
+    void select(Selection selection) {
+        selection_ = selection;
+        dragging_ = false;
+        if (GetCapture() == window_) ReleaseCapture();
+        invalidate();
+    }
+    [[nodiscard]] Selection selection() const noexcept { return selection_; }
+
+protected:
+    LRESULT handle_message(UINT message, WPARAM wparam, LPARAM lparam) override;
+    void render() override;
+
+private:
+    [[nodiscard]] float ui_scale() const noexcept;
+    [[nodiscard]] D2D1_POINT_2F ui_origin() const noexcept;
+    [[nodiscard]] int command_at(POINT point) const noexcept;
+    void show_menu(POINT point, int zone = -1);
+    ZoomWindow& owner_;
+    Selection selection_{Selection::None};
+    bool dragging_{};
+    PointF drag_start_{};
+    PointF drag_end_{};
+};
+
 class ZoomWindow final : public WindowBase {
 public:
     explicit ZoomWindow(Controller& controller) : WindowBase(controller) {}
@@ -1156,6 +1213,18 @@ public:
     bool redo();
     void commit_text_screen(PointF position, Color color, float thickness,
                             std::wstring text);
+    void execute_focus(HotkeyAction action);
+    void focus_command(UINT command);
+    void focus_pick(RectF view_rect, bool mask);
+    void focus_cancel_selection();
+    void focus_remove_mask(PointF view_point);
+    [[nodiscard]] bool focus_active() const noexcept { return active_ && focus_mode_; }
+    [[nodiscard]] bool focus_animating() const noexcept { return focus_animating_; }
+    [[nodiscard]] const FocusScene& focus_scene() const noexcept { return focus_scene_; }
+    [[nodiscard]] const FocusScene& focus_previous_masks() const noexcept { return focus_previous_masks_; }
+    [[nodiscard]] RectF focus_source() const noexcept { return focus_current_; }
+    [[nodiscard]] bool focus_overview() const noexcept { return focus_overview_; }
+    [[nodiscard]] int focus_zone() const noexcept { return focus_zone_; }
     [[nodiscard]] bool active() const noexcept { return active_; }
     [[nodiscard]] bool frozen() const noexcept {
         return ink_ && ink_->frozen();
@@ -1201,6 +1270,11 @@ private:
     void apply_view_regions(ZoomView view, int width, int height);
     bool load_magnification();
     void finish_entry_animation();
+    void start_focus(FocusScene scene, bool select = false);
+    void animate_focus(RectF target);
+    void refresh_focus();
+    void save_focus();
+    void exit_focus();
 
     using MagInitializePointer = BOOL(WINAPI*)();
     using MagUninitializePointer = BOOL(WINAPI*)();
@@ -1221,6 +1295,20 @@ private:
     std::unique_ptr<ZoomTargetWindow> target_;
     std::unique_ptr<ZoomLensFrameWindow> lens_frame_;
     std::unique_ptr<ZoomEditToolbarWindow> edit_toolbar_;
+    std::unique_ptr<FocusWindow> focus_;
+    bool focus_mode_{};
+    bool focus_animating_{};
+    bool focus_closing_{};
+    bool focus_overview_{};
+    bool focus_pending_select_{};
+    int focus_zone_{-1};
+    FocusScene focus_scene_;
+    FocusScene focus_previous_masks_;
+    RectF focus_from_{};
+    RectF focus_target_{};
+    RectF focus_current_{};
+    RECT focus_monitor_{};
+    std::chrono::steady_clock::time_point focus_started_{};
     RECT monitor_rect_{};
     RECT zoom_rect_{};
     RECT source_rect_{};
@@ -1528,11 +1616,11 @@ constexpr std::array<Color, 42> kExtendedColors{{
     {255, 128, 161, 255}, {92, 225, 230, 255}, {137, 245, 173, 255}
 }};
 
-constexpr std::array<Tool, 18> kTools{{
+constexpr std::array<Tool, 19> kTools{{
     Tool::Interact, Tool::Pen, Tool::Highlighter, Tool::Eraser, Tool::Line,
     Tool::Rectangle, Tool::Ellipse, Tool::Arrow, Tool::CurvedArrow, Tool::Text,
     Tool::Screenshot, Tool::Zoom, Tool::Pentagon, Tool::Hexagon,
-    Tool::Cross, Tool::Checkmark, Tool::Warning, Tool::Prohibition
+    Tool::Cross, Tool::Checkmark, Tool::Warning, Tool::Prohibition, Tool::Focus
 }};
 
 constexpr std::array<Tool, 11> kGeometryTools{{
@@ -2948,17 +3036,32 @@ void PaletteWindow::install_hotkeys() {
     // It invokes the same commands directly and must not steal the user's
     // machine-wide shortcuts merely to exercise unrelated interaction paths.
     wchar_t qa_instance[2]{};
+    wchar_t qa_real_hotkeys[2]{};
     if (GetEnvironmentVariableW(L"ELITE_PEN_QA_INSTANCE_ID", qa_instance,
-                                static_cast<DWORD>(std::size(qa_instance))) > 0) {
+                                static_cast<DWORD>(std::size(qa_instance))) > 0 &&
+        GetEnvironmentVariableW(L"ELITE_PEN_QA_REAL_HOTKEYS", qa_real_hotkeys,
+                                static_cast<DWORD>(std::size(qa_real_hotkeys))) == 0) {
         registered_hotkeys_ = controller_.preferences().hotkeys;
         hotkeys_registered_ = true;
         return;
     }
-    if (!apply_hotkeys(controller_.preferences().hotkeys)) {
-        controller_.preferences().hotkeys = kDefaultHotkeys;
-        apply_hotkeys(kDefaultHotkeys);
-        controller_.save_preferences();
+    auto available = controller_.preferences().hotkeys;
+    bool skipped_focus_default = false;
+    while (!apply_hotkeys(available)) {
+        const auto index = failed_hotkey_index_;
+        if (index >= static_cast<std::size_t>(HotkeyAction::FocusToggle) &&
+            index < static_cast<std::size_t>(HotkeyAction::ZoomFreeze) &&
+            available[index] == kDefaultHotkeys[index]) {
+            available[index] = {};
+            skipped_focus_default = true;
+            continue;
+        }
+        show_notification(L"Atajo ocupado",
+            L"Otra aplicación usa una combinación de Elite Pen. Revisa Configuración > Atajos; tus asignaciones se conservan.");
+        return;
     }
+    if (skipped_focus_default) show_notification(L"Atajo de enfoque ocupado",
+        L"Otra aplicación usa uno de los atajos nuevos. Los demás siguen disponibles; puedes reasignarlo en Configuración > Atajos.");
 }
 
 bool PaletteWindow::apply_hotkeys(
@@ -2966,11 +3069,13 @@ bool PaletteWindow::apply_hotkeys(
     const auto previous = registered_hotkeys_;
     const bool had_previous = hotkeys_registered_;
     remove_hotkeys();
+    failed_hotkey_index_ = kHotkeyActionCount;
     for (std::size_t index = 0; index < kGlobalHotkeyActionCount; ++index) {
         if (bindings[index].virtual_key == 0) continue;
         const int id = static_cast<int>(index) + 1;
         if (!RegisterHotKey(window_, id, bindings[index].modifiers | MOD_NOREPEAT,
                             bindings[index].virtual_key)) {
+            failed_hotkey_index_ = index;
             for (int registered = 1;
                  registered <= static_cast<int>(kGlobalHotkeyActionCount); ++registered)
                 UnregisterHotKey(window_, registered);
@@ -4715,6 +4820,7 @@ void ToolWindow::render() {
                 context->DrawLine(D2D1::Point2F(icon_x - 1, icon_y - 1),
                                   D2D1::Point2F(icon_x + 6, icon_y + 5), text.Get(), 1.5F);
                 break;
+            case Tool::Focus:
             case Tool::Zoom:
                 context->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(icon_x - 2, icon_y - 2),
                                                    6, 6), text.Get(), 2.0F);
@@ -5302,7 +5408,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.14.0",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.15.0",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
@@ -5454,7 +5560,7 @@ bool SettingsWindow::initialize() {
                                     reinterpret_cast<HMENU>(4300),
                                     GetModuleHandleW(nullptr), nullptr);
     help_ = CreateWindowW(L"STATIC",
-        L"Ayuda de Elite Pen 2.14.0. Anotación, pizarra, captura y zoom para Windows. "
+        L"Ayuda de Elite Pen 2.15.0. Anotación, pizarra, captura y zoom para Windows. "
         L"Código abierto bajo Apache License 2.0. Desarrollado por Power Elite Studio.",
         WS_CHILD | SS_OWNERDRAW, 24, 119, 540, 400, window_,
         reinterpret_cast<HMENU>(4105), GetModuleHandleW(nullptr), nullptr);
@@ -5698,7 +5804,7 @@ void SettingsWindow::paint_help(HDC dc, RECT bounds) {
     SelectObject(dc, small_font_);
     SetTextColor(dc, theme_colorref(theme.text_muted));
     RECT version{bounds.left, bounds.top + 73, bounds.right, bounds.top + 94};
-    DrawTextW(dc, L"Version 2.14.0 · Windows 10 y 11 · x64", -1, &version,
+    DrawTextW(dc, L"Version 2.15.0 · Windows 10 y 11 · x64", -1, &version,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
 
     SelectObject(dc, body_font_);
@@ -7746,6 +7852,8 @@ void ZoomEditToolbarWindow::render() {
     if (!surface_.end_draw(error)) controller_.report_runtime_error(error);
 }
 
+#include "focus_zoom.inl"
+
 bool ZoomWindow::load_magnification() {
     if (magnification_module_) return true;
     magnification_module_ = LoadLibraryW(L"Magnification.dll");
@@ -7769,7 +7877,7 @@ ZoomWindow* ZoomWindow::click_hook_owner_ = nullptr;
 
 LRESULT CALLBACK ZoomWindow::click_hook_proc(int code, WPARAM wparam, LPARAM lparam) {
     ZoomWindow* zoom = click_hook_owner_;
-    if (code == HC_ACTION && zoom && zoom->active_ && !zoom->frozen() &&
+    if (code == HC_ACTION && zoom && zoom->active_ && !zoom->focus_mode_ && !zoom->frozen() &&
         zoom->edit_state_ != ZoomEditState::Navigate &&
         (wparam == WM_LBUTTONDOWN || wparam == WM_LBUTTONUP)) {
         const auto* information = reinterpret_cast<const MSLLHOOKSTRUCT*>(lparam);
@@ -7825,7 +7933,11 @@ bool ZoomWindow::start_recordable_output() {
     // live DWM thumbnail of the focused application instead. WGC records this
     // normal desktop composition while the native magnifier remains the fallback
     // for ordinary use and unsupported windows.
-    if (!obs_is_running()) return false;
+    wchar_t qa_instance[2]{}, qa_recordable[2]{};
+    const bool qa_thumbnail =
+        GetEnvironmentVariableW(L"ELITE_PEN_QA_INSTANCE_ID", qa_instance, 2) > 0 &&
+        GetEnvironmentVariableW(L"ELITE_PEN_QA_RECORDABLE_ZOOM", qa_recordable, 2) > 0;
+    if (!obs_is_running() && !qa_thumbnail) return false;
     if (!window_ || !foreground_before_zoom_ ||
         !IsWindow(foreground_before_zoom_) ||
         !IsWindowVisible(foreground_before_zoom_) ||
@@ -7885,7 +7997,7 @@ void ZoomWindow::update_recordable_output() {
                            static_cast<double>(window_width);
     const double scale_y = static_cast<double>(recordable_source_size_.cy) /
                            static_cast<double>(window_height);
-    if (static_cast<ZoomView>(controller_.preferences().zoom_view) == ZoomView::Lens) {
+    if (!focus_mode_ && static_cast<ZoomView>(controller_.preferences().zoom_view) == ZoomView::Lens) {
         RECT available{};
         IntersectRect(&available, &recordable_source_bounds_, &monitor_rect_);
         const auto clipped = clip_zoom_source(
@@ -7961,7 +8073,7 @@ void ZoomWindow::update_native_output(float factor) {
     RECT source = source_rect_;
     RECT destination{0, 0, zoom_rect_.right - zoom_rect_.left,
                            zoom_rect_.bottom - zoom_rect_.top};
-    if (static_cast<ZoomView>(controller_.preferences().zoom_view) == ZoomView::Lens) {
+    if (!focus_mode_ && static_cast<ZoomView>(controller_.preferences().zoom_view) == ZoomView::Lens) {
         const auto clipped = clip_zoom_source(
             floating_rect(source_rect_), floating_rect(monitor_rect_),
             {static_cast<float>(source_rect_.right - source_rect_.left) * factor,
@@ -8032,7 +8144,7 @@ LRESULT CALLBACK ZoomWindow::magnifier_subclass(
         message == WM_NCHITTEST) {
         return HTTRANSPARENT;
     }
-    if (zoom && (message == WM_LBUTTONDOWN || message == WM_LBUTTONDBLCLK) &&
+    if (zoom && !zoom->focus_mode_ && (message == WM_LBUTTONDOWN || message == WM_LBUTTONDBLCLK) &&
         zoom->active_ && !zoom->frozen() &&
         zoom->edit_state_ != ZoomEditState::Navigate) {
         SetFocus(zoom->window_);
@@ -8077,6 +8189,8 @@ bool ZoomWindow::initialize(GraphicsDevice& graphics) {
     if (!lens_frame_->initialize(graphics)) return false;
     edit_toolbar_ = std::make_unique<ZoomEditToolbarWindow>(controller_, *this);
     if (!edit_toolbar_->initialize(graphics)) return false;
+    focus_ = std::make_unique<FocusWindow>(controller_, *this);
+    if (!focus_->initialize(graphics)) return false;
     // Zoom presentation is intentionally capturable. Native Magnifier remains
     // the general fallback; an OBS-aware DWM path is selected at activation.
     SetWindowDisplayAffinity(window_, WDA_NONE);
@@ -8093,6 +8207,7 @@ bool ZoomWindow::show_zoom() {
     GetMonitorInfoW(monitor, &info);
     monitor_rect_ = info.rcMonitor;
     tool_before_zoom_ = controller_.state().tool;
+    if (focus_mode_) monitor_rect_ = focus_monitor_;
     foreground_before_zoom_ = nullptr;
     remember_foreground_target();
     start_recordable_output();
@@ -8102,6 +8217,7 @@ bool ZoomWindow::show_zoom() {
         if (target_) excluded.push_back(target_->hwnd());
         if (lens_frame_) excluded.push_back(lens_frame_->hwnd());
         if (edit_toolbar_) excluded.push_back(edit_toolbar_->hwnd());
+        if (focus_) excluded.push_back(focus_->hwnd());
         if (controller_.palette()) excluded.push_back(controller_.palette()->hwnd());
         if (controller_.geometry_panel()) excluded.push_back(controller_.geometry_panel()->hwnd());
         if (controller_.emoji_panel()) excluded.push_back(controller_.emoji_panel()->hwnd());
@@ -8116,12 +8232,12 @@ bool ZoomWindow::show_zoom() {
     entry_animation_anchor_ = cursor;
     presented_factor_ = 1.0F;
     entry_animation_started_ = std::chrono::steady_clock::now();
-    entry_animation_active_ =
+    entry_animation_active_ = !focus_mode_ &&
         static_cast<ZoomView>(controller_.preferences().zoom_view) ==
             ZoomView::Fullscreen &&
         controller_.state().zoom_factor > 1.001F;
     source_initialized_ = false;
-    install_click_hook();
+    if (!focus_mode_) install_click_hook();
     SetTimer(window_, 1, 16, nullptr);
     refresh_source();
     apply_color_effect();
@@ -8135,6 +8251,11 @@ bool ZoomWindow::show_zoom() {
 
 void ZoomWindow::hide_zoom() {
     if (!active_) return;
+    if (focus_) focus_->hide();
+    focus_mode_ = false;
+    focus_animating_ = false;
+    focus_closing_ = false;
+    focus_pending_select_ = false;
     controller_.cancel_pending_text();
     set_edit_passthrough(false);
     active_ = false;
@@ -8157,7 +8278,7 @@ void ZoomWindow::hide_zoom() {
 }
 
 bool ZoomWindow::toggle_freeze() {
-    if (!active_ || !ink_) return false;
+    if (!active_ || !ink_ || focus_mode_) return false;
     finish_entry_animation();
     controller_.commit_pending_text();
     if (edit_active()) {
@@ -8202,7 +8323,7 @@ bool ZoomWindow::toggle_freeze() {
 }
 
 void ZoomWindow::toggle_edit_mode() {
-    if (!active_ || !ink_) return;
+    if (!active_ || !ink_ || focus_mode_) return;
     finish_entry_animation();
     if (edit_active()) {
         controller_.commit_pending_text();
@@ -8435,6 +8556,7 @@ void ZoomWindow::bring_to_front() {
     if (lens_frame_) lens_frame_->bring_to_front();
     if (target_) target_->bring_to_front();
     if (edit_toolbar_) edit_toolbar_->bring_to_front();
+    if (focus_mode_ && focus_) focus_->bring_to_front();
     controller_.restack_panels();
     if (controller_.palette() && IsWindowVisible(controller_.palette()->hwnd())) {
         SetWindowPos(controller_.palette()->hwnd(), HWND_TOPMOST, 0, 0, 0, 0,
@@ -8463,7 +8585,7 @@ void ZoomWindow::commit_text_screen(PointF position, Color color, float thicknes
 void ZoomWindow::apply_color_effect() {
     if (!mag_set_color_effect_ || !magnifier_) return;
     MAGCOLOREFFECT effect{};
-    if (controller_.preferences().zoom_invert) {
+    if (controller_.preferences().zoom_invert && !focus_mode_) {
         const MAGCOLOREFFECT inverted{{
             {-1.0F, 0, 0, 0, 0},
             {0, -1.0F, 0, 0, 0},
@@ -8556,9 +8678,11 @@ void ZoomWindow::apply_theme() {
     if (target_) target_->invalidate();
     if (lens_frame_) lens_frame_->invalidate();
     if (edit_toolbar_) edit_toolbar_->invalidate();
+    if (focus_) focus_->invalidate();
 }
 
 void ZoomWindow::refresh_source() {
+    if (focus_mode_ && active_) { refresh_focus(); return; }
     if (!active_ || (ink_ && ink_->frozen())) return;
     const bool edit_locked = edit_state_ == ZoomEditState::Annotate;
     POINT cursor{};
@@ -8697,6 +8821,32 @@ void ZoomWindow::refresh_source() {
 }
 
 LRESULT ZoomWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
+    if (message == WM_APP + 131) return focus_active() ? 1 : 0;
+    if (message == WM_APP + 132) return focus_ ? static_cast<LRESULT>(focus_->selection()) : 0;
+    if (message == WM_APP + 133) return focus_animating_ ? 1 : 0;
+    if (message == WM_APP + 134) return static_cast<LRESULT>(focus_scene_.mask_count);
+    if (message == WM_APP + 135) {
+        switch (wparam) {
+            case 0: return static_cast<LRESULT>(std::lround(focus_scene_.area.left));
+            case 1: return static_cast<LRESULT>(std::lround(focus_scene_.area.top));
+            case 2: return static_cast<LRESULT>(std::lround(focus_scene_.area.width()));
+            case 3: return static_cast<LRESULT>(std::lround(focus_scene_.area.height()));
+        }
+    }
+    if (message == WM_APP + 136) {
+        switch (wparam) {
+            case 0: return static_cast<LRESULT>(std::lround(focus_current_.left));
+            case 1: return static_cast<LRESULT>(std::lround(focus_current_.top));
+            case 2: return static_cast<LRESULT>(std::lround(focus_current_.right));
+            case 3: return static_cast<LRESULT>(std::lround(focus_current_.bottom));
+        }
+    }
+    if (message == WM_APP + 140) return recordable_output_ ? 1 : 0;
+    if (focus_mode_ && message == WM_KEYDOWN) {
+        if (wparam == VK_ESCAPE) focus_cancel_selection();
+        return 0;
+    }
+    if (focus_mode_ && message == WM_DISPLAYCHANGE) { hide_zoom(); return 0; }
     switch (message) {
         case WM_PAINT: {
             PAINTSTRUCT paint{};
@@ -8844,7 +8994,7 @@ LRESULT ZoomWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
             return 0;
         }
         case WM_PARENTNOTIFY:
-            if (LOWORD(wparam) == WM_LBUTTONDOWN && !frozen() &&
+            if (LOWORD(wparam) == WM_LBUTTONDOWN && !focus_mode_ && !frozen() &&
                 edit_state_ != ZoomEditState::Navigate) {
                 toggle_freeze();
                 return 0;
@@ -9174,6 +9324,7 @@ bool Controller::route_palette_command(PointF screen_point) {
 }
 
 void Controller::set_tool(Tool tool) {
+    if (tool == Tool::Focus) { execute_hotkey(HotkeyAction::FocusToggle); return; }
     if (text_input_ && text_input_->active() && tool != Tool::Text) text_input_->commit();
     if (tool == Tool::Zoom) {
         toggle_zoom();
@@ -9361,6 +9512,11 @@ void Controller::execute_hotkey(HotkeyAction action) {
     const auto index = static_cast<std::size_t>(action);
     if (settings_ && index < preferences_.hotkeys.size() &&
         settings_->capture_registered_hotkey(preferences_.hotkeys[index])) return;
+    if (action >= HotkeyAction::FocusToggle && action < HotkeyAction::ZoomFreeze) {
+        if (zoom_) zoom_->execute_focus(action);
+        else report_runtime_error(L"La ampliación nativa de Windows no está disponible.");
+        return;
+    }
     if (action >= HotkeyAction::EmojiFavorite1 && action <= HotkeyAction::EmojiFavorite8) {
         const auto slot = index - static_cast<std::size_t>(HotkeyAction::EmojiFavorite1);
         if (valid_emoji(preferences_.emoji_favorites[slot]))

@@ -2,6 +2,7 @@
 
 #include "elite_pen/core.hpp"
 #include "elite_pen/emoji.hpp"
+#include "elite_pen/focus.hpp"
 
 #include <windows.h>
 
@@ -79,6 +80,30 @@ enum class HotkeyAction : std::uint8_t {
     EmojiFavorite6,
     EmojiFavorite7,
     EmojiFavorite8,
+    FocusToggle,
+    FocusSelect,
+    FocusMask,
+    FocusMasksToggle,
+    FocusIsolation,
+    FocusOverview,
+    FocusNext,
+    FocusPrevious,
+    FocusRecall1,
+    FocusRecall2,
+    FocusRecall3,
+    FocusRecall4,
+    FocusRecall5,
+    FocusRecall6,
+    FocusRecall7,
+    FocusRecall8,
+    FocusSave1,
+    FocusSave2,
+    FocusSave3,
+    FocusSave4,
+    FocusSave5,
+    FocusSave6,
+    FocusSave7,
+    FocusSave8,
     ZoomFreeze,
     ZoomFullscreen,
     ZoomLens,
@@ -133,6 +158,28 @@ inline constexpr std::array<HotkeyBinding, kHotkeyActionCount> kDefaultHotkeys{{
     {0, 0}, {0, 0}, {0, 0}, {0, 0},
     {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},
     {0, 0}, {0, 0}, {0, 0}, {0, 0},
+    {MOD_CONTROL | MOD_SHIFT, 'M'},
+    {MOD_CONTROL | MOD_ALT, 'M'},
+    {MOD_CONTROL | MOD_ALT | MOD_SHIFT, 'M'},
+    {0, 0}, {0, 0}, {0, 0},
+    {MOD_CONTROL | MOD_SHIFT, VK_NEXT},
+    {MOD_CONTROL | MOD_SHIFT, VK_PRIOR},
+    {MOD_CONTROL | MOD_ALT, VK_F1},
+    {MOD_CONTROL | MOD_ALT, VK_F2},
+    {MOD_CONTROL | MOD_ALT, VK_F3},
+    {MOD_CONTROL | MOD_ALT, VK_F4},
+    {MOD_CONTROL | MOD_ALT, VK_F5},
+    {MOD_CONTROL | MOD_ALT, VK_F6},
+    {MOD_CONTROL | MOD_ALT, VK_F7},
+    {MOD_CONTROL | MOD_ALT, VK_F8},
+    {MOD_CONTROL | MOD_ALT | MOD_SHIFT, VK_F1},
+    {MOD_CONTROL | MOD_ALT | MOD_SHIFT, VK_F2},
+    {MOD_CONTROL | MOD_ALT | MOD_SHIFT, VK_F3},
+    {MOD_CONTROL | MOD_ALT | MOD_SHIFT, VK_F4},
+    {MOD_CONTROL | MOD_ALT | MOD_SHIFT, VK_F5},
+    {MOD_CONTROL | MOD_ALT | MOD_SHIFT, VK_F6},
+    {MOD_CONTROL | MOD_ALT | MOD_SHIFT, VK_F7},
+    {MOD_CONTROL | MOD_ALT | MOD_SHIFT, VK_F8},
     {0, 'P'},
     {0, 'F'},
     {0, 'L'},
@@ -166,6 +213,30 @@ inline constexpr std::array<HotkeyBinding, kHotkeyActionCount> kLegacyDefaultHot
     {0, 0}, {0, 0}, {0, 0}, {0, 0},
     {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},
     {0, 0}, {0, 0}, {0, 0}, {0, 0},
+    {0, 0},
+    {0, 0},
+    {0, 0},
+    {0, 0},
+    {0, 0},
+    {0, 0},
+    {0, 0},
+    {0, 0},
+    {0, 0},
+    {0, 0},
+    {0, 0},
+    {0, 0},
+    {0, 0},
+    {0, 0},
+    {0, 0},
+    {0, 0},
+    {0, 0},
+    {0, 0},
+    {0, 0},
+    {0, 0},
+    {0, 0},
+    {0, 0},
+    {0, 0},
+    {0, 0},
     {0, 'P'},
     {0, 'F'},
     {0, 'L'},
@@ -206,6 +277,11 @@ struct Preferences {
     int emoji_y{};
     int selected_emoji{0};
     std::array<int, kEmojiFavoriteCount> emoji_favorites{kDefaultEmojiFavorites};
+    FocusScene focus_last;
+    std::array<FocusScene, kFocusZoneCount> focus_zones{};
+    int focus_duration_ms{280};
+    bool focus_isolation{true};
+    bool focus_masks_visible{true};
     float zoom_factor{2.0F};
     int zoom_view{0};
     int zoom_lens_diameter{520};

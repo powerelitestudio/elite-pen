@@ -67,6 +67,13 @@ Invoke-Compiler ($common + @(
     '-static', '-pthread', '-lshell32', '-lole32'
 ))
 
+$wgcCaptureExecutable = Join-Path $outputDirectory 'wgc-capture.exe'
+Invoke-Compiler ($common + @(
+    (Join-Path $repoRoot 'tests\wgc_capture.cpp'),
+    '-o', $wgcCaptureExecutable, '-municode', '-static',
+    '-ld3d11', '-ldxgi', '-lruntimeobject', '-lole32', '-luser32'
+))
+
 if (-not $TestsOnly) {
     $applicationSources = Get-ChildItem -LiteralPath (Join-Path $repoRoot 'src') -Filter '*.cpp' |
         Where-Object { $_.Name -ne 'core.cpp' } |

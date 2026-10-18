@@ -168,6 +168,10 @@ $null = [ElitePenUiNative]::SetProcessDpiAwarenessContext([IntPtr](-4))
 $failures = [System.Collections.Generic.List[string]]::new()
 $paletteScale = 0.60
 $captureDirectory = Join-Path $repoRoot 'artifacts\qa\ui-captures'
+if (-not ([IO.Path]::GetFullPath($captureDirectory)).StartsWith(
+        ([IO.Path]::GetFullPath($repoRoot).TrimEnd('\') + '\'), [StringComparison]::OrdinalIgnoreCase)) {
+    throw 'UI capture cleanup path is outside the repository.'
+}
 if (Test-Path -LiteralPath $captureDirectory) {
     Remove-Item -LiteralPath $captureDirectory -Recurse -Force
 }
@@ -512,8 +516,8 @@ try {
     if ($toolPanel -ne [IntPtr]::Zero) {
         $toolPanelBounds = New-Object ElitePenUiNative+RECT
         $null = [ElitePenUiNative]::GetWindowRect($toolPanel, [ref]$toolPanelBounds)
-        Assert-Ui (($toolPanelBounds.Bottom - $toolPanelBounds.Top) -eq 544) 'Complete tool panel did not expose its Settings row.'
-        Click-Window $toolPanel 180 505
+        Assert-Ui (($toolPanelBounds.Bottom - $toolPanelBounds.Top) -eq 592) 'Complete tool panel did not expose its Settings row.'
+        Click-Window $toolPanel 180 553
     }
 
     # Settings remains directly accessible through the handle panel.
@@ -1856,6 +1860,12 @@ try {
             $process.WaitForExit(3000) | Out-Null
         }
         $process.Dispose()
+    }
+    $qaResolved = [IO.Path]::GetFullPath($qaSandbox)
+    $qaTempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\') + '\'
+    if (-not $qaResolved.StartsWith($qaTempRoot, [StringComparison]::OrdinalIgnoreCase) -or
+        -not ([IO.Path]::GetFileName($qaResolved)).StartsWith('elite-pen-ui-qa-')) {
+        throw 'UI QA cleanup path is unsafe.'
     }
     if (Test-Path -LiteralPath $qaSandbox) {
         for ($attempt = 0; $attempt -lt 40; $attempt++) {

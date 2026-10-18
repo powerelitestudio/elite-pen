@@ -82,13 +82,13 @@ int main() {
     check(fresh.geometry_size == 1 && !fresh.geometry_pinned &&
           !fresh.geometry_visible && !fresh.has_geometry_position,
           "figures start at 100 percent as an optional transient panel");
-    check(kHotkeyActionCount == 55 && kGlobalHotkeyActionCount == 45,
-          "emoji panel and eight favorite actions are global; ten zoom actions stay contextual");
+    check(kHotkeyActionCount == 79 && kGlobalHotkeyActionCount == 69,
+          "focus adds 24 global actions while ten classic zoom actions stay contextual");
     check(fresh.emoji_size == 1 && !fresh.emoji_pinned && !fresh.emoji_visible &&
           !fresh.has_emoji_position && fresh.emoji_favorites == kDefaultEmojiFavorites,
           "emoji panel starts optional at 100 percent with eight useful defaults");
     for (std::size_t index = static_cast<std::size_t>(HotkeyAction::EmojiPanel);
-         index < static_cast<std::size_t>(HotkeyAction::ZoomFreeze); ++index)
+         index < static_cast<std::size_t>(HotkeyAction::FocusToggle); ++index)
         check(fresh.hotkeys[index] == HotkeyBinding{}, "emoji shortcuts start unassigned");
     for (auto action : {HotkeyAction::Cross, HotkeyAction::Checkmark,
                         HotkeyAction::Warning, HotkeyAction::Prohibition}) {
@@ -225,6 +225,9 @@ int main() {
 
     check(store.save(expected), "preferences save atomically");
     const Preferences actual = store.load();
+    check(actual.hotkeys[static_cast<std::size_t>(HotkeyAction::FocusToggle)] ==
+          HotkeyBinding{MOD_CONTROL | MOD_SHIFT, 'M'} && actual.focus_duration_ms == 280,
+          "focus defaults to Ctrl Shift M and a short smooth transition");
     check(actual.theme == expected.theme, "appearance theme round trip");
     check(actual.emoji_size == 5 && actual.emoji_pinned && actual.emoji_visible &&
           actual.has_emoji_position && actual.emoji_x == -440 && actual.emoji_y == -1040 &&
@@ -334,6 +337,34 @@ int main() {
           sanitized.emoji_favorites[1] == kDefaultEmojiFavorites[1] &&
           sanitized.emoji_favorites[2] == -1 && sanitized.emoji_favorites[4] == 71,
           "invalid IDs recover individually without damaging valid or empty favorites");
+
+    Preferences focus;
+    focus.focus_duration_ms = 420;
+    focus.focus_isolation = false;
+    focus.focus_masks_visible = false;
+    focus.focus_last.area = {-1600, -800, -1000, -400};
+    focus.focus_last.masks[0] = {-1500, -700, -1450, -650};
+    focus.focus_last.mask_count = 1;
+    for (std::size_t slot = 0; slot < kFocusZoneCount; ++slot) focus.focus_zones[slot] = focus.focus_last;
+    check(store.save(focus), "focus scenes save");
+    const auto focus_saved = store.load();
+    check(focus_saved.focus_duration_ms == 420 && !focus_saved.focus_isolation &&
+          !focus_saved.focus_masks_visible && focus_saved.focus_zones[7].area.left == -1600 &&
+          focus_saved.focus_zones[7].mask_count == 1 && focus_saved.focus_zones[7].masks[0].left == -1500,
+          "eight zones preserve their masks, independent settings and negative coordinates");
+    {
+        std::ofstream malformed(std::filesystem::path(store.path()), std::ios::binary | std::ios::trunc);
+        malformed << "[ElitePen]\r\nHotkeySchemeVersion=2\r\nHotkeyPen=6,77\r\n"
+            "FocusDurationMs=9999\r\nFocusLastArea=1,2,-5,9\r\n"
+            "FocusZone1Area=-500,-400,600,300\r\nFocusZone1MaskCount=999\r\n"
+            "FocusZone1Mask1=-400,-300,80,80\r\nFocusZone1Mask2=0,0,0,0\r\n";
+    }
+    const auto sanitized_focus = store.load();
+    check(sanitized_focus.focus_duration_ms == 600 && !valid_focus_rect(sanitized_focus.focus_last.area) &&
+          sanitized_focus.focus_zones[0].mask_count == 1 &&
+          sanitized_focus.hotkeys[static_cast<std::size_t>(HotkeyAction::FocusToggle)] == HotkeyBinding{} &&
+          sanitized_focus.hotkeys[static_cast<std::size_t>(HotkeyAction::Pen)] == HotkeyBinding{6, 'M'},
+          "invalid focus values sanitize and a new shortcut never takes an existing custom binding");
 
     if (failures == 0) std::cout << "Elite Pen preferences: all tests passed\n";
     return failures == 0 ? 0 : 1;

@@ -251,6 +251,12 @@ try {
         $process.Dispose()
     }
     if (Test-Path -LiteralPath $sandbox) {
+        $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\') + '\'
+        $resolvedSandbox = [IO.Path]::GetFullPath($sandbox)
+        if (-not $resolvedSandbox.StartsWith($tempRoot, [StringComparison]::OrdinalIgnoreCase) -or
+            -not ([IO.Path]::GetFileName($resolvedSandbox)).StartsWith('elite-pen-render-qa-')) {
+            throw 'Render QA cleanup path is unsafe.'
+        }
         for ($attempt = 0; $attempt -lt 40; $attempt++) {
             try {
                 Remove-Item -LiteralPath $sandbox -Recurse -Force

@@ -72,6 +72,46 @@ HotkeyBinding read_hotkey(const std::wstring& path, const wchar_t* key,
     return {modifiers, virtual_key};
 }
 
+RectF read_focus_rect(const std::wstring& path, const std::wstring& key) {
+    wchar_t buffer[160]{};
+    GetPrivateProfileStringW(L"ElitePen", key.c_str(), L"", buffer,
+        static_cast<DWORD>(std::size(buffer)), path.c_str());
+    int left{}, top{}, width{}, height{};
+    if (swscanf_s(buffer, L"%d,%d,%d,%d", &left, &top, &width, &height) != 4 ||
+        std::abs(static_cast<double>(left)) > 1000000 ||
+        std::abs(static_cast<double>(top)) > 1000000 ||
+        width < 8 || width > 100000 || height < 8 || height > 100000) return {};
+    const RectF result{static_cast<float>(left), static_cast<float>(top),
+        static_cast<float>(left) + static_cast<float>(width),
+        static_cast<float>(top) + static_cast<float>(height)};
+    return valid_focus_rect(result) ? result : RectF{};
+}
+
+FocusScene read_focus_scene(const std::wstring& path, const std::wstring& prefix) {
+    FocusScene result;
+    result.area = read_focus_rect(path, prefix + L"Area");
+    const int count = std::clamp(read_int(path, (prefix + L"MaskCount").c_str(), 0),
+        0, static_cast<int>(kFocusMaskCount));
+    for (int index = 0; index < count; ++index) {
+        const auto mask = read_focus_rect(path, prefix + L"Mask" + std::to_wstring(index + 1));
+        if (valid_focus_rect(mask)) result.masks[result.mask_count++] = mask;
+    }
+    return result;
+}
+
+void write_focus_scene(std::ostream& stream, const std::string& prefix, const FocusScene& scene) {
+    const auto write_rect = [&](const std::string& key, RectF rect) {
+        if (!valid_focus_rect(rect)) rect = {};
+        stream << key << '=' << std::lround(rect.left) << ',' << std::lround(rect.top)
+            << ',' << std::lround(rect.width()) << ',' << std::lround(rect.height()) << "\r\n";
+    };
+    write_rect(prefix + "Area", scene.area);
+    const auto count = std::min(scene.mask_count, kFocusMaskCount);
+    stream << prefix << "MaskCount=" << count << "\r\n";
+    for (std::size_t index = 0; index < count; ++index)
+        write_rect(prefix + "Mask" + std::to_string(index + 1), scene.masks[index]);
+}
+
 }  // namespace
 
 PreferencesStore::PreferencesStore() {
@@ -125,6 +165,12 @@ Preferences PreferencesStore::load() const {
         result.emoji_favorites[slot] = valid_emoji(id) || id == -1
             ? id : kDefaultEmojiFavorites[slot];
     }
+    result.focus_last = read_focus_scene(path_, L"FocusLast");
+    for (std::size_t slot = 0; slot < kFocusZoneCount; ++slot)
+        result.focus_zones[slot] = read_focus_scene(path_, L"FocusZone" + std::to_wstring(slot + 1));
+    result.focus_duration_ms = std::clamp(read_int(path_, L"FocusDurationMs", 280), 120, 600);
+    result.focus_isolation = read_int(path_, L"FocusIsolation", 1) != 0;
+    result.focus_masks_visible = read_int(path_, L"FocusMasksVisible", 1) != 0;
     result.zoom_factor = std::clamp(read_float(path_, L"ZoomFactor", 2.0F), 1.25F, 8.0F);
     result.zoom_view = std::clamp(read_int(path_, L"ZoomView", 0), 0, 2);
     result.zoom_lens_diameter = std::clamp(
@@ -147,6 +193,30 @@ Preferences PreferencesStore::load() const {
         L"HotkeyEmojiPanel", L"HotkeyEmojiFavorite1", L"HotkeyEmojiFavorite2",
         L"HotkeyEmojiFavorite3", L"HotkeyEmojiFavorite4", L"HotkeyEmojiFavorite5",
         L"HotkeyEmojiFavorite6", L"HotkeyEmojiFavorite7", L"HotkeyEmojiFavorite8",
+        L"HotkeyFocusToggle",
+        L"HotkeyFocusSelect",
+        L"HotkeyFocusMask",
+        L"HotkeyFocusMasksToggle",
+        L"HotkeyFocusIsolation",
+        L"HotkeyFocusOverview",
+        L"HotkeyFocusNext",
+        L"HotkeyFocusPrevious",
+        L"HotkeyFocusRecall1",
+        L"HotkeyFocusRecall2",
+        L"HotkeyFocusRecall3",
+        L"HotkeyFocusRecall4",
+        L"HotkeyFocusRecall5",
+        L"HotkeyFocusRecall6",
+        L"HotkeyFocusRecall7",
+        L"HotkeyFocusRecall8",
+        L"HotkeyFocusSave1",
+        L"HotkeyFocusSave2",
+        L"HotkeyFocusSave3",
+        L"HotkeyFocusSave4",
+        L"HotkeyFocusSave5",
+        L"HotkeyFocusSave6",
+        L"HotkeyFocusSave7",
+        L"HotkeyFocusSave8",
         L"HotkeyZoomFreeze", L"HotkeyZoomFullscreen", L"HotkeyZoomLens",
         L"HotkeyZoomDocked", L"HotkeyZoomCycleView", L"HotkeyZoomInvert",
         L"HotkeyZoomOverview", L"HotkeyZoomIn", L"HotkeyZoomOut",
@@ -163,6 +233,22 @@ Preferences PreferencesStore::load() const {
             }
         }
         result.hotkey_scheme_version = kCurrentHotkeySchemeVersion;
+    }
+    // Missing new defaults must never displace an existing user's combination.
+    for (std::size_t index = static_cast<std::size_t>(HotkeyAction::FocusToggle);
+         index < static_cast<std::size_t>(HotkeyAction::ZoomFreeze); ++index) {
+        wchar_t saved[64]{};
+        GetPrivateProfileStringW(L"ElitePen", hotkey_keys[index], L"", saved,
+            static_cast<DWORD>(std::size(saved)), path_.c_str());
+        if (saved[0] || !result.hotkeys[index].virtual_key) continue;
+        for (std::size_t other = 0; other < kHotkeyActionCount; ++other) {
+            if (other >= static_cast<std::size_t>(HotkeyAction::FocusToggle) &&
+                other < static_cast<std::size_t>(HotkeyAction::ZoomFreeze)) continue;
+            if (result.hotkeys[index] == result.hotkeys[other]) {
+                result.hotkeys[index] = {};
+                break;
+            }
+        }
     }
     return result;
 }
@@ -204,6 +290,12 @@ bool PreferencesStore::save(const Preferences& preferences) const {
     content << "SelectedEmoji=" << preferences.selected_emoji << "\r\n";
     for (std::size_t slot = 0; slot < kEmojiFavoriteCount; ++slot)
         content << "EmojiFavorite" << slot + 1 << '=' << preferences.emoji_favorites[slot] << "\r\n";
+    write_focus_scene(content, "FocusLast", preferences.focus_last);
+    for (std::size_t slot = 0; slot < kFocusZoneCount; ++slot)
+        write_focus_scene(content, "FocusZone" + std::to_string(slot + 1), preferences.focus_zones[slot]);
+    content << "FocusDurationMs=" << preferences.focus_duration_ms << "\r\n";
+    content << "FocusIsolation=" << (preferences.focus_isolation ? 1 : 0) << "\r\n";
+    content << "FocusMasksVisible=" << (preferences.focus_masks_visible ? 1 : 0) << "\r\n";
     content << "ZoomFactor=" << preferences.zoom_factor << "\r\n";
     content << "ZoomView=" << preferences.zoom_view << "\r\n";
     content << "ZoomLensDiameter=" << preferences.zoom_lens_diameter << "\r\n";
@@ -227,6 +319,30 @@ bool PreferencesStore::save(const Preferences& preferences) const {
         "HotkeyEmojiPanel", "HotkeyEmojiFavorite1", "HotkeyEmojiFavorite2",
         "HotkeyEmojiFavorite3", "HotkeyEmojiFavorite4", "HotkeyEmojiFavorite5",
         "HotkeyEmojiFavorite6", "HotkeyEmojiFavorite7", "HotkeyEmojiFavorite8",
+        "HotkeyFocusToggle",
+        "HotkeyFocusSelect",
+        "HotkeyFocusMask",
+        "HotkeyFocusMasksToggle",
+        "HotkeyFocusIsolation",
+        "HotkeyFocusOverview",
+        "HotkeyFocusNext",
+        "HotkeyFocusPrevious",
+        "HotkeyFocusRecall1",
+        "HotkeyFocusRecall2",
+        "HotkeyFocusRecall3",
+        "HotkeyFocusRecall4",
+        "HotkeyFocusRecall5",
+        "HotkeyFocusRecall6",
+        "HotkeyFocusRecall7",
+        "HotkeyFocusRecall8",
+        "HotkeyFocusSave1",
+        "HotkeyFocusSave2",
+        "HotkeyFocusSave3",
+        "HotkeyFocusSave4",
+        "HotkeyFocusSave5",
+        "HotkeyFocusSave6",
+        "HotkeyFocusSave7",
+        "HotkeyFocusSave8",
         "HotkeyZoomFreeze", "HotkeyZoomFullscreen", "HotkeyZoomLens",
         "HotkeyZoomDocked", "HotkeyZoomCycleView", "HotkeyZoomInvert",
         "HotkeyZoomOverview", "HotkeyZoomIn", "HotkeyZoomOut",
