@@ -5432,7 +5432,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.17.0",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.17.1",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
@@ -5584,7 +5584,7 @@ bool SettingsWindow::initialize() {
                                     reinterpret_cast<HMENU>(4300),
                                     GetModuleHandleW(nullptr), nullptr);
     help_ = CreateWindowW(L"STATIC",
-        L"Ayuda de Elite Pen 2.17.0. Anotación, pizarra, captura y zoom para Windows. "
+        L"Ayuda de Elite Pen 2.17.1. Anotación, pizarra, captura y zoom para Windows. "
         L"Código abierto bajo Apache License 2.0. Desarrollado por Power Elite Studio.",
         WS_CHILD | SS_OWNERDRAW, 24, 119, 540, 400, window_,
         reinterpret_cast<HMENU>(4105), GetModuleHandleW(nullptr), nullptr);
@@ -5828,7 +5828,7 @@ void SettingsWindow::paint_help(HDC dc, RECT bounds) {
     SelectObject(dc, small_font_);
     SetTextColor(dc, theme_colorref(theme.text_muted));
     RECT version{bounds.left, bounds.top + 73, bounds.right, bounds.top + 94};
-    DrawTextW(dc, L"Version 2.17.0 · Windows 10 y 11 · x64", -1, &version,
+    DrawTextW(dc, L"Version 2.17.1 · Windows 10 y 11 · x64", -1, &version,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
 
     SelectObject(dc, body_font_);
@@ -8184,8 +8184,14 @@ LRESULT CALLBACK ZoomWindow::magnifier_subclass(
 ZoomWindow::~ZoomWindow() {
     stop_recordable_output();
     uninstall_click_hook();
-    if (magnifier_)
+    // The control's window procedure lives in Magnification.dll. Destroy it
+    // before uninitializing/unloading that runtime, not in WindowBase's later
+    // destructor (which would dispatch WM_DESTROY into an unloaded module).
+    if (magnifier_) {
         RemoveWindowSubclass(magnifier_, magnifier_subclass, 1);
+        DestroyWindow(magnifier_);
+        magnifier_ = nullptr;
+    }
     if (lens_cursor_) DestroyCursor(lens_cursor_);
     if (initialized_ && mag_uninitialize_) mag_uninitialize_();
     if (magnification_module_) FreeLibrary(magnification_module_);

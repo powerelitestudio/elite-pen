@@ -12,8 +12,12 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int) {
                                          ICC_STANDARD_CLASSES | ICC_WIN95_CLASSES};
     InitCommonControlsEx(&common_controls);
 
-    elite_pen::win::Application application;
-    const int result = application.run();
+    int result{};
+    {
+        // Windows and graphics resources must be released on the live COM apartment.
+        elite_pen::win::Application application;
+        result = application.run();
+    }
 
     if (SUCCEEDED(com_result)) CoUninitialize();
     return result;

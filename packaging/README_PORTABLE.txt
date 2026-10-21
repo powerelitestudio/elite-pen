@@ -1,4 +1,4 @@
-ELITE PEN 2.17.0 — EDICION PORTABLE
+ELITE PEN 2.17.1 — EDICION PORTABLE
 ================================
 
 Elite Pen es la herramienta de anotacion, pizarra y ampliacion de pantalla de
@@ -161,7 +161,7 @@ Configuracion.
 
 SOPORTE
 -------
-Producto de Power Elite Studio. Version 2.17.0.
+Producto de Power Elite Studio. Version 2.17.1.
 Sitio oficial: https://powerelite.studio/
 Codigo fuente: https://github.com/powerelitestudio/elite-pen
 

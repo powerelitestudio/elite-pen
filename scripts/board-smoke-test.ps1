@@ -87,7 +87,18 @@ function Red-Stroke([int]$Y){$null=Qa 20;$bitmap=[Drawing.Bitmap]::FromFile((Joi
 function Drag([IntPtr]$Window,[int]$X1,[int]$Y1,[int]$X2,[int]$Y2){$null=Send $Window 0x201 1 (($Y1 -shl 16) -bor ($X1 -band 0xffff));$null=Send $Window 0x200 1 (($Y2 -shl 16) -bor ($X2 -band 0xffff));$null=Send $Window 0x202 0 (($Y2 -shl 16) -bor ($X2 -band 0xffff));Wait-Frame}
 function Frame([string]$Name){$null=[BoardNative]::Foreground($script:board);$null=[BoardNative]::RedrawWindow($script:board,[IntPtr]::Zero,[IntPtr]::Zero,0x181);Wait-Frame;$r=[BoardNative+RECT]::new();$null=[BoardNative]::GetWindowRect($script:board,[ref]$r);$image=[Drawing.Bitmap]::new($r.Right-$r.Left,$r.Bottom-$r.Top);$g=[Drawing.Graphics]::FromImage($image);try{$g.CopyFromScreen($r.Left,$r.Top,0,0,$image.Size);$image.Save((Join-Path $captures $Name),[Drawing.Imaging.ImageFormat]::Png)}finally{$g.Dispose();$image.Dispose()}}
 function Start-App {$script:app=Start-Process -FilePath $exe -WindowStyle Hidden -PassThru;$script:palette=Find $script:app.Id 'ElitePen.Palette';$null=Send $script:palette 0x312 70;$script:board=Find $script:app.Id 'ElitePenBoardWindow';Wait-Frame}
-function Stop-App {if($script:app -and -not $script:app.HasExited){$null=[BoardNative]::PostMessage($script:palette,0x800C,[IntPtr]::Zero,[IntPtr]::Zero);if(-not $script:app.WaitForExit(10000)){$script:app.Kill();$script:app.WaitForExit(3000)|Out-Null}}}
+function Stop-App {
+ if(-not $script:app){return}
+ if(-not $script:app.HasExited){
+  $null=[BoardNative]::PostMessage($script:palette,0x800C,[IntPtr]::Zero,[IntPtr]::Zero)
+  if(-not $script:app.WaitForExit(10000)){
+   $script:app.Kill();$script:app.WaitForExit(3000)|Out-Null
+   throw 'Application shutdown timed out'
+  }
+ }
+ $script:app.Refresh()
+ if($script:app.ExitCode -ne 0){throw "Application shutdown failed: $($script:app.ExitCode)"}
+}
 $app=$null;$board=[IntPtr]::Zero;$palette=[IntPtr]::Zero;$device=[IntPtr]::Zero;$nativePenVerified=$false
 $clipboardBackup=[Windows.Forms.DataObject]::new()
 try {$oldClipboard=[Windows.Forms.Clipboard]::GetDataObject();if($oldClipboard){foreach($format in $oldClipboard.GetFormats($false)){try{$clipboardBackup.SetData($format,$false,$oldClipboard.GetData($format,$false))}catch{}}}}catch{}

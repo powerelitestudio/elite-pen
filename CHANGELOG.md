@@ -1,5 +1,14 @@
 # Historial de cambios
 
+## 2.17.1 — 2026-10-21
+
+- Corrige un fallo al salir: destruye el control nativo Magnifier antes de
+  desinicializar y descargar Magnification.dll. Antes, la destrucción posterior
+  de su ventana padre podía invocar código de una biblioteca ya descargada.
+- Libera la aplicación y los recursos gráficos antes de cerrar el apartamento COM.
+- La prueba de pizarra exige ahora código de salida cero. Añade una regresión de
+  ciclo de vida con inicio/salida, pizarra, zoom y enfoque en copias aisladas.
+
 ## 2.17.0 — 2026-10-21
 
 - Pizarra con panel flotante de iconos vectoriales, etiquetas, estados activos,

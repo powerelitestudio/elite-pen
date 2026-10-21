@@ -1,6 +1,6 @@
-# Elite Pen 2.17.0 — contrato de producto
+# Elite Pen 2.17.1 — contrato de producto
 
-Estado: versión 2.17.0 implementada como software de código abierto bajo Apache
+Estado: versión 2.17.1 implementada como software de código abierto bajo Apache
 License 2.0, con actualización instalada y distribución portable local.
 
 ## 0. Pizarra editable

@@ -61,6 +61,12 @@ decisiones en [WHITEBOARD_REFERENCE_STUDY.md](WHITEBOARD_REFERENCE_STUDY.md).
 
 ## Capas
 
+El cierre (2.17.1) destruye primero el HWND del control Magnifier y después
+ejecuta `MagUninitialize` y `FreeLibrary`: la clase nativa no puede recibir
+mensajes de destrucción después de descargar su procedimiento de ventana.
+La instancia `Application` también termina antes de `CoUninitialize`, manteniendo
+el apartamento COM durante la liberación de ventanas y recursos gráficos.
+
 - `core`: modelo vectorial, geometria, generación determinista de polígonos,
   hit testing, historial y preferencias. No depende de ventanas y se prueba de forma
   determinista.

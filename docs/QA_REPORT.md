@@ -1,4 +1,28 @@
-# Informe de calidad — Elite Pen 2.17.0
+# Informe de calidad — Elite Pen 2.17.1
+
+## Cierre del motor de zoom — 2.17.1
+
+Validación local: 2026-10-21.
+
+- La comprobación de procesos y eventos de las copias aisladas reveló una
+  excepción al salir en `Magnification.dll_unloaded`. Reproducción controlada
+  sobre 2.17.0: iniciar y cerrar sin dibujar devuelve **-1073740771**.
+  El harness anterior no verificaba ese código al finalizar; se corrige esa
+  omisión. Las 75 comprobaciones de interacción anteriores siguen siendo válidas,
+  pero no probaban por sí solas una salida sin excepción.
+- Con la corrección, **ocho ciclos de vida** (dos por modo: inicio/salida,
+  pizarra, zoom y enfoque activo) terminan con código **0**. El HWND de Magnifier
+  se destruye antes de descargar su biblioteca y COM sigue disponible hasta
+  liberar la aplicación.
+- Release sin errores/advertencias; núcleo, preferencias, rendimiento CPU y
+  399 comprobaciones de modelo/persistencia aprobados. Las 75 comprobaciones
+  de interfaz y las diez de lápiz compatible pasan otra vez sobre 2.17.1,
+  esta vez exigiendo también un cierre con código cero.
+- Instalación, build y portable comparten SHA-256
+  `848F05E77CFC2FA32B8DA5167648DF4B0DD371BA259A61364978A3457D3F6CF8`.
+  Respaldo completo verificado en `backups/update-2.17.1-20261021-111933`.
+  Preferencias conservadas con hash idéntico y sesión de pizarra reabierta.
+- Evidencia local: `artifacts/shutdown-2.17.1-20261021/`, ignorada por Git.
 
 ## Panel visual de pizarra — 2.17.0
 
