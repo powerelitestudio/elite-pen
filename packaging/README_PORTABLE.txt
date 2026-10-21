@@ -1,4 +1,4 @@
-ELITE PEN 2.15.0 — EDICION PORTABLE
+ELITE PEN 2.16.0 — EDICION PORTABLE
 ================================
 
 Elite Pen es la herramienta de anotacion, pizarra y ampliacion de pantalla de
@@ -42,6 +42,24 @@ CONTROLES PRINCIPALES
   otra pantalla. Recuerda tamano y posicion; si queda fijado y visible, reaparece
   al iniciar. La X lo oculta. Desactiva Fijado para cerrar al elegir una figura.
 
+PIZARRA EDITABLE (WHITEBOARD / BLACKBOARD)
+----------------------------------------
+- Herramientas > Pizarra editable abre una ventana con documento independiente.
+- Dibujo con presion de Windows Ink, figuras, texto y emojis. Fondo blanco o negro.
+- Mano, boton central o Espacio + arrastrar: mover; rueda: zoom; Encuadrar: ver todo.
+- Seleccion: clic o area; Shift: multiple; arrastrar: mover; esquina: escalar.
+  Clic derecho: duplicar, ordenar delante/detras, bloquear, desbloquear y eliminar.
+- Captura: elegir un area del escritorio e insertarla como imagen. Archivo tambien
+  inserta imagenes, pega con Ctrl+V y exporta la vista como PNG.
+- Ctrl+S guarda .epboard con imagenes incluidas; Ctrl+O abre; Ctrl+Shift+S guarda otra copia.
+- Recuperacion automatica en data\boards; cerrar/minimizar no descarta el trabajo.
+  Al volver a abrir se recupera documento y camara. Nueva/Abrir archivan la sesion anterior.
+- Opciones: presion, cuadricula y panel del 80 % al 300 %. Tab oculta/recupera panel;
+  F11: pantalla completa; Esc cancela, deselecciona o vuelve al escritorio.
+- Ctrl+Z / Ctrl+Y: historial; Ctrl+A: seleccionar todo; Ctrl+D: duplicar; Supr: eliminar.
+- Configuracion > Atajos > Pizarra editable: asigna una tecla del macropad.
+- Deco 01 V3: activar Windows Ink en el controlador XPPen y asignar el monitor de dibujo.
+- Formato propio .epboard; capturas estaticas en esta primera version.
 ZOOM DE ENFOQUE
 ---------------
 - Herramientas > Zoom de enfoque o Ctrl+Shift+M. La primera vez arrastra un area;
@@ -140,7 +158,7 @@ Configuracion.
 
 SOPORTE
 -------
-Producto de Power Elite Studio. Version 2.15.0.
+Producto de Power Elite Studio. Version 2.16.0.
 Sitio oficial: https://powerelite.studio/
 Codigo fuente: https://github.com/powerelitestudio/elite-pen
 

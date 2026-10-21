@@ -14,6 +14,10 @@ $testExecutable = Join-Path $repoRoot "build\$($Configuration.ToLowerInvariant()
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $performanceExecutable = Join-Path $repoRoot "build\$($Configuration.ToLowerInvariant())\elite-pen-performance-tests.exe"
+$boardExecutable = Join-Path $repoRoot "build\$($Configuration.ToLowerInvariant())\elite-pen-board-tests.exe"
+& $boardExecutable
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
 & $performanceExecutable
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

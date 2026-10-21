@@ -82,8 +82,10 @@ int main() {
     check(fresh.geometry_size == 1 && !fresh.geometry_pinned &&
           !fresh.geometry_visible && !fresh.has_geometry_position,
           "figures start at 100 percent as an optional transient panel");
-    check(kHotkeyActionCount == 79 && kGlobalHotkeyActionCount == 69,
-          "focus adds 24 global actions while ten classic zoom actions stay contextual");
+    check(kHotkeyActionCount == 80 && kGlobalHotkeyActionCount == 70,
+          "board adds one assignable action while ten classic zoom actions stay contextual");
+    check(fresh.hotkeys[static_cast<std::size_t>(HotkeyAction::BoardOpen)] == HotkeyBinding{},
+          "board shortcut starts unassigned to preserve existing combinations");
     check(fresh.emoji_size == 1 && !fresh.emoji_pinned && !fresh.emoji_visible &&
           !fresh.has_emoji_position && fresh.emoji_favorites == kDefaultEmojiFavorites,
           "emoji panel starts optional at 100 percent with eight useful defaults");
@@ -218,6 +220,8 @@ int main() {
     expected.hotkeys[static_cast<std::size_t>(HotkeyAction::ZoomIn)] = {};
     expected.hotkeys[static_cast<std::size_t>(HotkeyAction::ZoomEdit)] =
         {MOD_ALT, 'E'};
+    expected.hotkeys[static_cast<std::size_t>(HotkeyAction::BoardOpen)] =
+        {MOD_CONTROL | MOD_ALT, VK_F10};
     for (std::size_t offset = 0; offset < 4; ++offset) {
         expected.hotkeys[static_cast<std::size_t>(HotkeyAction::Cross) + offset] =
             {0, VK_F13 + static_cast<UINT>(offset)};

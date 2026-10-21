@@ -1,5 +1,44 @@
 # Arquitectura
 
+## Pizarra editable — 2.16.0
+
+`elite_pen/board.hpp` y `src/board.cpp` contienen cámara, objetos, historial y
+serialización independientes del escritorio. Las operaciones comparten objetos
+inmutables y recursos PNG; una operación nueva invalida el rehacer. El borrador
+agrupa el gesto en una sola operación. La presión acompaña a cada punto del trazo;
+no se simplifican puntos eliminando su alineación con las muestras de presión.
+
+`src/board_window.inl` añade una ventana Win32 normal y una ventana transitoria
+para seleccionar capturas. Comparte el dispositivo gráfico y el renderizador de
+figuras, texto y emojis, pero conserva herramientas, colores y documento propios.
+Oculta temporalmente las superficies del escritorio sin reescribir sus ajustes.
+Minimizar o cerrar la ventana vuelve a esas superficies y conserva la sesión.
+
+La cámara transforma coordenadas de mundo a viewport. Una caché GPU del tamaño
+del viewport evita reservar un lienzo gigantesco; incorpora solo el último objeto
+en añadidos consecutivos y vuelve a dibujar objetos visibles al navegar. Las
+imágenes conservan su PNG original y usan previsualizaciones GPU de hasta 4.096 px
+por lado, con presupuesto de caché de 128 MiB. WM_POINTER lee el historial del
+lápiz en orden temporal y normaliza presión a 0–1. El ratón pasa por el mismo
+recorrido con presión constante.
+
+`.epboard` v1 contiene cabecera, versión, tamaño y checksum FNV-1a de integridad
+(no criptográfico), cámara, ajustes, recursos y objetos. El lector valida límites,
+IDs únicos, geometría finita, presión, tipos y longitudes antes de reemplazar el
+documento. WIC valida dimensiones reales y decodificación de las imágenes.
+La escritura usa un archivo temporal, FlushFileBuffers y reemplazo atómico;
+solo una versión anterior válida sustituye `.previous`. Un guardado fallido deja
+el original intacto. Los archivos no ejecutan acciones ni abren rutas embebidas.
+
+La recuperación usa una instantánea compartida escrita en segundo plano tras
+una pausa de dibujo o cada quince segundos de actividad continua. Solo incluye
+objetos incorporados al documento; la vista previa del gesto activo sigue siendo
+transitoria. Cerrar/minimizar espera y guarda la última revisión; Nueva y
+Abrir archivan primero el documento anterior. Las carpetas proceden de la ruta
+real o portable de preferencias. No se abre automáticamente una pizarra privada
+al arrancar. Una nueva acción global nombrada `HotkeyBoardOpen` llega sin asignar;
+las claves anteriores siguen estables y el zoom conserva diez acciones contextuales.
+
 ## Capas
 
 - `core`: modelo vectorial, geometria, generación determinista de polígonos,

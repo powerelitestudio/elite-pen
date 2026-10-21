@@ -14,6 +14,8 @@ if (-not $SkipBuild) {
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     & (Join-Path $releaseDirectory 'elite-pen-tests.exe')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+    & (Join-Path $releaseDirectory 'elite-pen-board-tests.exe')
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     & (Join-Path $releaseDirectory 'elite-pen-performance-tests.exe')
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
     & (Join-Path $releaseDirectory 'preferences-qa\elite-pen-preferences-tests.exe')

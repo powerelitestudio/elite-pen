@@ -104,6 +104,7 @@ enum class HotkeyAction : std::uint8_t {
     FocusSave6,
     FocusSave7,
     FocusSave8,
+    BoardOpen,
     ZoomFreeze,
     ZoomFullscreen,
     ZoomLens,
@@ -180,6 +181,7 @@ inline constexpr std::array<HotkeyBinding, kHotkeyActionCount> kDefaultHotkeys{{
     {MOD_CONTROL | MOD_ALT | MOD_SHIFT, VK_F6},
     {MOD_CONTROL | MOD_ALT | MOD_SHIFT, VK_F7},
     {MOD_CONTROL | MOD_ALT | MOD_SHIFT, VK_F8},
+    {0, 0}, // Editable whiteboard; assign freely for a macropad.
     {0, 'P'},
     {0, 'F'},
     {0, 'L'},
@@ -213,6 +215,7 @@ inline constexpr std::array<HotkeyBinding, kHotkeyActionCount> kLegacyDefaultHot
     {0, 0}, {0, 0}, {0, 0}, {0, 0},
     {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0},
     {0, 0}, {0, 0}, {0, 0}, {0, 0},
+    {0, 0},
     {0, 0},
     {0, 0},
     {0, 0},

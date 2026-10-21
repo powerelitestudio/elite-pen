@@ -52,6 +52,14 @@ Invoke-Compiler ($common + @(
 $performanceExecutable = Join-Path $outputDirectory 'elite-pen-performance-tests.exe'
 Invoke-Compiler ($common + @(
     (Join-Path $repoRoot 'src\core.cpp'),
+    (Join-Path $repoRoot 'src\board.cpp'),
+    (Join-Path $repoRoot 'tests\board_tests.cpp'),
+    '-o', (Join-Path $outputDirectory 'elite-pen-board-tests.exe'),
+    '-static', '-pthread'
+))
+
+Invoke-Compiler ($common + @(
+    (Join-Path $repoRoot 'src\core.cpp'),
     (Join-Path $repoRoot 'tests\performance_tests.cpp'),
     '-o', $performanceExecutable,
     '-static', '-pthread'

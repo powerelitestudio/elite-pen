@@ -1,8 +1,8 @@
 # Publicación abierta de Elite Pen
 
-Desarrollo 2.15.0 (17 de octubre de 2026): añade Zoom de enfoque con transiciones,
-encuadre fijo en vivo, ocho zonas, máscaras y atajos de macropad. Conserva emojis,
-favoritos y paneles independientes ampliables hasta el 300 %.
+Desarrollo 2.16.0 (21 de octubre de 2026): añade Pizarra editable con presión,
+capturas, selección, guardado y recuperación local. Conserva Zoom de enfoque,
+emojis, favoritos y paneles independientes ampliables hasta el 300 %.
 La publicación histórica descrita a continuación corresponde a 2.10.3; actualizar
 el código y generar paquetes locales no cambia por sí solo esa Release pública.
 

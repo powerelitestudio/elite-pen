@@ -111,7 +111,8 @@ enum class Tool : std::uint8_t {
     Warning,
     Prohibition,
     Emoji,
-    Focus
+    Focus,
+    Board
 };
 
 [[nodiscard]] const wchar_t* tool_name(Tool tool) noexcept;

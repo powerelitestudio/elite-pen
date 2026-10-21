@@ -1,7 +1,29 @@
-# Elite Pen 2.13.0 — contrato de producto
+# Elite Pen 2.16.0 — contrato de producto
 
-Estado: versión 2.13.0 implementada como software de código abierto bajo Apache
-License 2.0 y preparada para distribución pública portable e instalada.
+Estado: versión 2.16.0 implementada como software de código abierto bajo Apache
+License 2.0, con actualización instalada y distribución portable local.
+
+## 0. Pizarra editable
+
+Herramientas > Pizarra editable abre una ventana Whiteboard / Blackboard propia.
+El documento del escritorio y los fondos rápidos existentes permanecen separados.
+Mientras la pizarra está visible, las superficies del escritorio se ocultan
+temporalmente; minimizarla o cerrarla recupera esos controles sin descartar el documento.
+
+- Lienzo navegable sin tamaño fijo de página, zoom al cursor y encuadre de contenido.
+- Lápiz con muestras de presión Windows Ink, resaltador, figuras, símbolos, texto y emojis.
+- Selección individual, múltiple y por área; movimiento, escalado, orden y bloqueo.
+- Imágenes, capturas estáticas, pegado y PNG de la vista actual.
+- Guardado editable `.epboard` con recursos incluidos, checksum y copia anterior.
+- Recuperación tras pausas y puntos periódicos durante el dibujo continuo; al
+  reabrir la pizarra vuelve la sesión con su cámara. Nueva/Abrir archiva primero
+  el documento anterior. La pizarra no aparece automáticamente al iniciar Elite Pen.
+- Panel independiente del 80 % al 300 %, ocultable con Tab, y acción global
+  Pizarra editable configurable para macropad. Se conservan los atajos anteriores.
+
+Esta primera versión no enlaza automáticamente tinta e imagen, no abre `.wboard`
+y no integra ventanas de aplicaciones en vivo. Imagen y trazos pueden moverse
+juntos mediante selección múltiple. Las rutas y controles se describen en README.
 
 ## 1. Identidad e interaccion principal
 

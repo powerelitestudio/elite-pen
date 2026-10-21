@@ -1,5 +1,25 @@
 # Historial de cambios
 
+## 2.16.0 — 2026-10-21
+
+- Herramientas > Pizarra editable abre Whiteboard / Blackboard en una ventana
+  propia, con documento, cámara, historial y herramientas independientes.
+- Lienzo amplio navegable mediante mano, botón central o Espacio; zoom alrededor
+  del cursor, encuadre del contenido, cuadrícula y pantalla completa.
+- Entrada Windows Ink con presión por punto, historial de muestras y borrador
+  del lápiz. El ratón conserva un trazo de ancho constante.
+- Selección individual y por área, múltiple con Shift, mover, escalar, duplicar,
+  bloquear/desbloquear y ordenar delante/detrás. Tinta, figuras, texto y emojis.
+- Capturas de región, imágenes pegadas, insertadas o arrastradas y exportación
+  PNG del encuadre. Imágenes incluidas en el documento editable `.epboard`.
+- Recuperación automática, guardado atómico con copia anterior y comprobación
+  de integridad; archivo de la sesión antes de Nueva/Abrir. Cerrar o minimizar
+  conserva el trabajo; reabrir recupera documento, cámara y ajustes del panel.
+- Panel del 80 % al 300 %, siempre disponible y ocultable con Tab. Nueva acción
+  Pizarra editable configurable para macropad; conserva todos los atajos previos.
+- Pruebas del modelo, persistencia y corrupción y pruebas nativas de interfaz,
+  presión, imágenes, captura y recuperación en una copia portátil aislada.
+
 ## 2.15.0 — 2026-10-17
 
 - Zoom de enfoque independiente del zoom clásico: selección rectangular o clic

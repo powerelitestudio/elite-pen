@@ -1,6 +1,7 @@
 #include "application.hpp"
 
 #include "elite_pen/core.hpp"
+#include "elite_pen/board.hpp"
 #include "control_layout.hpp"
 #include "graphics.hpp"
 #include "history_shortcuts.hpp"
@@ -30,8 +31,11 @@
 #include <string>
 #include <sstream>
 #include <unordered_map>
+#include <unordered_set>
 #include <utility>
 #include <vector>
+#include <future>
+#include <fstream>
 
 namespace elite_pen::win {
 
@@ -642,6 +646,7 @@ constexpr std::array<HotkeyInfo, kHotkeyActionCount> kHotkeyInfo{{
     {L"Enfoque: guardar 6", L"Guarda el encuadre y sus máscaras"},
     {L"Enfoque: guardar 7", L"Guarda el encuadre y sus máscaras"},
     {L"Enfoque: guardar 8", L"Guarda el encuadre y sus máscaras"},
+    {L"Pizarra editable", L"Abre Whiteboard / Blackboard con guardado local"},
     {L"Zoom: pausar", L"Congela o reanuda para anotar"},
     {L"Zoom: completa", L"Cambia a pantalla completa"},
     {L"Zoom: lente", L"Cambia a lente movil"},
@@ -657,6 +662,7 @@ constexpr std::array<HotkeyInfo, kHotkeyActionCount> kHotkeyInfo{{
 constexpr std::size_t kVisibleShortcutRows = 6;
 
 class Controller;
+class BoardWindow;
 
 class DocumentRenderCache {
 public:
@@ -1429,6 +1435,12 @@ public:
     [[nodiscard]] bool zoom_frozen() const noexcept;
     void restack_zoom();
     void populate_stress_document(std::size_t count);
+    void open_board();
+    void sync_board_visibility();
+    [[nodiscard]] bool board_active() const noexcept;
+    [[nodiscard]] std::filesystem::path board_directory() const {
+        return std::filesystem::path(preferences_store_.path()).parent_path() / L"boards";
+    }
 
 private:
     static Controller* history_hook_owner_;
@@ -1452,6 +1464,8 @@ private:
     std::unique_ptr<TextInputWindow> text_input_;
     std::unique_ptr<SettingsWindow> settings_;
     std::unique_ptr<ZoomWindow> zoom_;
+    std::unique_ptr<BoardWindow> board_;
+    std::vector<HWND> board_hidden_windows_;
     HHOOK history_hook_{};
     HistoryShortcutRouter history_keys_;
     bool qa_history_keys_{};
@@ -1616,11 +1630,11 @@ constexpr std::array<Color, 42> kExtendedColors{{
     {255, 128, 161, 255}, {92, 225, 230, 255}, {137, 245, 173, 255}
 }};
 
-constexpr std::array<Tool, 19> kTools{{
+constexpr std::array<Tool, 20> kTools{{
     Tool::Interact, Tool::Pen, Tool::Highlighter, Tool::Eraser, Tool::Line,
     Tool::Rectangle, Tool::Ellipse, Tool::Arrow, Tool::CurvedArrow, Tool::Text,
     Tool::Screenshot, Tool::Zoom, Tool::Pentagon, Tool::Hexagon,
-    Tool::Cross, Tool::Checkmark, Tool::Warning, Tool::Prohibition, Tool::Focus
+    Tool::Cross, Tool::Checkmark, Tool::Warning, Tool::Prohibition, Tool::Focus, Tool::Board
 }};
 
 constexpr std::array<Tool, 11> kGeometryTools{{
@@ -2501,6 +2515,8 @@ void OverlayWindow::refresh_pencil_cursor() {
 }
 
 void OverlayWindow::update_interaction() {
+    if (controller_.board_active()) { ShowWindow(window_, SW_HIDE); return; }
+    if (!IsWindowVisible(window_)) ShowWindow(window_, SW_SHOWNOACTIVATE);
     LONG_PTR style = GetWindowLongPtrW(window_, GWL_EXSTYLE);
     const bool transparent = controller_.state().tool == Tool::Interact ||
                              controller_.zoom_active();
@@ -4820,6 +4836,14 @@ void ToolWindow::render() {
                 context->DrawLine(D2D1::Point2F(icon_x - 1, icon_y - 1),
                                   D2D1::Point2F(icon_x + 6, icon_y + 5), text.Get(), 1.5F);
                 break;
+            case Tool::Board:
+                context->DrawRoundedRectangle(D2D1::RoundedRect(
+                    D2D1::RectF(icon_x - 10, icon_y - 8, icon_x + 10, icon_y + 6), 2, 2), text.Get(), 1.8F);
+                context->DrawLine(D2D1::Point2F(icon_x - 5, icon_y + 11),
+                                  D2D1::Point2F(icon_x + 5, icon_y + 11), text.Get(), 1.8F);
+                context->DrawLine(D2D1::Point2F(icon_x, icon_y + 6),
+                                  D2D1::Point2F(icon_x, icon_y + 11), text.Get(), 1.8F);
+                break;
             case Tool::Focus:
             case Tool::Zoom:
                 context->DrawEllipse(D2D1::Ellipse(D2D1::Point2F(icon_x - 2, icon_y - 2),
@@ -5408,7 +5432,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.15.0",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.16.0",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
@@ -5560,7 +5584,7 @@ bool SettingsWindow::initialize() {
                                     reinterpret_cast<HMENU>(4300),
                                     GetModuleHandleW(nullptr), nullptr);
     help_ = CreateWindowW(L"STATIC",
-        L"Ayuda de Elite Pen 2.15.0. Anotación, pizarra, captura y zoom para Windows. "
+        L"Ayuda de Elite Pen 2.16.0. Anotación, pizarra, captura y zoom para Windows. "
         L"Código abierto bajo Apache License 2.0. Desarrollado por Power Elite Studio.",
         WS_CHILD | SS_OWNERDRAW, 24, 119, 540, 400, window_,
         reinterpret_cast<HMENU>(4105), GetModuleHandleW(nullptr), nullptr);
@@ -5804,7 +5828,7 @@ void SettingsWindow::paint_help(HDC dc, RECT bounds) {
     SelectObject(dc, small_font_);
     SetTextColor(dc, theme_colorref(theme.text_muted));
     RECT version{bounds.left, bounds.top + 73, bounds.right, bounds.top + 94};
-    DrawTextW(dc, L"Version 2.15.0 · Windows 10 y 11 · x64", -1, &version,
+    DrawTextW(dc, L"Version 2.16.0 · Windows 10 y 11 · x64", -1, &version,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
 
     SelectObject(dc, body_font_);
@@ -7852,6 +7876,7 @@ void ZoomEditToolbarWindow::render() {
     if (!surface_.end_draw(error)) controller_.report_runtime_error(error);
 }
 
+#include "board_window.inl"
 #include "focus_zoom.inl"
 
 bool ZoomWindow::load_magnification() {
@@ -9236,6 +9261,7 @@ void Controller::shutdown() {
     preferences_.color = state_.color;
     preferences_store_.save(preferences_);
     if (zoom_) zoom_->hide_zoom();
+    board_.reset();
     settings_.reset();
     text_input_.reset();
     tools_.reset();
@@ -9276,6 +9302,7 @@ void Controller::invalidate_all() {
 }
 
 void Controller::restack_palette() {
+    if (board_active()) return;
     if (!palette_) return;
     restack_panels();
     SetWindowPos(palette_->hwnd(), HWND_TOPMOST, 0, 0, 0, 0,
@@ -9283,6 +9310,7 @@ void Controller::restack_palette() {
 }
 
 void Controller::restack_panels() {
+    if (board_active()) return;
     if (emojis_ && emojis_->visible())
         SetWindowPos(emojis_->hwnd(), HWND_TOPMOST, 0, 0, 0, 0,
                      SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
@@ -9324,6 +9352,7 @@ bool Controller::route_palette_command(PointF screen_point) {
 }
 
 void Controller::set_tool(Tool tool) {
+    if (tool == Tool::Board) { open_board(); return; }
     if (tool == Tool::Focus) { execute_hotkey(HotkeyAction::FocusToggle); return; }
     if (text_input_ && text_input_->active() && tool != Tool::Text) text_input_->commit();
     if (tool == Tool::Zoom) {
@@ -9512,7 +9541,10 @@ void Controller::execute_hotkey(HotkeyAction action) {
     const auto index = static_cast<std::size_t>(action);
     if (settings_ && index < preferences_.hotkeys.size() &&
         settings_->capture_registered_hotkey(preferences_.hotkeys[index])) return;
-    if (action >= HotkeyAction::FocusToggle && action < HotkeyAction::ZoomFreeze) {
+    if (action == HotkeyAction::BoardOpen) { open_board(); return; }
+    if (board_active() && board_->execute(action)) return;
+    if (board_active()) board_->hide();
+    if (action >= HotkeyAction::FocusToggle && action < HotkeyAction::BoardOpen) {
         if (zoom_) zoom_->execute_focus(action);
         else report_runtime_error(L"La ampliación nativa de Windows no está disponible.");
         return;
@@ -9910,6 +9942,10 @@ void Controller::report_runtime_error(const std::wstring& message) {
 }
 
 void Controller::request_exit() {
+    if (board_) {
+        board_->hide();
+        if (board_active()) return;
+    }
     if (palette_) PostMessageW(palette_->hwnd(), kExitMessage, 0, 0);
 }
 

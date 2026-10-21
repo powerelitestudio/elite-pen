@@ -10,10 +10,9 @@ pantalla para Windows, desarrollada por [Power Elite Studio](https://powerelite.
 Permite explicar sobre cualquier aplicación sin convertir la presentación en una
 sucesión de ventanas y menús.
 
-> **Estado:** acceso anticipado. La versión 2.15.0 incorpora Zoom de enfoque:
-> encuadre fijo en vivo, transiciones suaves, ocho zonas guardadas y áreas ocultas.
-> Sus atajos configurables permiten controlarlo desde un macropad. Conserva los
-> emojis, favoritos y paneles ampliables hasta el 300 % de las versiones anteriores.
+> **Estado:** acceso anticipado. La versión 2.16.0 incorpora una pizarra editable
+> Whiteboard / Blackboard con lienzo navegable, presión del lápiz, imágenes,
+> selección y recuperación local. Conserva Zoom de enfoque, emojis y macropad.
 
 Ofrece dos presentaciones del mismo motor: `Paleta`, inspirada en una paleta de
 pintor, y `Lineal`, una barra vertical ultracompacta. `Paleta` es el modo
@@ -26,6 +25,59 @@ usa distancias al cuadrado y el simplificador de trazos es iterativo. El zoom co
 la geometría cuando el encuadre no cambia. El benchmark automatizado
 valida 5.000 trazos, cuadros en caché, dibujo activo, paneo del Zoom editable,
 memoria y rutas de compatibilidad.
+
+## Pizarra editable — Whiteboard / Blackboard
+
+Abre **Herramientas > Pizarra editable**. Es una ventana independiente que puedes
+mover a otro monitor, maximizar o minimizar. Tus anotaciones del escritorio y los
+fondos rápidos blanco/negro se conservan. **Blackboard / Whiteboard** cambia el fondo
+del documento; **Opciones** activa cuadrícula y presión y amplía el panel del 80 %
+al 300 %. El panel permanece disponible y recuerda su escala; **Tab** lo oculta o
+recupera. Si ocupa más de media ventana, desplaza el panel con la rueda.
+
+- Dibuja con lápiz o resaltador, figuras, símbolos, texto y emojis. El lápiz de
+  Windows Ink conserva la presión en cada punto; el ratón usa grosor constante.
+- **Mano**, botón central o **Espacio + arrastrar** desplazan el lienzo. La rueda
+  acerca/aleja alrededor del cursor entre 3,125 % y 3.200 %. **Encuadrar** muestra
+  todo el contenido. El lienzo no tiene un tamaño fijo de página.
+- **Selección** permite clic, área y selección múltiple con Shift. Arrastra para
+  mover o usa su esquina inferior derecha para escalar. Clic derecho permite
+  duplicar, traer al frente, enviar al fondo, bloquear, desbloquear o eliminar.
+- **Captura** permite elegir una región del escritorio e insertarla como imagen.
+  **Archivo** también permite insertar PNG/JPEG/BMP/GIF y pegar una imagen con Ctrl+V.
+  Puedes dibujar encima y mover imagen y tinta con una selección conjunta.
+- **Ctrl+S** guarda un `.epboard` editable con las imágenes incluidas; **Ctrl+O**
+  lo abre y **Ctrl+Shift+S** guarda otra copia. **Archivo > Exportar vista como PNG**
+  exporta el encuadre actual sin herramientas ni marcas de selección.
+- La recuperación automática guarda los cambios tras una breve pausa y crea
+  puntos de recuperación periódicos durante el dibujo continuo. Cerrar la
+  pizarra vuelve al escritorio; minimizar conserva la sesión. Al abrirla de nuevo,
+  incluso tras reiniciar Elite Pen, se recupera el último documento y su vista.
+  No se muestra automáticamente al iniciar la aplicación.
+
+**Ctrl+Z / Ctrl+Y** deshacen y rehacen; **Ctrl+A** selecciona todo, **Ctrl+D** duplica,
+**Supr** elimina, **F11** alterna pantalla completa y **Esc** cancela, deselecciona
+o vuelve al escritorio. El texto se confirma con **Ctrl+Enter**.
+
+En **Configuración > Atajos**, asigna **Pizarra editable** a una tecla del macropad.
+Llega sin asignar para respetar tus combinaciones. Las acciones globales de lápiz,
+figuras, colores, deshacer y favoritos actúan sobre la pizarra mientras está abierta.
+Los ajustes del escritorio se mantienen independientes.
+
+Los archivos de recuperación se guardan en
+`%LOCALAPPDATA%\Power Elite Studio\Elite Pen\boards` o `data\boards` en portable.
+**Archivo > Recuperaciones locales** abre esa carpeta. Antes de Nueva/Abrir se
+archiva la sesión anterior; cada guardado mantiene una copia `.previous`. Un error
+de escritura no reemplaza el archivo original y se muestra en la interfaz.
+Las recuperaciones contienen tu trabajo: puedes administrarlas desde esa carpeta.
+
+Para la Deco 01 V3, activa **Windows Ink** en el controlador XPPen y asigna el área
+de trabajo al monitor donde dibujas, conservando proporciones. Consulta el
+[manual oficial de XPPen](https://www.xp-pen.com/user-manual/deco-01-v3.html).
+Esta primera versión usa capturas estáticas y su formato propio `.epboard`;
+no importa archivos `.wboard` ni integra ventanas de aplicaciones en vivo.
+El [estudio de la referencia SQLBI](docs/WHITEBOARD_REFERENCE_STUDY.md) explica
+qué se examinó y cómo se trasladó a una implementación propia.
 
 ## Zoom de enfoque
 
@@ -84,7 +136,7 @@ Los paquetes oficiales listos para usar se publican en
 [GitHub Releases](https://github.com/powerelitestudio/elite-pen/releases):
 
 La distribución publicada que se enlaza a continuación es 2.10.3. Los símbolos y
-tamaños nuevos, emojis y Zoom de enfoque están en el código 2.15.0 y pueden compilarse con los scripts del repositorio.
+tamaños nuevos, emojis, Zoom de enfoque y pizarra editable están en el código 2.16.0 y pueden compilarse con los scripts del repositorio.
 
 - [Descargar portable 2.10.3](https://github.com/powerelitestudio/elite-pen/releases/download/v2.10.3/Elite.Pen.Portable.2.10.3.zip):
   descomprime la carpeta y ejecuta `Elite Pen.exe`.

@@ -1,4 +1,46 @@
-# Informe de calidad — Elite Pen 2.15.0
+# Informe de calidad — Elite Pen 2.16.0
+
+## Pizarra editable — 2.16.0
+
+Validación local: 2026-10-21.
+
+- Compilación Release sin errores ni advertencias. Núcleo, preferencias,
+  rendimiento CPU y **399 comprobaciones de pizarra** aprobados en Debug y Release.
+  Las pruebas de persistencia se ejecutaron con los permisos reales de Windows;
+  la primera ejecución restringida por el entorno no podía escribir en Temp.
+- Cámara con zoom anclado, coordenadas negativas, encuadre y límites; presión,
+  selección, transformaciones, bloqueo, duplicación, orden e historial. El borrador
+  agrupa su gesto en un solo deshacer. Los recursos se comparten en las copias.
+- Archivos: ida/vuelta determinista, texto Unicode, imágenes compartidas,
+  presión, cámara, escala y ajustes; archivos truncados, 300 mutaciones,
+  versión desconocida, checksum, datos sobrantes, errores de escritura y fallback
+  a la copia anterior válida. Un archivo inválido no reemplaza el documento abierto.
+- **44 comprobaciones nativas de interfaz** en una copia portátil aislada:
+  atajo real configurable de macropad, Ctrl+Z/Ctrl+Y, lápiz, selección, movimiento,
+  escalado, imagen pegada, captura, PNG, panel al 300 %, píxeles de fondo negro,
+  minimizar, cerrar/reabrir, guardado explícito y recuperación automática tras
+  una terminación forzada. Nueva y Abrir preservan la sesión anterior.
+- Windows recibió un trazo sintético con 1 DOWN, 10 UPDATE y 1 UP, que produjo
+  11 muestras guardadas con presión variable (64–864 sobre 1024). Una exportación
+  independiente verifica que la zona con más presión es visiblemente más gruesa.
+  La inyección usa el origen del escritorio virtual para varios monitores.
+  Esto valida Windows Ink; queda pendiente la comprobación manual con la
+  **XP-Pen física y su controlador**, que no se simula como si estuviera realizada.
+- Smoke completo de interfaz anterior aprobado: escritorio, fondos rápidos,
+  texto, capturas, zoom clásico/editable, símbolos, emojis, favoritos, atajos y
+  paneles fijados. Se cerró primero la app instalada, cuyos tres documentos de
+  anotaciones estaban vacíos, para liberar los atajos globales durante la prueba.
+- Rendimiento gráfico existente, 5.000 trazos / 240 cuadros: población 287,368 ms,
+  primer render 70,622 ms, cuadro en caché 1,268 ms y activo 1,763 ms. Zoom editable:
+  primer Lápiz 112,163 ms, Mano 0,163 ms y retorno caliente 20,330 ms. Memoria
+  308,02 MiB. Todos los presupuestos pasan.
+- Instalación 2.16.0 respaldada y sustituida con hashes verificados. Build,
+  portable e instalación comparten SHA-256
+  `E6B6B977DA84D271ACAE235C7FACBED43658C7859AB7342D4465016C1B55F2DE`.
+  `settings.ini` conserva exactamente su SHA-256 anterior a la sustitución.
+- Estudio de referencia documentado con REA y fuentes oficiales en
+  [WHITEBOARD_REFERENCE_STUDY.md](WHITEBOARD_REFERENCE_STUDY.md). No se declara
+  equivalencia funcional completa con SQLBI ni compatibilidad con sus archivos.
 
 ## Zoom de enfoque — 2.15.0
 
