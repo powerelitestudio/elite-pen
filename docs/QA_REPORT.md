@@ -1,4 +1,30 @@
-# Informe de calidad — Elite Pen 2.17.1
+# Informe de calidad — Elite Pen 2.17.2
+
+## Pantalla completa de pizarra — 2.17.2
+
+Validación local: 2026-10-21.
+
+- Release sin errores ni advertencias; núcleo, preferencias y 399 comprobaciones
+  de modelo/persistencia aprobados.
+- **86 comprobaciones de interfaz** en una copia portable aislada, sin registrar
+  atajos globales mientras estaba abierta la app instalada. F11 usa entrada real
+  de teclado; el botón de pantalla completa se acciona con clics reales.
+- En pantalla completa, cabecera de altura cero, viewport con toda la altura
+  del cliente, ausencia de controles superiores y presencia de los botones de
+  salida/ajustes en la caja. Los píxeles superior e inferior corresponden al
+  lienzo negro. Se inspeccionó la captura real de pantalla.
+- Dibujo de compatibilidad de lápiz sin desplazamiento de coordenadas,
+  tinta sobre la antigua zona de cabecera, color rojo verificado en PNG e
+  historial de deshacer. El panel al 300 % conserva su botón de salida.
+- F11 y el botón recuperan el tamaño/posición anteriores; Esc sale de pantalla
+  completa sin cerrar la pizarra. Pasan también las pruebas existentes de presión
+  Windows Ink, selección, imágenes, guardado y recuperación, con salida normal.
+- Build, portable e instalación 2.17.2 comparten SHA-256
+  `477C4606F49C33C004E7652C681D305C508FF0871FF186A5EDDAEE131C71A8E5`.
+  Respaldo verificado en `backups/update-2.17.2-20261021-113807`; preferencias
+  conservadas con hash idéntico y sesión reabierta en pantalla completa.
+- Evidencia local: `artifacts/fullscreen-2.17.2-20261021/` y
+  `artifacts/qa/board-captures/whiteboard-fullscreen.png`, ignoradas por Git.
 
 ## Cierre del motor de zoom — 2.17.1
 

@@ -1,6 +1,6 @@
-# Elite Pen 2.17.1 — contrato de producto
+# Elite Pen 2.17.2 — contrato de producto
 
-Estado: versión 2.17.1 implementada como software de código abierto bajo Apache
+Estado: versión 2.17.2 implementada como software de código abierto bajo Apache
 License 2.0, con actualización instalada y distribución portable local.
 
 ## 0. Pizarra editable
@@ -11,6 +11,8 @@ Mientras la pizarra está visible, las superficies del escritorio se ocultan
 temporalmente; minimizarla o cerrarla recupera esos controles sin descartar el documento.
 
 - Lienzo navegable sin tamaño fijo de página, zoom al cursor y encuadre de contenido.
+- F11: pantalla completa con solo lienzo y caja de herramientas. F11, Esc o el
+  botón del panel recuperan la ventana sin cerrar el documento.
 - Lápiz con muestras de presión Windows Ink, resaltador, figuras, símbolos, texto y emojis.
 - Selección individual, múltiple y por área; movimiento, escalado, orden y bloqueo.
 - Panel flotante con iconos vectoriales, colores y muestras de grosor; pin,

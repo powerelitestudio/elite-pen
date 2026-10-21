@@ -1,4 +1,4 @@
-ELITE PEN 2.17.1 — EDICION PORTABLE
+ELITE PEN 2.17.2 — EDICION PORTABLE
 ================================
 
 Elite Pen es la herramienta de anotacion, pizarra y ampliacion de pantalla de
@@ -48,6 +48,8 @@ PIZARRA EDITABLE (WHITEBOARD / BLACKBOARD)
 - Panel flotante con iconos, colores y muestras de grosor. Opciones: escala 80-300 %.
   Chincheta: fijar/desbloquear; arrastra la cabecera para mover. Flecha: contraer.
   Rueda sobre el panel: recorrer controles grandes. Tab: ocultar/mostrar.
+- F11: pantalla completa con solo lienzo y caja de herramientas. F11 o Esc: volver
+  a la ventana sin cerrar la pizarra. La caja incluye botones de pantalla y ajustes.
 - Dibujo con presion de Windows Ink, figuras, texto y emojis. Fondo blanco o negro.
 - Mano, boton central o Espacio + arrastrar: mover; rueda: zoom; Encuadrar: ver todo.
 - Seleccion: clic o area; Shift: multiple; arrastrar: mover; esquina: escalar.
@@ -58,7 +60,7 @@ PIZARRA EDITABLE (WHITEBOARD / BLACKBOARD)
 - Recuperacion automatica en data\boards; cerrar/minimizar no descarta el trabajo.
   Al volver a abrir se recupera documento y camara. Nueva/Abrir archivan la sesion anterior.
 - Opciones: presion, cuadricula y panel del 80 % al 300 %. Tab oculta/recupera panel;
-  F11: pantalla completa; Esc cancela, deselecciona o vuelve al escritorio.
+  F11: pantalla completa; Esc sale de ella o, en ventana, cancela/deselecciona/vuelve al escritorio.
 - Ctrl+Z / Ctrl+Y: historial; Ctrl+A: seleccionar todo; Ctrl+D: duplicar; Supr: eliminar.
 - Configuracion > Atajos > Pizarra editable: asigna una tecla del macropad.
 - Deco 01 V3: activar Windows Ink en el controlador XPPen y asignar el monitor de dibujo.
@@ -161,7 +163,7 @@ Configuracion.
 
 SOPORTE
 -------
-Producto de Power Elite Studio. Version 2.17.1.
+Producto de Power Elite Studio. Version 2.17.2.
 Sitio oficial: https://powerelite.studio/
 Codigo fuente: https://github.com/powerelitestudio/elite-pen
 

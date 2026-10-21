@@ -1,5 +1,15 @@
 # Historial de cambios
 
+## 2.17.2 — 2026-10-21
+
+- F11 muestra únicamente el lienzo y la caja de herramientas: oculta título,
+  barra superior y estado inferior, dando toda la pantalla al documento.
+- Botón de pantalla completa en la cabecera de la caja. F11 o Esc recuperan
+  la ventana; Esc conserva la pizarra abierta. Opciones y escala del panel
+  siguen accesibles desde su propia cabecera.
+- Conserva el panel hasta el 300 %, el dibujo con lápiz, los atajos y el historial
+  en pantalla completa. Pruebas de píxeles, entrada, dimensiones y restauración.
+
 ## 2.17.1 — 2026-10-21
 
 - Corrige un fallo al salir: destruye el control nativo Magnifier antes de

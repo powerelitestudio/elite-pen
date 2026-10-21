@@ -59,6 +59,16 @@ posición, pin y contracción viven durante la instancia. La caché de tinta y l
 vista previa continúan independientes del panel. Estudio de referencias y
 decisiones en [WHITEBOARD_REFERENCE_STUDY.md](WHITEBOARD_REFERENCE_STUDY.md).
 
+## Pantalla completa de pizarra — 2.17.2
+
+F11 conserva la ventana sin marco existente y elimina además las dos franjas
+internas: `toolbar_height_` pasa a cero y el viewport no reserva los 28 px de
+estado inferior. Render, selección, entrada de lápiz/ratón, texto y exportación
+usan esas mismas dimensiones. La caja flotante conserva su cuerpo, pin, escala
+y desplazamiento, e incorpora controles propios de ajustes y pantalla completa.
+Esc sale primero de pantalla completa cuando no hay un gesto activo, conservando
+la pizarra abierta. F11 y el botón restauran el estilo y rectángulo anteriores.
+
 ## Capas
 
 El cierre (2.17.1) destruye primero el HWND del control Magnifier y después

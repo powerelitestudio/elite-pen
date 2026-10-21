@@ -6,7 +6,8 @@ constexpr std::array<Color, 8> kColors{
     {kBlack, {255, 255, 255, 255}, kYellow, kBlue, kRed, kGreen, kPurple, {249, 115, 22, 255}}};
 constexpr std::array<float, 4> kWidths{2, 4, 8, 16};
 constexpr bool chrome(int id) {
-    return id == 1 || id == 14 || id == 18 || id == 19 || id == 20 || id == 21 || id == 24 || id == 25;
+    return id == 1 || id == 14 || id == 18 || id == 19 || id == 20 || id == 21 || id == 24 || id == 25 ||
+           id == 30 || id == 31;
 }
 
 // Original 24-unit outline glyphs, rendered as vectors at every panel scale.
@@ -121,6 +122,7 @@ void icon(ID2D1DeviceContext *c, ID2D1SolidColorBrush *brush, int id, RectF boun
         line(12, 5, 12, 19);
         break;
     case 20:
+    case 30:
         path({{3, 9}, {3, 3}, {9, 3}});
         path({{15, 3}, {21, 3}, {21, 9}});
         path({{21, 15}, {21, 21}, {15, 21}});
@@ -157,6 +159,12 @@ void icon(ID2D1DeviceContext *c, ID2D1SolidColorBrush *brush, int id, RectF boun
     case 28:
         line(4, 19, 20, 5);
         path({{12, 5}, {20, 5}, {20, 13}});
+        break;
+    case 32:
+        path({{3, 9}, {9, 9}, {9, 3}});
+        path({{15, 3}, {15, 9}, {21, 9}});
+        path({{21, 15}, {15, 15}, {15, 21}});
+        path({{9, 21}, {9, 15}, {3, 15}});
         break;
     case 29:
         line(4, 19, 20, 5);
@@ -391,7 +399,8 @@ class BoardWindow final : public WindowBase {
     }
     PointF viewport() const {
         return {static_cast<float>(surface_.width()),
-                std::max(1.0F, static_cast<float>(surface_.height()) - toolbar_height_ - 28)};
+                std::max(1.0F, static_cast<float>(surface_.height()) - toolbar_height_ -
+                                   (fullscreen_ ? 0.0F : 28.0F))};
     }
     void set_tool(Tool tool) {
         commit_text();
@@ -654,16 +663,18 @@ void BoardWindow::layout() {
         return;
     }
     const float width = static_cast<float>(surface_.width()), height = static_cast<float>(surface_.height());
-    toolbar_height_ = 50;
+    toolbar_height_ = fullscreen_ ? 0.0F : 50.0F;
     const auto add = [&](int id, const wchar_t *name, float x, float y, float w, float h) {
         buttons_.push_back({id, name, {x, y, x + w, y + h}});
     };
-    add(1, L"Archivo", 148, 8, 32, 34);
-    add(21, L"Guardar · Ctrl+S", 186, 8, 32, 34);
-    add(14, L"Opciones · tamaño del panel", 224, 8, 32, 34);
-    add(18, L"Alejar", width - 174, 8, 32, 34);
-    add(19, L"Acercar", width - 82, 8, 32, 34);
-    add(20, L"Encuadrar todo", width - 44, 8, 32, 34);
+    if (!fullscreen_) {
+        add(1, L"Archivo", 148, 8, 32, 34);
+        add(21, L"Guardar · Ctrl+S", 186, 8, 32, 34);
+        add(14, L"Opciones · tamaño del panel", 224, 8, 32, 34);
+        add(18, L"Alejar", width - 174, 8, 32, 34);
+        add(19, L"Acercar", width - 82, 8, 32, 34);
+        add(20, L"Encuadrar todo", width - 44, 8, 32, 34);
+    }
     // Fit horizontally without reducing the requested icon size: narrow windows
     // reflow columns, while an oversized panel scrolls vertically below its grip.
     const float s = static_cast<float>(scale_) / 100;
@@ -672,14 +683,21 @@ void BoardWindow::layout() {
     const float cell = (panel_width / s - 24) / static_cast<float>(columns);
     const int rows = (16 + columns - 1) / columns;
     toolbar_total_ = (42 + static_cast<float>(rows) * 54 + 168) * s;
-    const float panel_height = panel_collapsed_ ? 38 * s : std::min(toolbar_total_, height - 90);
+    const float panel_height =
+        panel_collapsed_ ? 38 * s : std::min(toolbar_total_, height - (fullscreen_ ? 24.0F : 90.0F));
     if (!panel_moved_)
-        panel_position_ = {width - panel_width - 16, 66};
+        panel_position_ = {width - panel_width - 16, toolbar_height_ + 16};
     panel_position_.x = std::clamp(panel_position_.x, 12.0F, std::max(12.0F, width - panel_width - 12));
-    panel_position_.y = std::clamp(panel_position_.y, 58.0F, std::max(58.0F, height - panel_height - 32));
+    const float min_y = toolbar_height_ + 8;
+    panel_position_.y = std::clamp(panel_position_.y, min_y,
+                                   std::max(min_y, height - panel_height - (fullscreen_ ? 4.0F : 32.0F)));
     panel_bounds_ = {panel_position_.x, panel_position_.y, panel_position_.x + panel_width,
                      panel_position_.y + panel_height};
     panel_body_ = {panel_bounds_.left, panel_bounds_.top + 38 * s, panel_bounds_.right, panel_bounds_.bottom};
+    add(31, L"Opciones · tamaño del panel", panel_bounds_.right - 131 * s, panel_bounds_.top + 4 * s, 29 * s,
+        29 * s);
+    add(30, fullscreen_ ? L"Salir de pantalla completa · F11 / Esc" : L"Pantalla completa · F11",
+        panel_bounds_.right - 99 * s, panel_bounds_.top + 4 * s, 29 * s, 29 * s);
     add(24, L"Fijar / mover el panel", panel_bounds_.right - 67 * s, panel_bounds_.top + 4 * s, 29 * s,
         29 * s);
     add(25, L"Contraer / desplegar panel", panel_bounds_.right - 35 * s, panel_bounds_.top + 4 * s, 29 * s,
@@ -981,6 +999,7 @@ void BoardWindow::command(int id) {
         changed();
         break;
     case 14:
+    case 31:
         options_menu();
         break;
     case 15: {
@@ -1040,6 +1059,9 @@ void BoardWindow::command(int id) {
         break;
     case 29:
         set_tool(Tool::Line);
+        break;
+    case 30:
+        toggle_fullscreen();
         break;
     default:
         break;
@@ -1810,15 +1832,17 @@ void BoardWindow::render_controls(ID2D1DeviceContext *context, DrawableRenderRes
         context->DrawTextW(value.c_str(), static_cast<UINT32>(value.size()), format, board_ui::rect(r), brush,
                            D2D1_DRAW_TEXT_OPTIONS_CLIP);
     };
-    fill({0, 0, static_cast<float>(surface_.width()), toolbar_height_}, theme.surface_1, 0);
-    brush->SetColor(theme_color(theme.line));
-    context->DrawLine({0, toolbar_height_ - .5F},
-                      {static_cast<float>(surface_.width()), toolbar_height_ - .5F}, brush);
-    label(L"ELITE PEN", {18, 5, 140, 23}, 10, theme.violet_strong);
-    label(L"Pizarra", {18, 21, 140, 46}, 17, theme.text);
-    label(std::to_wstring(static_cast<int>(camera_.zoom * 100)) + L" %",
-          {static_cast<float>(surface_.width()) - 144, 8, static_cast<float>(surface_.width()) - 84, 42}, 12,
-          theme.text, true);
+    if (!fullscreen_) {
+        fill({0, 0, static_cast<float>(surface_.width()), toolbar_height_}, theme.surface_1, 0);
+        brush->SetColor(theme_color(theme.line));
+        context->DrawLine({0, toolbar_height_ - .5F},
+                          {static_cast<float>(surface_.width()), toolbar_height_ - .5F}, brush);
+        label(L"ELITE PEN", {18, 5, 140, 23}, 10, theme.violet_strong);
+        label(L"Pizarra", {18, 21, 140, 46}, 17, theme.text);
+        label(std::to_wstring(static_cast<int>(camera_.zoom * 100)) + L" %",
+              {static_cast<float>(surface_.width()) - 144, 8, static_cast<float>(surface_.width()) - 84, 42},
+              12, theme.text, true);
+    }
     const auto panel = panel_bounds_;
     // A small bounded shadow stays on the GPU; no canvas readback or CPU blur.
     for (int n = 6; n >= 1; --n) {
@@ -1829,7 +1853,7 @@ void BoardWindow::render_controls(ID2D1DeviceContext *context, DrawableRenderRes
     brush->SetColor(theme_color(theme.line));
     context->DrawRoundedRectangle(D2D1::RoundedRect(board_ui::rect(panel), 12 * s, 12 * s), brush);
     label(panel_pinned_ ? L"HERRAMIENTAS" : L"ARRASTRA PARA MOVER",
-          {panel.left + 16 * s, panel.top + 3 * s, panel.right - 72 * s, panel.top + 35 * s}, 10 * s,
+          {panel.left + 16 * s, panel.top + 3 * s, panel.right - 136 * s, panel.top + 35 * s}, 10 * s,
           theme.text_soft);
     if (!panel_collapsed_) {
         brush->SetColor(theme_color(theme.line));
@@ -1859,7 +1883,7 @@ void BoardWindow::render_controls(ID2D1DeviceContext *context, DrawableRenderRes
                  tool_ != Tool::Arrow) ||
                 (id == 8 && mode_ == Mode::Ink && tool_ == Tool::Text) ||
                 (id == 9 && mode_ == Mode::Ink && tool_ == Tool::Emoji) || (id == 22 && pressure_) ||
-                (id == 23 && grid_) || (id == 24 && panel_pinned_) ||
+                (id == 23 && grid_) || (id == 24 && panel_pinned_) || (id == 30 && fullscreen_) ||
                 (id == 26 && mode_ == Mode::Ink && tool_ == Tool::Rectangle) ||
                 (id == 27 && mode_ == Mode::Ink && tool_ == Tool::Ellipse) ||
                 (id == 28 && mode_ == Mode::Ink && tool_ == Tool::Arrow) ||
@@ -1911,9 +1935,10 @@ void BoardWindow::render_controls(ID2D1DeviceContext *context, DrawableRenderRes
                       {r.left + 33 * s, r.top, r.right - 4 * s, r.bottom}, 10 * s, foreground);
             } else {
                 const bool tool = !chrome && id != 15 && id != 16 && id != 17;
-                const float size = (id == 24 || id == 25) ? 21 * s : (chrome ? 21.0F : 22 * s);
+                const float size =
+                    (id == 24 || id == 25 || id == 30 || id == 31) ? 21 * s : (chrome ? 21.0F : 22 * s);
                 const float icon_y = tool ? r.top + 17 * s : cy;
-                board_ui::icon(context, brush, id,
+                board_ui::icon(context, brush, id == 31 ? 14 : (id == 30 && fullscreen_ ? 32 : id),
                                {cx - size / 2, icon_y - size / 2, cx + size / 2, icon_y + size / 2});
                 if (tool)
                     label(b.label, {r.left, r.top + 32 * s, r.right, r.bottom - 2 * s}, 8.5F * s, foreground,
@@ -1996,27 +2021,29 @@ void BoardWindow::render() {
     context->SetTransform(D2D1::Matrix3x2F::Identity());
     const auto &theme = current_ui_theme();
     render_controls(context, resources);
-    const float bottom = static_cast<float>(surface_.height());
-    resources.brush->SetColor(theme_color(theme.surface_2));
-    context->FillRectangle(D2D1::RectF(0, bottom - 28, static_cast<float>(surface_.width()), bottom),
-                           resources.brush.Get());
-    resources.brush->SetColor(theme_color(theme.text_soft));
-    std::wstring description = std::to_wstring(static_cast<int>(camera_.zoom * 100)) + L" % · " +
-                               std::to_wstring(document_.objects().size()) + L" objetos · " +
-                               tool_name(tool_) + L" " + std::to_wstring(static_cast<int>(thickness_)) +
-                               L" px · " + status_;
-    for (const auto &b : buttons_)
-        if (b.command == hover_command_) {
-            description = b.label;
-            break;
+    if (!fullscreen_) {
+        const float bottom = static_cast<float>(surface_.height());
+        resources.brush->SetColor(theme_color(theme.surface_2));
+        context->FillRectangle(D2D1::RectF(0, bottom - 28, static_cast<float>(surface_.width()), bottom),
+                               resources.brush.Get());
+        resources.brush->SetColor(theme_color(theme.text_soft));
+        std::wstring description = std::to_wstring(static_cast<int>(camera_.zoom * 100)) + L" % · " +
+                                   std::to_wstring(document_.objects().size()) + L" objetos · " +
+                                   tool_name(tool_) + L" " + std::to_wstring(static_cast<int>(thickness_)) +
+                                   L" px · " + status_;
+        for (const auto &b : buttons_)
+            if (b.command == hover_command_) {
+                description = b.label;
+                break;
+            }
+        auto *format = resources.text_format(controller_.graphics(), 12);
+        if (format) {
+            format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
+            context->DrawTextW(
+                description.c_str(), static_cast<UINT32>(description.size()), format,
+                D2D1::RectF(10, bottom - 26, static_cast<float>(surface_.width()) - 10, bottom - 1),
+                resources.brush.Get());
         }
-    auto *format = resources.text_format(controller_.graphics(), 12);
-    if (format) {
-        format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
-        context->DrawTextW(
-            description.c_str(), static_cast<UINT32>(description.size()), format,
-            D2D1::RectF(10, bottom - 26, static_cast<float>(surface_.width()) - 10, bottom - 1),
-            resources.brush.Get());
     }
     std::wstring message;
     surface_.end_draw(message);
@@ -2185,6 +2212,8 @@ LRESULT BoardWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
         if (wparam == VK_ESCAPE) {
             if (drag_ != Drag::None)
                 cancel();
+            else if (fullscreen_)
+                toggle_fullscreen();
             else if (!selected_.empty()) {
                 selected_.clear();
                 invalidate();
@@ -2432,6 +2461,10 @@ LRESULT BoardWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
             return toolbar_scroll_;
         case 42:
             return static_cast<LRESULT>(tool_);
+        case 43:
+            return fullscreen_;
+        case 44:
+            return static_cast<LRESULT>(std::lround(viewport().y));
         default:
             break;
         }

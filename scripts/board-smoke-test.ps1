@@ -132,6 +132,35 @@ try {
   Key @(0x11,0x10,0x12) 123
   Check ([BoardNative]::IsWindowVisible($board)) 'Assigned macropad shortcut reopens the board'
  }
+ # F11 is immersive: no title, command rail, or status strip; toolbox stays live.
+ $windowed=[BoardNative+RECT]::new();$null=[BoardNative]::GetWindowRect($board,[ref]$windowed)
+ $null=[BoardNative]::Foreground($board);Key @() 0x7A
+ Check ((Qa 43) -eq 1) 'F11 enters immersive fullscreen'
+ Check ((Qa 7) -eq 0 -and (Qa 33 1) -eq -1 -and (Qa 33 14) -eq -1) 'Fullscreen removes the command header and its hit zones'
+ $client=[BoardNative+RECT]::new();$null=[BoardNative]::GetClientRect($board,[ref]$client)
+ Check ((Qa 44) -eq $client.Bottom) 'Fullscreen gives the entire client height to the canvas'
+ Check ((Qa 33 30) -gt 0 -and (Qa 33 31) -gt 0) 'Fullscreen toolbox retains exit and settings buttons'
+ Tap-Command 104 $true;Pointer-Stroke $true 200
+ Check ((Qa 0) -eq 1 -and (Red-Stroke 200)) 'Compatibility pen draws in fullscreen without a toolbar coordinate offset'
+ Drag $board 300 12 550 12
+ Check ((Qa 0) -eq 2) 'Former title/header area is now drawable canvas'
+ $null=Qa 17;$null=Qa 17
+ Check ((Qa 0) -eq 0) 'Fullscreen strokes keep independent undo operations'
+ Tap-Command 13;Frame 'whiteboard-fullscreen.png'
+ $fullImage=[Drawing.Bitmap]::FromFile((Join-Path $captures 'whiteboard-fullscreen.png'))
+ try{
+  Check ($fullImage.GetPixel(50,10).R -lt 30) 'Fullscreen top edge contains canvas, not a title or command strip'
+  Check ($fullImage.GetPixel(50,$fullImage.Height-10).R -lt 30) 'Fullscreen bottom edge contains canvas, not a status strip'
+ }finally{$fullImage.Dispose()}
+ Tap-Command 30
+ Check ((Qa 43) -eq 0 -and (Qa 7) -eq 50) 'Toolbox button exits fullscreen and restores the header'
+ $restored=[BoardNative+RECT]::new();$null=[BoardNative]::GetWindowRect($board,[ref]$restored)
+ Check ($restored.Left -eq $windowed.Left -and $restored.Top -eq $windowed.Top -and $restored.Right -eq $windowed.Right -and $restored.Bottom -eq $windowed.Bottom) 'Fullscreen restores the previous window position and size'
+ Tap-Command 30;Key @() 0x1B
+ Check ((Qa 43) -eq 0 -and [BoardNative]::IsWindowVisible($board)) 'Escape leaves fullscreen while keeping the board open'
+ $null=Qa 9 300;Wait-Frame;Tap-Command 30
+ Check ((Qa 43) -eq 1 -and (Qa 23) -eq 300 -and (Qa 33 30) -gt 0) '300 percent toolbox stays usable in fullscreen'
+ Tap-Command 30;$null=Qa 9 100;Wait-Frame;Tap-Command 13;Tap-Command 100
  $null=Qa 28 40
  $null=Qa 3 64 100 160;$null=Qa 4 64 200 160;$null=Qa 4 1024 350 160;$null=Qa 4 1024 500 160;$null=Qa 5 1024 580 160
  Check ((Qa 0) -eq 1 -and (Qa 8) -ge 4) 'Pressure points use the drawing input path'

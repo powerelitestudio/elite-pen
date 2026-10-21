@@ -10,7 +10,7 @@ pantalla para Windows, desarrollada por [Power Elite Studio](https://powerelite.
 Permite explicar sobre cualquier aplicación sin convertir la presentación en una
 sucesión de ventanas y menús.
 
-> **Estado:** acceso anticipado. La versión 2.17.1 renueva la pizarra con un
+> **Estado:** acceso anticipado. La versión 2.17.2 renueva la pizarra con un
 > panel flotante de iconos y conserva los toques de lápiz corregidos en 2.16.1.
 > Incluye la pizarra editable
 > Whiteboard / Blackboard con lienzo navegable, presión del lápiz, imágenes,
@@ -41,6 +41,11 @@ El botón de chincheta fija/desbloquea el panel para arrastrarlo por su cabecera
 la flecha lo contrae. Si no cabe en la ventana, usa la rueda sobre el panel:
 sus columnas se adaptan y el lienzo mantiene su tamaño. La posición y el estado
 contraído se conservan mientras siga abierta esa sesión de la app.
+
+**F11** deja únicamente el lienzo y la caja de herramientas: oculta título,
+barra superior y estado inferior. También puedes usar el botón de cuatro esquinas
+en la cabecera de la caja. **F11** o **Esc** recuperan la ventana sin cerrar la
+pizarra. Las opciones de tamaño siguen disponibles en el botón de ajustes de la caja.
 
 - Dibuja con lápiz o resaltador, figuras, símbolos, texto y emojis. El lápiz de
   Windows Ink conserva la presión en cada punto; el ratón usa grosor constante.
@@ -143,7 +148,7 @@ Los paquetes oficiales listos para usar se publican en
 [GitHub Releases](https://github.com/powerelitestudio/elite-pen/releases):
 
 La distribución publicada que se enlaza a continuación es 2.10.3. Los símbolos y
-tamaños nuevos, emojis, Zoom de enfoque y pizarra editable están en el código 2.17.1 y pueden compilarse con los scripts del repositorio.
+tamaños nuevos, emojis, Zoom de enfoque y pizarra editable están en el código 2.17.2 y pueden compilarse con los scripts del repositorio.
 
 - [Descargar portable 2.10.3](https://github.com/powerelitestudio/elite-pen/releases/download/v2.10.3/Elite.Pen.Portable.2.10.3.zip):
   descomprime la carpeta y ejecuta `Elite Pen.exe`.
