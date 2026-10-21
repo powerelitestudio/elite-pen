@@ -20,7 +20,12 @@ en añadidos consecutivos y vuelve a dibujar objetos visibles al navegar. Las
 imágenes conservan su PNG original y usan previsualizaciones GPU de hasta 4.096 px
 por lado, con presupuesto de caché de 128 MiB. WM_POINTER lee el historial del
 lápiz en orden temporal y normaliza presión a 0–1. El ratón pasa por el mismo
-recorrido con presión constante.
+recorrido con presión constante. Desde 2.16.1 se aceptan también contactos de
+lápiz entregados como ratón por controladores de compatibilidad. Solo se
+suprimen duplicados mientras existe un contacto WM_POINTER propio; los contactos
+sobre controles se siguen hasta su liberación, sin convertirlos en tinta.
+Las secuencias no adquiridas conservan el manejo predeterminado de Windows;
+la captura de ratón no cancela por sí sola una secuencia de lápiz.
 
 `.epboard` v1 contiene cabecera, versión, tamaño y checksum FNV-1a de integridad
 (no criptográfico), cámara, ajustes, recursos y objetos. El lector valida límites,

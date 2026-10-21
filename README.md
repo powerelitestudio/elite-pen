@@ -10,7 +10,8 @@ pantalla para Windows, desarrollada por [Power Elite Studio](https://powerelite.
 Permite explicar sobre cualquier aplicación sin convertir la presentación en una
 sucesión de ventanas y menús.
 
-> **Estado:** acceso anticipado. La versión 2.16.0 incorpora una pizarra editable
+> **Estado:** acceso anticipado. La versión 2.16.1 corrige los toques de lápiz
+> en modo de compatibilidad y conserva la pizarra editable
 > Whiteboard / Blackboard con lienzo navegable, presión del lápiz, imágenes,
 > selección y recuperación local. Conserva Zoom de enfoque, emojis y macropad.
 

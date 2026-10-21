@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$ExecutablePath)
+param([string]$ExecutablePath,[switch]$PenCompatibilityOnly)
 $ErrorActionPreference='Stop'
 $repoRoot=Split-Path -Parent $PSScriptRoot
 if(-not $ExecutablePath){$ExecutablePath=Join-Path $repoRoot 'build\release\Elite Pen.exe'}
@@ -19,6 +19,8 @@ public static class BoardNative {
  }
  [StructLayout(LayoutKind.Sequential)] public struct PEN_INFO {public POINTER_INFO Pointer;public uint Flags,Mask,Pressure,Rotation;public int TiltX,TiltY;}
  [StructLayout(LayoutKind.Explicit,Size=152)] public struct TYPE_INFO {[FieldOffset(0)]public uint Type;[FieldOffset(8)]public PEN_INFO Pen;}
+ [StructLayout(LayoutKind.Sequential)] public struct MOUSE_INFO {public int X,Y;public uint Data,Flags,Time;public UIntPtr Extra;}
+ [StructLayout(LayoutKind.Explicit,Size=40)] public struct MOUSE_INPUT {[FieldOffset(0)]public uint Type;[FieldOffset(8)]public MOUSE_INFO Mouse;}
  public delegate bool Callback(IntPtr w,IntPtr data);
  [DllImport("user32.dll")]public static extern bool EnumWindows(Callback c,IntPtr p);
  [DllImport("user32.dll")]public static extern uint GetWindowThreadProcessId(IntPtr w,out uint pid);
@@ -33,6 +35,7 @@ public static class BoardNative {
  [DllImport("user32.dll")]public static extern bool ClientToScreen(IntPtr w,ref POINT p);
  [DllImport("user32.dll")]public static extern IntPtr WindowFromPoint(POINT p);
  [DllImport("user32.dll")]public static extern int GetSystemMetrics(int index);
+ [DllImport("user32.dll",SetLastError=true)]public static extern uint SendInput(uint count,[In]MOUSE_INPUT[] input,int size);
  [DllImport("user32.dll")]public static extern bool SetForegroundWindow(IntPtr w);
  [DllImport("user32.dll")]public static extern IntPtr GetForegroundWindow();
  [DllImport("user32.dll")]public static extern bool AttachThreadInput(uint from,uint to,bool attach);
@@ -53,6 +56,7 @@ public static class BoardNative {
  public static bool Foreground(IntPtr window){uint pid;uint current=GetCurrentThreadId();uint other=GetWindowThreadProcessId(GetForegroundWindow(),out pid);bool attached=current!=other&&AttachThreadInput(current,other,true);try{ShowWindow(window,5);SetWindowPos(window,new IntPtr(-1),0,0,0,0,0x43);SetForegroundWindow(window);}finally{if(attached)AttachThreadInput(current,other,false);}if(GetForegroundWindow()!=window){keybd_event(0x12,0,0,UIntPtr.Zero);SetForegroundWindow(window);keybd_event(0x12,0,2,UIntPtr.Zero);}return GetForegroundWindow()==window;}
  // InjectSyntheticPointerInput uses coordinates relative to the virtual desktop's top-left.
  public static bool Pen(IntPtr device,int x,int y,uint flags,uint pressure){var sample=new TYPE_INFO();sample.Type=3;sample.Pen.Pointer.Type=3;sample.Pen.Pointer.Id=1;sample.Pen.Pointer.Flags=flags;sample.Pen.Pointer.Pixel=new POINT{X=x-GetSystemMetrics(76),Y=y-GetSystemMetrics(77)};sample.Pen.Mask=1;sample.Pen.Pressure=pressure;return InjectSyntheticPointerInput(device,new[]{sample},1);}
+ public static bool Mouse(int x,int y,uint flags,bool pen){var sample=new MOUSE_INPUT();sample.Mouse.X=(int)((long)(x-GetSystemMetrics(76))*65535/(GetSystemMetrics(78)-1));sample.Mouse.Y=(int)((long)(y-GetSystemMetrics(77))*65535/(GetSystemMetrics(79)-1));sample.Mouse.Flags=flags|0xC001;sample.Mouse.Extra=pen?new UIntPtr(0xFF515700):UIntPtr.Zero;return SendInput(1,new[]{sample},Marshal.SizeOf<MOUSE_INPUT>())==1;}
 }
 '@
 $null=[BoardNative]::SetThreadDpiAwarenessContext([IntPtr](-4))
@@ -66,6 +70,7 @@ Set-Content -LiteralPath (Join-Path $sandbox 'portable.flag') -Value 'Isolated b
 Set-Content -LiteralPath (Join-Path $sandbox 'data\settings.ini') -Encoding ascii -Value "[ElitePen]`r`nHotkeySchemeVersion=2`r`nExcludePaletteFromCapture=0`r`nStartInInteractMode=1`r`nHasPalettePosition=1`r`nPaletteX=50`r`nPaletteY=50`r`nHotkeyBoardOpen=7,123`r`n"
 $oldInstance=$env:ELITE_PEN_QA_INSTANCE_ID;$oldBoard=$env:ELITE_PEN_BOARD_QA;$oldRealHotkeys=$env:ELITE_PEN_QA_REAL_HOTKEYS
 $env:ELITE_PEN_QA_INSTANCE_ID=[Guid]::NewGuid().ToString('N');$env:ELITE_PEN_BOARD_QA='1';$env:ELITE_PEN_QA_REAL_HOTKEYS='1'
+if($PenCompatibilityOnly){Remove-Item Env:ELITE_PEN_QA_REAL_HOTKEYS -ErrorAction SilentlyContinue}
 $failures=[Collections.Generic.List[string]]::new();$checks=0
 function Check([bool]$Condition,[string]$Message){$script:checks++;if(-not $Condition){$script:failures.Add($Message);Write-Output "FAIL: $Message"}}
 function Find([int]$ProcessId,[string]$Class){for($n=0;$n -lt 120;$n++){$w=[BoardNative]::Find([uint32]$ProcessId,$Class);if($w -ne [IntPtr]::Zero){return $w};Start-Sleep -Milliseconds 50};throw "Missing $Class"}
@@ -73,6 +78,10 @@ function Send([IntPtr]$Window,[uint32]$Message,[long]$W=0,[long]$L=0){$result=[I
 function Qa([int]$Offset,[long]$W=0,[int]$X=0,[int]$Y=0){return Send $script:board (0x80C8+$Offset) $W (($Y -shl 16) -bor ($X -band 0xffff))}
 function Wait-Frame {$null=[BoardNative]::DwmFlush();Start-Sleep -Milliseconds 180}
 function Key([int[]]$Modifiers,[int]$Code){foreach($m in $Modifiers){[BoardNative]::keybd_event([byte]$m,0,0,[UIntPtr]::Zero)};[BoardNative]::keybd_event([byte]$Code,0,0,[UIntPtr]::Zero);[BoardNative]::keybd_event([byte]$Code,0,2,[UIntPtr]::Zero);for($n=$Modifiers.Count-1;$n -ge 0;$n--){[BoardNative]::keybd_event([byte]$Modifiers[$n],0,2,[UIntPtr]::Zero)};Wait-Frame}
+function Mouse([int]$X,[int]$Y,[uint32]$Flags,[bool]$Pen){$p=[BoardNative+POINT]::new();$p.X=$X;$p.Y=$Y;$null=[BoardNative]::ClientToScreen($script:board,[ref]$p);if(-not [BoardNative]::Mouse($p.X,$p.Y,$Flags,$Pen)){throw 'Mouse/pen input injection failed'};Start-Sleep -Milliseconds 45}
+function Pointer-Stroke([bool]$Pen,[int]$Y){Mouse 600 $Y 2 $Pen;for($x=625;$x -le 800;$x+=25){Mouse $x $Y 0 $Pen};Mouse 820 $Y 4 $Pen;Wait-Frame}
+function Pen-Tap([IntPtr]$Device,[int]$X,[int]$Y){$p=[BoardNative+POINT]::new();$p.X=$X;$p.Y=$Y;$null=[BoardNative]::ClientToScreen($script:board,[ref]$p);$ok=[BoardNative]::Pen($Device,$p.X,$p.Y,0x10016,512);Start-Sleep -Milliseconds 60;$ok=[BoardNative]::Pen($Device,$p.X,$p.Y,0x40012,0) -and $ok;Check $ok 'Windows accepted the native pen tap';Wait-Frame}
+function Red-Stroke([int]$Y){$null=Qa 20;$bitmap=[Drawing.Bitmap]::FromFile((Join-Path $sandbox 'data\boards\qa-view.png'));try{$red=0;for($x=620;$x -lt 790;$x++){for($row=$Y-5;$row -lt $Y+6;$row++){$p=$bitmap.GetPixel($x,$row);if($p.R -gt 180 -and $p.G -lt 120 -and $p.B -lt 120){$red++}}};return $red -gt 30}finally{$bitmap.Dispose()}}
 function Drag([IntPtr]$Window,[int]$X1,[int]$Y1,[int]$X2,[int]$Y2){$null=Send $Window 0x201 1 (($Y1 -shl 16) -bor ($X1 -band 0xffff));$null=Send $Window 0x200 1 (($Y2 -shl 16) -bor ($X2 -band 0xffff));$null=Send $Window 0x202 0 (($Y2 -shl 16) -bor ($X2 -band 0xffff));Wait-Frame}
 function Frame([string]$Name){$null=[BoardNative]::Foreground($script:board);$null=[BoardNative]::RedrawWindow($script:board,[IntPtr]::Zero,[IntPtr]::Zero,0x181);Wait-Frame;$r=[BoardNative+RECT]::new();$null=[BoardNative]::GetWindowRect($script:board,[ref]$r);$image=[Drawing.Bitmap]::new($r.Right-$r.Left,$r.Bottom-$r.Top);$g=[Drawing.Graphics]::FromImage($image);try{$g.CopyFromScreen($r.Left,$r.Top,0,0,$image.Size);$image.Save((Join-Path $captures $Name),[Drawing.Imaging.ImageFormat]::Png)}finally{$g.Dispose();$image.Dispose()}}
 function Start-App {$script:app=Start-Process -FilePath $exe -WindowStyle Hidden -PassThru;$script:palette=Find $script:app.Id 'ElitePen.Palette';$null=Send $script:palette 0x312 70;$script:board=Find $script:app.Id 'ElitePenBoardWindow';Wait-Frame}
@@ -85,6 +94,26 @@ try {
  Check ([BoardNative]::IsWindowVisible($board)) 'Board opens from its global action'
  Check (-not [BoardNative]::IsWindowVisible($palette)) 'Desktop palette hides while drawing on board'
  Check ((Send $palette 0x805E) -eq 0) 'Desktop document starts unchanged'
+ if($PenCompatibilityOnly){
+  Check ([BoardNative]::Foreground($board)) 'Compatibility test owns foreground focus';Wait-Frame
+  $client=[BoardNative+RECT]::new();$null=[BoardNative]::GetClientRect($board,[ref]$client)
+  $columns=[Math]::Max(1,[Math]::Floor(($client.Right-5)/110));$colorY=[int](5+[Math]::Ceiling(14/$columns)*38+16);$top=[int](Qa 7)
+  # This is a real WM_MOUSE stream tagged as pen, as produced by compatibility drivers.
+  Mouse 173 $colorY 2 $true;Mouse 173 $colorY 4 $true
+  Pointer-Stroke $false ($top+160)
+  Check ((Qa 0) -eq 1) 'Ordinary mouse still draws after a pen toolbar tap'
+  Check (Red-Stroke 160) 'Pen compatibility tap selects the red swatch'
+  $null=Qa 12
+  Pointer-Stroke $true ($top+230)
+  Check ((Qa 0) -eq 1) 'Pen compatibility contact creates exactly one complete stroke'
+  Check (Red-Stroke 230) 'Pen compatibility stroke uses the chosen color'
+  $null=Qa 17;Check ((Qa 0) -eq 0) 'One undo removes one compatibility pen stroke'
+  $null=Qa 18;Check ((Qa 0) -eq 1) 'Redo restores compatibility pen stroke'
+  $result=[ordered]@{Checks=$checks;Failures=@($failures);Mode='PenTaggedMouse';Sandbox=$sandbox}
+  $result|ConvertTo-Json -Depth 4|Set-Content -LiteralPath (Join-Path $captures 'pen-compatibility-result.json') -Encoding utf8
+  if($failures.Count){throw "$($failures.Count) of $checks pen compatibility checks failed"}
+  Write-Output "$checks pen compatibility checks passed";return
+ }
  $null=[BoardNative]::Foreground($board);Key @(0x11,0x10,0x12) 123
  Check (-not [BoardNative]::IsWindowVisible($board)) 'Assigned macropad shortcut closes the board'
  Key @(0x11,0x10,0x12) 123
@@ -114,6 +143,19 @@ try {
   Check ((Qa 0) -eq 2 -and (Qa 8) -ge 3) 'WM_POINTER pen history records a full stroke'
   Check ((Qa 21) -lt 150 -and (Qa 22) -gt 500) 'Native pen pressure varies across samples'
   $nativePenVerified=(Qa 30 0) -gt 0 -and (Qa 0) -eq 2
+  # Native controls must consume one contact and then release ownership for the next tool.
+  $client=[BoardNative+RECT]::new();$null=[BoardNative]::GetClientRect($board,[ref]$client)
+  $columns=[int][Math]::Max(1,[Math]::Floor(($client.Right-5)/110))
+  $toggleX=[int](5+(12%$columns)*110+52);$toggleY=[int](5+[Math]::Floor(12/$columns)*38+16)
+  Pen-Tap $device $toggleX $toggleY;Check ((Qa 10) -eq 1) 'Native pen toolbar contact toggles blackboard exactly once'
+  Pen-Tap $device $toggleX $toggleY;Check ((Qa 10) -eq 0) 'Native pen can immediately toggle whiteboard again'
+  $colorY=[int](5+[Math]::Ceiling(14/$columns)*38+16)
+  Pen-Tap $device 173 $colorY
+  Pointer-Stroke $false ($top+350)
+  Check (Red-Stroke 350) 'Native pen tap selects the red color for subsequent drawing'
+  $objects=Qa 0;Pen-Tap $device 850 ($top+410)
+  Check ((Qa 0) -eq $objects+1) 'Native pen draws again after using toolbar controls'
+  Mouse 21 $colorY 2 $false;Mouse 21 $colorY 4 $false
   [BoardNative]::DestroySyntheticPointerDevice($device);$device=[IntPtr]::Zero
  }
  $before=Qa 0;$null=[BoardNative]::Foreground($board);Key @(0x11) 0x5A

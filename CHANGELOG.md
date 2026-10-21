@@ -1,5 +1,19 @@
 # Historial de cambios
 
+## 2.16.1 — 2026-10-21
+
+- Corrige los toques del lápiz en la Pizarra editable cuando el controlador
+  entrega la entrada como mensajes de ratón identificados como lápiz. Ahora
+  permiten elegir colores, activar herramientas y dibujar.
+- Evita descartar indiscriminadamente esos mensajes: solo suprime el ratón
+  mientras la aplicación está atendiendo un contacto nativo real.
+- Los contactos nativos sobre herramientas tienen su propio seguimiento y
+  liberan la entrada al levantar el lápiz. Conserva la presión y evita que un
+  cambio de captura de ratón interrumpa un contacto de lápiz.
+- Añade una regresión con entrada real SendInput marcada como lápiz, selección
+  de color verificada en el PNG y trazo completo con deshacer/rehacer. También
+  prueba colores y botones con el lápiz sintético de Windows Ink.
+
 ## 2.16.0 — 2026-10-21
 
 - Herramientas > Pizarra editable abre Whiteboard / Blackboard en una ventana

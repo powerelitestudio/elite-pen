@@ -1,4 +1,27 @@
-# Informe de calidad — Elite Pen 2.16.0
+# Informe de calidad — Elite Pen 2.16.1
+
+## Toque del lápiz en la pizarra — 2.16.1
+
+Validación local: 2026-10-21.
+
+- Reproducción sobre 2.16.0 sin modificar: cuatro fallos de diez comprobaciones
+  con eventos reales SendInput de ratón etiquetados como lápiz. El cursor se
+  movía, pero el filtro descartaba el contacto y los colores no respondían.
+- Con la corrección pasan las diez comprobaciones de compatibilidad y las
+  **52 comprobaciones nativas de pizarra**, incluidos contactos Windows Ink
+  sobre controles, selección de rojo, dibujo posterior y presión variable.
+- **Confirmación del usuario con su XP-Pen Deco 01 física:** el toque ya
+  selecciona el color y permite dibujar. Esta confirmación no mide la curva de
+  presión física del controlador.
+- Release sin errores ni advertencias; núcleo, preferencias, rendimiento CPU
+  y 399 comprobaciones de modelo/persistencia aprobados.
+- Instalación 2.16.1 verificada con SHA-256
+  `8FDCA39562DEC0EB914E86D786A8B83A8A286B03051F7A09E096C830F62983BE`.
+  Respaldo completo de aplicación, ajustes, registro y pizarras en
+  `backups/update-2.16.1-20261021-104347` de la carpeta local de datos.
+  El hash de `settings.ini` se conserva exactamente.
+- Evidencia local ignorada por Git:
+  `artifacts/whiteboard-pen-2.16.1-20261021/`.
 
 ## Pizarra editable — 2.16.0
 

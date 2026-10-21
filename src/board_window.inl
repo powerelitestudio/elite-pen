@@ -156,7 +156,8 @@ class BoardWindow final : public WindowBase {
     Drag drag_{Drag::None};
     Color color_{kBlack};
     float thickness_{4};
-    bool dark_{}, pressure_{true}, grid_{}, capturing_{}, pointer_{}, toolbar_{true}, fullscreen_{};
+    bool dark_{}, pressure_{true}, grid_{}, capturing_{}, pointer_{}, pointer_controls_{}, toolbar_{true},
+        fullscreen_{};
     int scale_{100}, toolbar_scroll_{};
     UINT32 pointer_id_{};
     std::array<unsigned, 6> pointer_events_{};
@@ -1093,6 +1094,7 @@ void BoardWindow::finish(PointF view, float pressure) {
     drag_ = Drag::None;
     preview_.reset();
     pointer_ = false;
+    pointer_controls_ = false;
     if (GetCapture() == window_)
         ReleaseCapture();
     invalidate();
@@ -1102,6 +1104,7 @@ void BoardWindow::cancel() {
         document_.end_compound();
     drag_ = Drag::None;
     pointer_ = false;
+    pointer_controls_ = false;
     preview_.reset();
     if (GetCapture() == window_)
         ReleaseCapture();
@@ -1110,6 +1113,13 @@ void BoardWindow::cancel() {
 void BoardWindow::pen_samples(WPARAM wparam, bool end) {
     if (!pointer_ || GET_POINTERID_WPARAM(wparam) != pointer_id_)
         return;
+    if (pointer_controls_) {
+        if (end) {
+            pointer_ = false;
+            pointer_controls_ = false;
+        }
+        return;
+    }
     UINT32 count{};
     GetPointerPenInfoHistory(pointer_id_, &count, nullptr);
     count = std::min<UINT32>(count, 1024);
@@ -1623,7 +1633,9 @@ LRESULT BoardWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
         }
         break;
     case WM_LBUTTONDOWN:
-        if ((GetMessageExtraInfo() & 0xFFFFFF80) == 0xFF515700)
+        // Compatibility drivers can deliver their entire pen contact as mouse
+        // messages. Discard only duplicates of a native contact we actually own.
+        if (pointer_)
             return 0;
         layout();
         if (static_cast<float>(GET_Y_LPARAM(lparam)) < toolbar_height_) {
@@ -1662,7 +1674,11 @@ LRESULT BoardWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
         }
         POINT p = pen.pointerInfo.ptPixelLocation;
         ScreenToClient(window_, &p);
-        if (static_cast<float>(p.y) < toolbar_height_) {
+        layout();
+        pointer_id_ = GET_POINTERID_WPARAM(wparam);
+        pointer_ = true;
+        pointer_controls_ = static_cast<float>(p.y) < toolbar_height_;
+        if (pointer_controls_) {
             for (const auto &b : buttons_)
                 if (b.bounds.contains({static_cast<float>(p.x), static_cast<float>(p.y)})) {
                     command(b.command);
@@ -1670,8 +1686,6 @@ LRESULT BoardWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
                 }
             return 0;
         }
-        pointer_id_ = GET_POINTERID_WPARAM(wparam);
-        pointer_ = true;
         begin({static_cast<float>(p.x), static_cast<float>(p.y) - toolbar_height_},
               (pen.penMask & PEN_MASK_PRESSURE) ? static_cast<float>(pen.pressure) / 1024 : 1,
               (pen.penFlags & PEN_FLAG_ERASER) != 0, (pen.penFlags & PEN_FLAG_BARREL) != 0);
@@ -1679,14 +1693,20 @@ LRESULT BoardWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
     }
     case WM_POINTERUPDATE:
         ++pointer_events_[1];
+        if (!pointer_ || GET_POINTERID_WPARAM(wparam) != pointer_id_)
+            break; // Leave unclaimed pointer sequences to Windows' mouse fallback.
         pen_samples(wparam, false);
         return 0;
     case WM_POINTERUP:
         ++pointer_events_[2];
+        if (!pointer_ || GET_POINTERID_WPARAM(wparam) != pointer_id_)
+            break;
         pen_samples(wparam, true);
         return 0;
     case WM_POINTERCAPTURECHANGED:
         ++pointer_events_[3];
+        if (!pointer_ || GET_POINTERID_WPARAM(wparam) != pointer_id_)
+            break;
         if (drag_ == Drag::Ink || drag_ == Drag::Erase)
             finish(current_, preview_ && !preview_->pressures.empty() ? preview_->pressures.back() : 1);
         else
@@ -1696,7 +1716,8 @@ LRESULT BoardWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
         cancel();
         return 0;
     case WM_CAPTURECHANGED:
-        if (drag_ != Drag::None)
+        // WM_POINTERCAPTURECHANGED owns pen cancellation; mouse capture is separate.
+        if (!pointer_ && drag_ != Drag::None)
             cancel();
         return 0;
     case WM_MOUSEWHEEL: {
