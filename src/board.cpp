@@ -15,6 +15,10 @@ namespace {
 constexpr std::size_t kMaxFile = 128U * 1024U * 1024U;
 constexpr std::size_t kMaxPoints = 2000000;
 bool finite(float value) { return std::isfinite(value) && std::abs(value) <= 10000000.0F; }
+bool valid_font(const std::wstring &font) {
+    return !font.empty() && font.size() <= 128 &&
+           std::all_of(font.begin(), font.end(), [](wchar_t c) { return c >= 32 && c != 127; });
+}
 bool valid_rect(RectF r) {
     return finite(r.left) && finite(r.top) && finite(r.right) && finite(r.bottom) && r.width() > 0 &&
            r.height() > 0;
@@ -41,7 +45,7 @@ bool within_save_budget(const BoardObjects &objects) {
     std::unordered_set<const BoardImage *> images;
     for (const auto &object : objects) {
         points += object->ink.points.size();
-        bytes += 128 + object->ink.points.size() * 12 + object->ink.text.size() * 4;
+        bytes += 128 + object->ink.points.size() * 12 + object->ink.text.size() * 4 + object->font.size() * 4;
         if (object->image && images.insert(object->image.get()).second)
             bytes += object->image->png.size();
         if (points > kMaxPoints || bytes > 120U * 1024U * 1024U)
@@ -78,6 +82,11 @@ struct Writer {
             throw std::runtime_error("La pizarra supera el límite de 128 MiB.");
         data.insert(data.end(), bytes.begin(), bytes.end());
     }
+    void text(const std::wstring &value) {
+        number(value.size(), 4);
+        for (auto c : value)
+            number(static_cast<std::uint32_t>(c), 4);
+    }
     void rect(RectF r) {
         real(r.left);
         real(r.top);
@@ -103,6 +112,24 @@ struct Reader {
         return static_cast<std::size_t>(n);
     }
     float real() { return std::bit_cast<float>(static_cast<std::uint32_t>(number(4))); }
+    std::wstring text() {
+        std::wstring value;
+        const auto length = count(128);
+        for (std::size_t i = 0; i < length; ++i) {
+            const auto c = number(4);
+            if (c > 0xffff)
+                throw std::runtime_error("Fuente no válida.");
+            value.push_back(static_cast<wchar_t>(c));
+        }
+        if (!valid_font(value))
+            throw std::runtime_error("Fuente no válida.");
+        return value;
+    }
+    Color color() {
+        const auto c = static_cast<std::uint32_t>(number(4));
+        return {static_cast<std::uint8_t>(c >> 16), static_cast<std::uint8_t>(c >> 8),
+                static_cast<std::uint8_t>(c), static_cast<std::uint8_t>(c >> 24)};
+    }
     RectF rect() {
         const float l = real(), t = real(), r = real(), b = real();
         return {l, t, r, b};
@@ -152,6 +179,10 @@ void BoardCamera::frame(RectF box, PointF viewport) noexcept {
               (box.top + box.bottom - viewport.y / zoom) * 0.5F};
 }
 bool valid_board_object(const BoardObject &o) noexcept {
+    if (!o.font.empty() &&
+        (o.image || o.ink.kind != Tool::Text || !valid_font(o.font) || !std::isfinite(o.font_size) ||
+         o.font_size < 1 || o.font_size > 10000 || !valid_rect(o.text_bounds)))
+        return false;
     if (o.image)
         return valid_rect(o.image_bounds) && o.image->width && o.image->height && o.image->width <= 16384 &&
                o.image->height <= 16384 &&
@@ -194,6 +225,12 @@ BoardObject transform_board_object(const BoardObject &object, RectF from, RectF 
         result.ink.width = std::clamp(result.ink.width * scale, 0.01F, 10000.0F);
         result.ink.reference_scale = std::clamp(result.ink.reference_scale / scale, 0.001F, 10000.0F);
         result.ink.invalidate_bounds_cache();
+        if (!result.font.empty()) {
+            const auto a = map({result.text_bounds.left, result.text_bounds.top});
+            const auto b = map({result.text_bounds.right, result.text_bounds.bottom});
+            result.text_bounds = {a.x, a.y, b.x, b.y};
+            result.font_size = std::clamp(result.font_size * scale, 1.0F, 10000.0F);
+        }
     }
     return result;
 }
@@ -220,7 +257,7 @@ RectF BoardDocument::selection_bounds(std::span<const std::uint64_t> ids) const 
 std::shared_ptr<const BoardObject> BoardDocument::hit(PointF p, float tolerance) const {
     for (auto it = objects_.rbegin(); it != objects_.rend(); ++it) {
         const auto &o = *it;
-        if (o->image ? o->image_bounds.contains(p) : hit_test(o->ink, p, tolerance))
+        if ((o->image || !o->font.empty()) ? o->bounds().contains(p) : hit_test(o->ink, p, tolerance))
             return o;
     }
     return {};
@@ -263,6 +300,37 @@ bool BoardDocument::add(BoardObject o) {
     if (!within_save_budget(next))
         return false;
     commit(std::move(next), true);
+    return true;
+}
+bool BoardDocument::replace(std::span<const std::uint64_t> ids, BoardObject object) {
+    if (ids.empty() || !valid_board_object(object))
+        return false;
+    const std::unordered_set<std::uint64_t> selected(ids.begin(), ids.end());
+    if (selected.size() != ids.size())
+        return false;
+    std::size_t found{};
+    for (const auto &o : objects_)
+        if (selected.contains(o->id)) {
+            if (o->locked)
+                return false;
+            ++found;
+        }
+    if (found != ids.size())
+        return false;
+    BoardObjects next;
+    bool inserted{};
+    for (const auto &o : objects_) {
+        if (!selected.contains(o->id))
+            next.push_back(o);
+        else if (!inserted) {
+            object.id = o->id;
+            next.push_back(std::make_shared<const BoardObject>(std::move(object)));
+            inserted = true;
+        }
+    }
+    if (!within_save_budget(next))
+        return false;
+    commit(std::move(next));
     return true;
 }
 bool BoardDocument::remove(std::span<const std::uint64_t> ids) {
@@ -394,7 +462,9 @@ std::vector<std::uint8_t> encode_board(const BoardFile &file) {
         file.source_path.size() > 32768 ||
         (file.panel_scale != 80 && file.panel_scale != 100 && file.panel_scale != 125 &&
          file.panel_scale != 150 && file.panel_scale != 200 && file.panel_scale != 300) ||
-        !std::isfinite(file.pen_width) || file.pen_width < .5F || file.pen_width > 100)
+        !std::isfinite(file.pen_width) || file.pen_width < .5F || file.pen_width > 100 ||
+        !valid_font(file.text_font) || !std::isfinite(file.text_size) || file.text_size < 8 ||
+        file.text_size > 256 || (file.background && file.background->a != 255))
         throw std::runtime_error("Pizarra no válida.");
     Writer p;
     p.real(file.camera.origin.x);
@@ -408,6 +478,12 @@ std::vector<std::uint8_t> encode_board(const BoardFile &file) {
     p.number(file.pen_color.argb(), 4);
     p.number(file.source_path.size(), 4);
     p.bytes({reinterpret_cast<const std::uint8_t *>(file.source_path.data()), file.source_path.size()});
+    p.number(file.background ? 1 : 0, 1);
+    if (file.background)
+        p.number(file.background->argb(), 4);
+    p.number(file.auto_text ? 1 : 0, 1);
+    p.text(file.text_font);
+    p.real(file.text_size);
     std::unordered_map<const BoardImage *, std::size_t> ids;
     std::vector<std::shared_ptr<const BoardImage>> images;
     std::unordered_set<std::uint64_t> object_ids;
@@ -432,6 +508,12 @@ std::vector<std::uint8_t> encode_board(const BoardFile &file) {
         p.number(o->id, 8);
         p.number(o->locked ? 1 : 0, 1);
         p.number(o->image ? 1 : 0, 1);
+        p.number(o->font.empty() ? 0 : 1, 1);
+        if (!o->font.empty()) {
+            p.text(o->font);
+            p.real(o->font_size);
+            p.rect(o->text_bounds);
+        }
         if (o->image) {
             p.number(ids.at(o->image.get()), 4);
             p.rect(o->image_bounds);
@@ -465,7 +547,7 @@ std::vector<std::uint8_t> encode_board(const BoardFile &file) {
     Writer w;
     const std::array<std::uint8_t, 8> magic{'E', 'P', 'B', 'O', 'A', 'R', 'D', 0};
     w.bytes(magic);
-    w.number(1, 4);
+    w.number(2, 4);
     w.number(p.data.size(), 8);
     w.number(digest(p.data), 8);
     w.bytes(p.data);
@@ -479,7 +561,8 @@ bool decode_board(std::span<const std::uint8_t> bytes, BoardFile &file, std::str
         const auto magic = r.bytes(8);
         if (magic != std::vector<std::uint8_t>{'E', 'P', 'B', 'O', 'A', 'R', 'D', 0})
             throw std::runtime_error("No es un archivo de pizarra de Elite Pen.");
-        if (r.number(4) != 1)
+        const auto version = r.number(4);
+        if (version != 1 && version != 2)
             throw std::runtime_error("Versión de pizarra no admitida.");
         const auto size = r.number(8), checksum = r.number(8);
         if (size != bytes.size() - 28 || checksum != digest(bytes.subspan(28)))
@@ -506,6 +589,24 @@ bool decode_board(std::span<const std::uint8_t> bytes, BoardFile &file, std::str
             throw std::runtime_error("Ajustes de pizarra no válidos.");
         const auto path = r.bytes(r.count(32768));
         next.source_path.assign(path.begin(), path.end());
+        if (version >= 2) {
+            const auto custom = r.number(1);
+            if (custom > 1)
+                throw std::runtime_error("Fondo no válido.");
+            if (custom) {
+                next.background = r.color();
+                if (next.background->a != 255)
+                    throw std::runtime_error("Fondo no válido.");
+            }
+            const auto enabled = r.number(1);
+            if (enabled > 1)
+                throw std::runtime_error("Modo de escritura no válido.");
+            next.auto_text = enabled != 0;
+            next.text_font = r.text();
+            next.text_size = r.real();
+            if (!std::isfinite(next.text_size) || next.text_size < 8 || next.text_size > 256)
+                throw std::runtime_error("Tamaño de texto no válido.");
+        }
         std::vector<std::shared_ptr<const BoardImage>> images;
         const auto image_count = r.count(100000);
         for (std::size_t n = 0; n < image_count; ++n) {
@@ -530,6 +631,16 @@ bool decode_board(std::span<const std::uint8_t> bytes, BoardFile &file, std::str
             if (!o.id || o.id > 1000000000 || !ids.insert(o.id).second || locked > 1 || kind > 1)
                 throw std::runtime_error("Identidad de objeto no válida.");
             o.locked = locked != 0;
+            if (version >= 2) {
+                const auto styled = r.number(1);
+                if (styled > 1)
+                    throw std::runtime_error("Estilo de texto no válido.");
+                if (styled) {
+                    o.font = r.text();
+                    o.font_size = r.real();
+                    o.text_bounds = r.rect();
+                }
+            }
             if (kind) {
                 const auto index = r.number(4);
                 if (index >= images.size())

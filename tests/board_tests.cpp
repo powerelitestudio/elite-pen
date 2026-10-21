@@ -1,6 +1,7 @@
 #include "elite_pen/board.hpp"
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <random>
 #include <thread>
 #include <windows.h>
@@ -145,6 +146,53 @@ void serialization() {
         check(!decode_board(corrupt, result, error), "mutated archive rejected");
     }
 }
+void styled_text() {
+    BoardDocument d;
+    check(d.add(stroke()) && d.add(stroke(100)), "recognition source strokes");
+    const auto original = d.objects();
+    BoardObject text;
+    text.ink.kind = Tool::Text;
+    text.ink.points = {{-50, 0}};
+    text.ink.text = L"Hola, español";
+    text.font = L"Palitoon";
+    text.font_size = 28;
+    text.text_bounds = {-50, 0, 190, 36};
+    check(d.replace(d.all_ids(), text) && d.objects().size() == 1, "conversion is one atomic replacement");
+    check(d.hit({180, 20})->id == d.objects()[0]->id && !d.hit({200, 20}), "text hit uses measured bounds");
+    check(d.undo() && d.objects() == original, "undo restores exact strokes and pressure");
+    check(d.redo() && d.objects()[0]->ink.text == text.ink.text, "redo restores text");
+    const auto id = d.objects()[0]->id;
+    const auto revision = d.revision();
+    check(!d.replace(BoardIds{id, 999999}, text) && d.revision() == revision,
+          "stale recognition cannot partially remove content");
+    check(!d.replace(BoardIds{id, id}, text), "duplicate replacement targets rejected");
+    d.lock(BoardIds{id}, true);
+    check(!d.replace(BoardIds{id}, text), "locked text is protected");
+    d.lock(BoardIds{id}, false);
+    auto transformed = transform_board_object(*d.objects()[0], text.text_bounds, {-100, 100, 380, 172});
+    check(close_enough(transformed.font_size, 56) && close_enough(transformed.bounds().left, -100),
+          "text scales and moves with selection");
+    auto f = file(d);
+    f.background = Color{20, 60, 140, 255};
+    f.auto_text = true;
+    f.text_font = L"Palitoon";
+    f.text_size = 48;
+    BoardFile recovered;
+    std::string error;
+    check(decode_board(encode_board(f), recovered, error) && recovered.background == f.background &&
+              recovered.auto_text && recovered.text_font == L"Palitoon" && recovered.text_size == 48 &&
+              recovered.objects[0]->font == L"Palitoon" && recovered.objects[0]->ink.text == text.ink.text &&
+              recovered.objects[0]->text_bounds.right == 190,
+          "font, converted text and arbitrary background survive persistence");
+    auto invalid = text;
+    invalid.font_size = std::numeric_limits<float>::quiet_NaN();
+    check(!d.replace(BoardIds{id}, invalid), "invalid text style rejected");
+    const auto fixture = std::filesystem::path(__FILE__).parent_path() / "fixtures" / "board-v1.epboard";
+    check(read_board(fixture, recovered, error, false) && recovered.objects.size() == 1 && recovered.dark &&
+              recovered.panel_scale == 200 && !recovered.background && !recovered.auto_text &&
+              recovered.text_font == L"Palitoon" && recovered.objects[0]->pressures.size() == 2,
+          "v1 fixture remains readable with safe defaults");
+}
 void persistence() {
     const auto folder = std::filesystem::temp_directory_path() /
                         (L"elite-pen-board-model-" + std::to_wstring(GetCurrentProcessId()));
@@ -181,6 +229,7 @@ void persistence() {
 int main() {
     model();
     serialization();
+    styled_text();
     persistence();
     std::cout << checks << " board checks, " << failures << " failures\n";
     return failures ? 1 : 0;

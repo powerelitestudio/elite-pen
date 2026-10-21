@@ -27,7 +27,7 @@ sobre controles se siguen hasta su liberación, sin convertirlos en tinta.
 Las secuencias no adquiridas conservan el manejo predeterminado de Windows;
 la captura de ratón no cancela por sí sola una secuencia de lápiz.
 
-`.epboard` v1 contiene cabecera, versión, tamaño y checksum FNV-1a de integridad
+`.epboard` v2 (con lectura de v1) contiene cabecera, versión, tamaño y checksum FNV-1a de integridad
 (no criptográfico), cámara, ajustes, recursos y objetos. El lector valida límites,
 IDs únicos, geometría finita, presión, tipos y longitudes antes de reemplazar el
 documento. WIC valida dimensiones reales y decodificación de las imágenes.
@@ -47,14 +47,14 @@ las claves anteriores siguen estables y el zoom conserva diez acciones contextua
 ## Panel visual de pizarra — 2.17.0
 
 El panel usa el mismo contexto Direct2D que la ventana, con iconos vectoriales
-propios sobre una cuadrícula de 24 unidades. La cabecera mide 50 px y el panel
+propios sobre una cuadrícula de 24 unidades. La cabecera mide 42 px desde 2.18, sin marca repetida, y el panel
 flota sobre el viewport; ampliar sus controles no reduce la altura del lienzo.
 El layout comparte límites entre render, ratón y lápiz. La cabecera del panel
 se dibuja después del cuerpo recortado y desplazable; sus comandos se identifican
 por ID, nunca por una coordenada que cambie al desplazar. El agarre tiene su
 propio estado de contacto, separado de la tinta.
 
-No se modifica el formato .epboard: escala/visibilidad siguen recuperándose y
+En 2.17 no se modificaba el formato .epboard: escala/visibilidad seguían recuperándose y
 posición, pin y contracción viven durante la instancia. La caché de tinta y la
 vista previa continúan independientes del panel. Estudio de referencias y
 decisiones en [WHITEBOARD_REFERENCE_STUDY.md](WHITEBOARD_REFERENCE_STUDY.md).
@@ -298,3 +298,31 @@ DWM recibe ambos rectángulos sin recentrar la miniatura. El fondo neutro de la 
 cubre el espacio exterior al monitor. La fuente lógica sigue siendo la referencia
 para tinta, congelación y foco; `F` y `D` mantienen su clamp. El cálculo es constante,
 sin capturas por cuadro ni nuevas superficies GPU.
+
+### Escritura local y fuentes — 2.18
+
+`board_recognition.cpp` crea su propio apartamento COM STA en un worker, elige un
+reconocedor de texto instalado según el idioma de Windows y convierte los puntos
+normalizados a HIMETRIC para Windows Ink. La UI sigue dibujando mientras se reconoce.
+Tras 1,4 segundos sin escribir se envía un lote de trazos Pen. Se aplica únicamente
+si generación e identidades inmutables de todos los objetos siguen vigentes.
+Desactivar, Deshacer o abrir otra pizarra invalida el trabajo pendiente. Un fallo deja
+la tinta intacta. `BoardDocument::replace` valida todos los IDs/bloqueos y confirma
+una sustitución atómica con un solo paso de historial.
+
+El texto de Board guarda familia, tamaño y caja medida con DirectWrite, sin cambiar
+`Drawable` ni el motor de anotación de escritorio. Palitoon original se incluye como
+recurso OTF y se carga en una colección DirectWrite en memoria, sin registro global
+de fuente. `NOTICE` conserva SIL OFL y autoría. El selector nativo permite otras
+familias instaladas; las recomendaciones se filtran por disponibilidad.
+
+El formato 2 añade fondo opcional, conversión, fuente/tamaño y estilo por objeto;
+se mantiene el lector del formato 1. La recuperación conserva estos ajustes y textos,
+pero el historial de deshacer continúa siendo de sesión. Una versión antigua de la
+aplicación requiere restaurar también las pizarras anteriores si se hace rollback.
+
+Los IDs de acciones 0–79 se conservan; Board añade 80–87 y mantiene 70 registros
+Win32 globales. La validación considera tres ámbitos: global, Zoom y Board. Zoom y
+Board pueden compartir teclas por ser contextos excluyentes; un atajo global se
+comprueba contra ambos. Las teclas reservadas de documento no se reasignan en Board.
+Cambiar un atajo contextual solo actualiza preferencias; no vuelve a registrar globals.

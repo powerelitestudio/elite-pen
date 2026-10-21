@@ -10,8 +10,9 @@ pantalla para Windows, desarrollada por [Power Elite Studio](https://powerelite.
 Permite explicar sobre cualquier aplicación sin convertir la presentación en una
 sucesión de ventanas y menús.
 
-> **Estado:** acceso anticipado. La versión 2.17.2 renueva la pizarra con un
-> panel flotante de iconos y conserva los toques de lápiz corregidos en 2.16.1.
+> **Estado:** acceso anticipado. La versión 2.18.0 renueva la pizarra con un
+> panel compacto de iconos, fondos de cualquier color y escritura a texto local con Palitoon.
+> Conserva los toques de lápiz corregidos en 2.16.1.
 > Incluye la pizarra editable
 > Whiteboard / Blackboard con lienzo navegable, presión del lápiz, imágenes,
 > selección y recuperación local. Conserva Zoom de enfoque, emojis y macropad.
@@ -91,6 +92,33 @@ no importa archivos `.wboard` ni integra ventanas de aplicaciones en vivo.
 El [estudio de la referencia SQLBI](docs/WHITEBOARD_REFERENCE_STUDY.md) explica
 qué se examinó y cómo se trasladó a una implementación propia.
 
+### Escritura a texto, fuentes y fondos
+
+- **A texto** es opcional y comienza desactivado. Actívalo en la caja de herramientas
+  para convertir los nuevos trazos de Lápiz al hacer una pausa de 1,4 segundos.
+  El reconocimiento utiliza Windows en este equipo; no envía la escritura a un servidor.
+  Requiere un reconocedor de escritura instalado en los idiomas de Windows.
+- **Palitoon** viene incluida y es la fuente inicial. En **Opciones → Fuente** hay
+  fuentes recomendadas disponibles en el equipo y **Todas las fuentes instaladas / tamaño**.
+  La fuente también se aplica al texto escrito con teclado.
+- **Ctrl+Z** recupera los trazos originales tras una conversión; **Ctrl+Y** la rehace.
+  Si no se reconoce texto, los trazos permanecen. Puedes corregir un texto mediante
+  **Selección → clic derecho → Editar texto**. También se pueden convertir trazos seleccionados.
+  La precisión depende de la escritura y del reconocedor de Windows.
+- **Fondo** conserva el cambio con un clic entre blanco y negro. **Color fondo** permite
+  elegir cualquier color, además de azul noche, verde pizarra o crema.
+- Fuente, tamaño, modo de conversión, textos y fondo se guardan en cada `.epboard`
+  y en la recuperación automática. Se pueden abrir las pizarras de versiones anteriores;
+  los archivos guardados en formato 2 requieren Elite Pen 2.18 o posterior.
+
+Los atajos locales iniciales son **P** (Lápiz), **R** (Resaltar), **E** (Borrador),
+**V** (Selección), **H** (Mano) y **F11** (pantalla completa). En
+**Configuración → Atajos**, las acciones **Board:** se pueden reasignar, también
+el cambio de fondo y la conversión a texto. Admiten teclas de función para macropad.
+No se permiten combinaciones duplicadas en Board, reservadas para el documento o
+ocupadas por acciones globales. Los atajos de Zoom mantienen su contexto independiente.
+Las personalizaciones globales anteriores tienen prioridad sobre los nuevos valores iniciales.
+
 ## Zoom de enfoque
 
 Pulsa **Ctrl+Shift+M** o abre **Herramientas > Zoom de enfoque**. La primera vez,
@@ -148,7 +176,7 @@ Los paquetes oficiales listos para usar se publican en
 [GitHub Releases](https://github.com/powerelitestudio/elite-pen/releases):
 
 La distribución publicada que se enlaza a continuación es 2.10.3. Los símbolos y
-tamaños nuevos, emojis, Zoom de enfoque y pizarra editable están en el código 2.17.2 y pueden compilarse con los scripts del repositorio.
+tamaños nuevos, emojis, Zoom de enfoque y pizarra editable están en el código 2.18.0 y pueden compilarse con los scripts del repositorio.
 
 - [Descargar portable 2.10.3](https://github.com/powerelitestudio/elite-pen/releases/download/v2.10.3/Elite.Pen.Portable.2.10.3.zip):
   descomprime la carpeta y ejecuta `Elite Pen.exe`.

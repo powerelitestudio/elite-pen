@@ -75,6 +75,13 @@ Invoke-Compiler ($common + @(
     '-static', '-pthread', '-lshell32', '-lole32'
 ))
 
+Invoke-Compiler ($common + @(
+    (Join-Path $repoRoot 'src\board_recognition.cpp'),
+    (Join-Path $repoRoot 'tests\board_recognition_tests.cpp'),
+    '-o', (Join-Path $outputDirectory 'elite-pen-recognition-tests.exe'),
+    '-static', '-pthread', '-lole32', '-loleaut32', '-luuid'
+))
+
 $wgcCaptureExecutable = Join-Path $outputDirectory 'wgc-capture.exe'
 Invoke-Compiler ($common + @(
     (Join-Path $repoRoot 'tests\wgc_capture.cpp'),
@@ -100,7 +107,7 @@ if (-not $TestsOnly) {
         $executable = Join-Path $outputDirectory 'Elite Pen.exe'
         $libraries = @(
             '-ld2d1', '-ldwrite', '-ld3d11', '-ldxgi', '-ldcomp', '-ldwmapi',
-            '-lcomctl32', '-lcomdlg32', '-lshell32', '-lole32', '-luuid',
+            '-lcomctl32', '-lcomdlg32', '-lshell32', '-lole32', '-loleaut32', '-luuid',
             '-lshlwapi', '-luxtheme', '-lwindowscodecs', '-luser32', '-lgdi32', '-lkernel32'
         )
         $linkFlags = @('-municode', '-mwindows', '-static', '-Wl,--gc-sections')

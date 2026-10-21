@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$ExecutablePath,[switch]$PenCompatibilityOnly,[switch]$SkipGlobalHotkeys)
+param([string]$ExecutablePath,[switch]$PenCompatibilityOnly,[switch]$SkipGlobalHotkeys,[switch]$WritingOnly,[switch]$FontPickerOnly)
 $ErrorActionPreference='Stop'
 $repoRoot=Split-Path -Parent $PSScriptRoot
 if(-not $ExecutablePath){$ExecutablePath=Join-Path $repoRoot 'build\release\Elite Pen.exe'}
@@ -10,6 +10,13 @@ using System;
 using System.Text;
 using System.Runtime.InteropServices;
 public static class BoardNative {
+ [DllImport("user32.dll")]public static extern bool GetMenuItemRect(IntPtr owner,IntPtr menu,uint position,out RECT rect);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode,EntryPoint="SendMessageW")]public static extern IntPtr SendText(IntPtr window,uint message,IntPtr w,string text);
+ [DllImport("user32.dll")]public static extern uint GetMenuItemID(IntPtr menu,int position);
+ [DllImport("user32.dll")]public static extern int GetMenuItemCount(IntPtr menu);
+ [DllImport("user32.dll")]public static extern IntPtr GetDlgItem(IntPtr window,int id);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode)]public static extern bool SetWindowText(IntPtr window,string text);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode)]public static extern IntPtr FindWindowEx(IntPtr parent,IntPtr after,string name,string title);
  [StructLayout(LayoutKind.Sequential)] public struct POINT {public int X,Y;}
  [StructLayout(LayoutKind.Sequential)] public struct RECT {public int Left,Top,Right,Bottom;}
  [StructLayout(LayoutKind.Sequential)] public struct POINTER_INFO {
@@ -52,7 +59,7 @@ public static class BoardNative {
  [DllImport("user32.dll")]public static extern void DestroySyntheticPointerDevice(IntPtr device);
  [DllImport("dwmapi.dll")]public static extern int DwmFlush();
  [DllImport("user32.dll")]public static extern bool RedrawWindow(IntPtr w,IntPtr r,IntPtr region,uint flags);
- public static IntPtr Find(uint pid,string name) {IntPtr result=IntPtr.Zero;EnumWindows((w,p)=>{uint owner;GetWindowThreadProcessId(w,out owner);if(owner!=pid)return true;var text=new StringBuilder(256);GetClassName(w,text,256);if(text.ToString()==name){result=w;return false;}return true;},IntPtr.Zero);return result;}
+ public static IntPtr Find(uint pid,string name,bool visible=false) {IntPtr result=IntPtr.Zero;EnumWindows((w,p)=>{uint owner;GetWindowThreadProcessId(w,out owner);if(owner!=pid)return true;var text=new StringBuilder(256);GetClassName(w,text,256);if(text.ToString()==name&&(!visible||IsWindowVisible(w))){result=w;return false;}return true;},IntPtr.Zero);return result;}
  public static bool Foreground(IntPtr window){uint pid;uint current=GetCurrentThreadId();uint other=GetWindowThreadProcessId(GetForegroundWindow(),out pid);bool attached=current!=other&&AttachThreadInput(current,other,true);try{ShowWindow(window,5);SetWindowPos(window,new IntPtr(-1),0,0,0,0,0x43);SetForegroundWindow(window);}finally{if(attached)AttachThreadInput(current,other,false);}if(GetForegroundWindow()!=window){keybd_event(0x12,0,0,UIntPtr.Zero);SetForegroundWindow(window);keybd_event(0x12,0,2,UIntPtr.Zero);}return GetForegroundWindow()==window;}
  // InjectSyntheticPointerInput uses coordinates relative to the virtual desktop's top-left.
  public static bool Pen(IntPtr device,int x,int y,uint flags,uint pressure){var sample=new TYPE_INFO();sample.Type=3;sample.Pen.Pointer.Type=3;sample.Pen.Pointer.Id=1;sample.Pen.Pointer.Flags=flags;sample.Pen.Pointer.Pixel=new POINT{X=x-GetSystemMetrics(76),Y=y-GetSystemMetrics(77)};sample.Pen.Mask=1;sample.Pen.Pressure=pressure;return InjectSyntheticPointerInput(device,new[]{sample},1);}
@@ -70,10 +77,10 @@ Set-Content -LiteralPath (Join-Path $sandbox 'portable.flag') -Value 'Isolated b
 Set-Content -LiteralPath (Join-Path $sandbox 'data\settings.ini') -Encoding ascii -Value "[ElitePen]`r`nHotkeySchemeVersion=2`r`nExcludePaletteFromCapture=0`r`nStartInInteractMode=1`r`nHasPalettePosition=1`r`nPaletteX=50`r`nPaletteY=50`r`nHotkeyBoardOpen=7,123`r`n"
 $oldInstance=$env:ELITE_PEN_QA_INSTANCE_ID;$oldBoard=$env:ELITE_PEN_BOARD_QA;$oldRealHotkeys=$env:ELITE_PEN_QA_REAL_HOTKEYS
 $env:ELITE_PEN_QA_INSTANCE_ID=[Guid]::NewGuid().ToString('N');$env:ELITE_PEN_BOARD_QA='1';$env:ELITE_PEN_QA_REAL_HOTKEYS='1'
-if($PenCompatibilityOnly -or $SkipGlobalHotkeys){Remove-Item Env:ELITE_PEN_QA_REAL_HOTKEYS -ErrorAction SilentlyContinue}
+if($PenCompatibilityOnly -or $SkipGlobalHotkeys -or $WritingOnly -or $FontPickerOnly){Remove-Item Env:ELITE_PEN_QA_REAL_HOTKEYS -ErrorAction SilentlyContinue}
 $failures=[Collections.Generic.List[string]]::new();$checks=0
 function Check([bool]$Condition,[string]$Message){$script:checks++;if(-not $Condition){$script:failures.Add($Message);Write-Output "FAIL: $Message"}}
-function Find([int]$ProcessId,[string]$Class){for($n=0;$n -lt 120;$n++){$w=[BoardNative]::Find([uint32]$ProcessId,$Class);if($w -ne [IntPtr]::Zero){return $w};Start-Sleep -Milliseconds 50};throw "Missing $Class"}
+function Find([int]$ProcessId,[string]$Class,[bool]$Visible=$false){for($n=0;$n -lt 120;$n++){$w=[BoardNative]::Find([uint32]$ProcessId,$Class,$Visible);if($w -ne [IntPtr]::Zero){return $w};Start-Sleep -Milliseconds 50};throw "Missing $Class"}
 function Send([IntPtr]$Window,[uint32]$Message,[long]$W=0,[long]$L=0){$result=[IntPtr]::Zero;if([BoardNative]::SendMessageTimeout($Window,$Message,[IntPtr]$W,[IntPtr]$L,2,7000,[ref]$result) -eq [IntPtr]::Zero){throw "UI command timed out: $Message"};return $result.ToInt64()}
 function Qa([int]$Offset,[long]$W=0,[int]$X=0,[int]$Y=0){return Send $script:board (0x80C8+$Offset) $W (($Y -shl 16) -bor ($X -band 0xffff))}
 function Button([int]$Command){$x=Qa 33 $Command;$y=Qa 34 $Command;if($x -lt 0 -or $y -lt 0){throw "Control $Command is outside the visible panel"};return @([int]$x,[int]$y)}
@@ -107,6 +114,119 @@ try {
  Check ([BoardNative]::IsWindowVisible($board)) 'Board opens from its global action'
  Check (-not [BoardNative]::IsWindowVisible($palette)) 'Desktop palette hides while drawing on board'
  Check ((Send $palette 0x805E) -eq 0) 'Desktop document starts unchanged'
+ if($FontPickerOnly){
+  function Menu-Choose([int]$QaOffset,[int]$Id){
+   $null=[BoardNative]::PostMessage($board,[uint32](0x80C8+$QaOffset),[IntPtr]::Zero,[IntPtr]::Zero);Wait-Frame
+   $popup=Find $app.Id '#32768' $true;$handle=Send $popup 0x1e1
+   $before=0;$found=$false
+   for($pos=0;$pos -lt [BoardNative]::GetMenuItemCount([IntPtr]$handle);$pos++){
+    $item=[BoardNative]::GetMenuItemID([IntPtr]$handle,$pos)
+    if($item -eq $Id){$found=$true;break};if($item -ne [uint32]::MaxValue -and $item -ne 0){$before++}
+   }
+   if(-not $found){throw "Missing menu item $Id"}
+   $itemRect=[BoardNative+RECT]::new()
+   if(-not [BoardNative]::GetMenuItemRect($board,[IntPtr]$handle,[uint32]$pos,[ref]$itemRect)){throw 'Menu item rectangle unavailable'}
+   $cx=[int](($itemRect.Left+$itemRect.Right)/2);$cy=[int](($itemRect.Top+$itemRect.Bottom)/2)
+   $null=[BoardNative]::Mouse($cx,$cy,2,$false);Start-Sleep -Milliseconds 80
+   $null=[BoardNative]::Mouse($cx,$cy,4,$false);Wait-Frame
+  }
+  $null=[BoardNative]::Foreground($board)
+  Check ((Qa 56) -eq 1) 'Palitoon starts as the selected font'
+  Menu-Choose 55 1
+  $fontDialog=[IntPtr]::Zero
+  for($n=0;$n -lt 120 -and $fontDialog -eq [IntPtr]::Zero;$n++){$fontDialog=[BoardNative]::Find([uint32]$app.Id,'#32770',$true);Start-Sleep -Milliseconds 50}
+  if($fontDialog -eq [IntPtr]::Zero){throw 'Visible font dialog did not open'}
+  Check ([BoardNative]::IsWindowVisible($fontDialog)) 'All installed fonts opens the native Windows font picker'
+  $fontBox=[BoardNative]::GetDlgItem($fontDialog,1136)
+  Check ($fontBox -ne [IntPtr]::Zero) 'Native font family selector is available'
+  $null=[BoardNative]::Foreground($fontDialog)
+  $fontRect=[BoardNative+RECT]::new();$null=[BoardNative]::GetWindowRect($fontBox,[ref]$fontRect)
+  $cx=[int](($fontRect.Left+$fontRect.Right)/2);$cy=$fontRect.Top+10
+  $null=[BoardNative]::Mouse($cx,$cy,2,$false);$null=[BoardNative]::Mouse($cx,$cy,4,$false);Wait-Frame
+  Key @(0x11) 0x41
+  foreach($letter in 'CONSOLAS'.ToCharArray()){Key @() ([int]$letter)}
+  Key @() 0x09;Key @() 0x0D
+  Wait-Frame;Check ((Qa 56) -eq 0) 'An installed font can replace the bundled default'
+  Tap-Command 8;$null=Qa 3 512 200 200
+  $edit=[BoardNative]::FindWindowEx($board,[IntPtr]::Zero,'EDIT',$null)
+  Check ($edit -ne [IntPtr]::Zero) 'Typed text editor opens on the board'
+  $null=[BoardNative]::SendText($edit,0xC,[IntPtr]::Zero,'Texto con fuente instalada')
+  Check ((Send $edit 0xE) -gt 0) 'Text editor receives the typed text'
+  $null=Qa 2 2;Wait-Frame
+  Check ((Qa 47) -eq 1 -and (Qa 51) -eq 0) 'Typed text uses the selected installed font'
+  Frame 'board-installed-font.png'
+  Stop-App
+  $result=[ordered]@{Checks=$checks;Failures=@($failures);Mode='NativeFontPicker';Sandbox=$sandbox;Captures=$captures}
+  $result|ConvertTo-Json -Depth 4|Set-Content -LiteralPath (Join-Path $captures 'font-picker-result.json') -Encoding utf8
+  if($failures.Count){throw "$($failures.Count) of $checks font picker checks failed"}
+  Write-Output "$checks font picker UI checks passed. Evidence: $captures";return
+ }
+ if($WritingOnly){
+  Check ((Qa 45) -eq 1) 'Embedded Palitoon is available to DirectWrite without installing a font'
+  Check ((Qa 46) -eq 0 -and (Qa 56) -eq 1) 'Conversion starts off with Palitoon selected'
+  $null=[BoardNative]::Foreground($board)
+  Key @() 0x52;Check ((Qa 42) -eq 2) 'R selects the board highlighter'
+  Key @() 0x48;Check ((Qa 54) -eq 2) 'H selects Hand'
+  $null=[BoardNative]::Foreground($board);Key @() 0x50
+  $penDeadline=[DateTime]::UtcNow.AddSeconds(3)
+  while(((Qa 42) -ne 1 -or (Qa 54) -ne 0) -and [DateTime]::UtcNow -lt $penDeadline){Start-Sleep -Milliseconds 50}
+  Check ((Qa 42) -eq 1 -and (Qa 54) -eq 0) 'P selects Pen'
+  Check ((Qa 53 84 0 124) -eq 1) 'Macropad F13 can be assigned to Hand'
+  Key @() 0x7C;Check ((Qa 54) -eq 2) 'Assigned F13 activates Hand'
+  Key @() 0x50;Key @() 0x48;Check ((Qa 54) -eq 0) 'Previous H binding stops acting after customization'
+  Check ((Qa 53 84 6 77) -eq 0) 'Board assignment cannot steal Ctrl+Shift+M focus zoom'
+  Check ((Qa 53 84 2 83) -eq 0) 'Board assignment cannot steal Ctrl+S save'
+  Check ((Qa 53 84 0 80) -eq 0) 'Duplicate board P is rejected'
+  function Write-HIL {
+   foreach($points in @(@(200,200,200,270),@(240,200,240,270),@(200,235,240,235),@(280,200,280,270),@(320,200,320,270,360,270))){
+    $null=Qa 3 512 $points[0] $points[1]
+    for($n=2;$n -lt $points.Count;$n+=2){$null=Qa 4 512 $points[$n] $points[$n+1]}
+    $null=Qa 5 512 $points[$points.Count-2] $points[$points.Count-1]
+   }
+  }
+  Write-HIL;Start-Sleep -Milliseconds 1800
+  Check ((Qa 47) -eq 0 -and (Qa 0) -eq 5) 'Original handwriting stays unchanged with conversion off'
+  $null=Qa 12;Tap-Command 34
+  Check ((Qa 46) -eq 1) 'A texto toggle enables optional recognition'
+  Write-HIL
+  $deadline=[DateTime]::UtcNow.AddSeconds(15)
+  do{Start-Sleep -Milliseconds 100;$recognized=Qa 47}while($recognized -eq 0 -and [DateTime]::UtcNow -lt $deadline -and (Qa 52))
+  Check ($recognized -eq 1 -and (Qa 0) -eq 1 -and (Qa 48) -eq 72) 'Actual Windows recognizer converts pen input into typed text'
+  Check ((Qa 51) -eq 1) 'Recognized text uses Palitoon'
+  $null=Qa 20
+  $png=[Drawing.Bitmap]::FromFile((Join-Path $sandbox 'data\boards\qa-view.png'))
+  try{$ink=0;for($x=195;$x -lt 400;$x++){for($y=190;$y -lt 310;$y++){if($png.GetPixel($x,$y).R -lt 150){$ink++}}};Check ($ink -gt 80) 'Palitoon text renders as visible glyphs'}finally{$png.Dispose()}
+  Frame 'board-palitoon-converted.png'
+  $null=Qa 17;Check ((Qa 0) -eq 5 -and (Qa 47) -eq 0) 'Undo restores every original stroke'
+  Start-Sleep -Milliseconds 1800;Check ((Qa 47) -eq 0) 'Undo does not trigger another conversion'
+  $null=Qa 18;Check ((Qa 47) -eq 1) 'Redo restores the conversion'
+  $null=Qa 49 0xA6235F;$null=Qa 20
+  $png=[Drawing.Bitmap]::FromFile((Join-Path $sandbox 'data\boards\qa-view.png'))
+  try{$pixel=$png.GetPixel(10,10);Check ($pixel.R -eq 166 -and $pixel.G -eq 35 -and $pixel.B -eq 95) 'Arbitrary background reaches actual exported pixels'}finally{$png.Dispose()}
+  $null=Qa 14;$null=Qa 6
+  Stop-App;Start-App
+  Check ((Qa 50) -eq 0xA6235F -and (Qa 47) -eq 1 -and (Qa 51) -eq 1 -and (Qa 46) -eq 1) 'Recovery retains custom background, Palitoon, typed text and mode'
+  $null=[BoardNative]::Foreground($board);Key @() 0x7C;Check ((Qa 54) -eq 2) 'Customized macropad shortcut persists after restart'
+  Tap-Command 13;Check ((Qa 50) -eq -1) 'One-click white/black removes the custom background'
+  $firstDark=Qa 10;Tap-Command 13;Check ((Qa 10) -ne $firstDark -and (Qa 50) -eq -1) 'One-click white/black continues alternating'
+  $null=Qa 15;Check ((Qa 50) -eq 0xA6235F -and (Qa 47) -eq 1) 'Named file restores custom color and styled text'
+  Tap-Command 34;Check ((Qa 46) -eq 0) 'Conversion can be disabled again'
+  $null=Send $palette 0x312 3;Check ((Qa 10) -eq 0 -and (Qa 50) -eq -1) 'Existing Whiteboard action returns a custom background to white'
+  $null=Send $palette 0x312 8;Check ((Qa 10) -eq 1) 'Existing Blackboard action remains available'
+  $null=Qa 15;Tap-Command 34
+  Frame 'board-custom-background.png'
+  $null=Qa 12;Tap-Command 2;Tap-Command 34;Write-HIL;Tap-Command 34
+  Start-Sleep -Milliseconds 2000
+  Check ((Qa 47) -eq 0 -and (Qa 0) -eq 5) 'Disabling recognition discards pending results without deleting ink'
+  Tap-Command 34;Write-HIL;$null=Qa 12
+  Start-Sleep -Milliseconds 2000
+  Check ((Qa 0) -eq 0) 'A new document cannot receive recognition from the previous board'
+  Stop-App
+  $result=[ordered]@{Checks=$checks;Failures=@($failures);Mode='HandwritingFontsColorsShortcuts';Sandbox=$sandbox;Captures=$captures}
+  $result|ConvertTo-Json -Depth 4|Set-Content -LiteralPath (Join-Path $captures 'writing-result.json') -Encoding utf8
+  if($failures.Count){throw "$($failures.Count) of $checks writing checks failed"}
+  Write-Output "$checks writing UI checks passed. Evidence: $captures";return
+ }
  if($PenCompatibilityOnly){
   Check ([BoardNative]::Foreground($board)) 'Compatibility test owns foreground focus';Wait-Frame
   $top=[int](Qa 7)
@@ -153,7 +273,7 @@ try {
   Check ($fullImage.GetPixel(50,$fullImage.Height-10).R -lt 30) 'Fullscreen bottom edge contains canvas, not a status strip'
  }finally{$fullImage.Dispose()}
  Tap-Command 30
- Check ((Qa 43) -eq 0 -and (Qa 7) -eq 50) 'Toolbox button exits fullscreen and restores the header'
+ Check ((Qa 43) -eq 0 -and (Qa 7) -eq 42) 'Toolbox button exits fullscreen and restores the header'
  $restored=[BoardNative+RECT]::new();$null=[BoardNative]::GetWindowRect($board,[ref]$restored)
  Check ($restored.Left -eq $windowed.Left -and $restored.Top -eq $windowed.Top -and $restored.Right -eq $windowed.Right -and $restored.Bottom -eq $windowed.Bottom) 'Fullscreen restores the previous window position and size'
  Tap-Command 30;Key @() 0x1B
@@ -228,7 +348,7 @@ try {
   Check ((Qa 23) -eq $scale) "Panel retains requested scale $scale"
   $p=Button 2;Check ($p[0] -gt 0 -and $p[1] -gt 50) "Pen tool remains visible at scale $scale"
  }
- Check ((Qa 7) -eq 50) 'Panel enlargement preserves the canvas viewport height'
+ Check ((Qa 7) -eq 42) 'Panel enlargement preserves the canvas viewport height'
  Frame 'whiteboard-panel-300.png'
  $null=Qa 11;Wait-Frame;Check ((Qa 10) -eq 1) 'Blackboard changes the background'
  $null=Qa 20;$black=[Drawing.Bitmap]::FromFile((Join-Path $sandbox 'data\boards\qa-view.png'));try{Check ($black.GetPixel(10,10).R -lt 30) 'Blackboard renders a dark background'}finally{$black.Dispose()}

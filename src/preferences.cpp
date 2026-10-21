@@ -221,7 +221,8 @@ Preferences PreferencesStore::load() const {
         L"HotkeyZoomFreeze", L"HotkeyZoomFullscreen", L"HotkeyZoomLens",
         L"HotkeyZoomDocked", L"HotkeyZoomCycleView", L"HotkeyZoomInvert",
         L"HotkeyZoomOverview", L"HotkeyZoomIn", L"HotkeyZoomOut",
-        L"HotkeyZoomEdit"
+        L"HotkeyZoomEdit",
+        L"HotkeyBoardPen", L"HotkeyBoardHighlighter", L"HotkeyBoardEraser", L"HotkeyBoardSelect", L"HotkeyBoardHand", L"HotkeyBoardFullscreen", L"HotkeyBoardBackground", L"HotkeyBoardInkToText"
     }};
     for (std::size_t index = 0; index < hotkey_keys.size(); ++index) {
         result.hotkeys[index] = read_hotkey(path_, hotkey_keys[index],
@@ -250,6 +251,12 @@ Preferences PreferencesStore::load() const {
                 break;
             }
         }
+    }
+    for (std::size_t index = kBoardHotkeyBegin; index < kHotkeyActionCount; ++index) {
+        if (reserved_board_binding(result.hotkeys[index])) result.hotkeys[index] = {};
+        for (std::size_t other = 0; other < index && result.hotkeys[index].virtual_key; ++other)
+            if (hotkey_scopes_overlap(index, other) && result.hotkeys[index] == result.hotkeys[other])
+                result.hotkeys[index] = {};
     }
     return result;
 }
@@ -348,7 +355,8 @@ bool PreferencesStore::save(const Preferences& preferences) const {
         "HotkeyZoomFreeze", "HotkeyZoomFullscreen", "HotkeyZoomLens",
         "HotkeyZoomDocked", "HotkeyZoomCycleView", "HotkeyZoomInvert",
         "HotkeyZoomOverview", "HotkeyZoomIn", "HotkeyZoomOut",
-        "HotkeyZoomEdit"
+        "HotkeyZoomEdit",
+        "HotkeyBoardPen", "HotkeyBoardHighlighter", "HotkeyBoardEraser", "HotkeyBoardSelect", "HotkeyBoardHand", "HotkeyBoardFullscreen", "HotkeyBoardBackground", "HotkeyBoardInkToText"
     }};
     for (std::size_t index = 0; index < hotkey_keys.size(); ++index) {
         content << hotkey_keys[index] << '=' << preferences.hotkeys[index].modifiers

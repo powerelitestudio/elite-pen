@@ -1,4 +1,33 @@
-# Informe de calidad — Elite Pen 2.17.2
+# Informe de calidad — Elite Pen 2.18.0
+
+
+## Escritura a texto, fuentes, fondos y atajos — 2.18.0
+
+Validación local: 2026-10-21.
+
+- Release sin errores ni advertencias. Núcleo, preferencias y rendimiento CPU aprobados;
+  **417 comprobaciones de modelo/persistencia**, incluida lectura de una muestra v1,
+  estilo de texto, fondo arbitrario, sustitución atómica y recuperación de tinta con Undo.
+- **33 comprobaciones de escritura en interfaz**: reconocedor real de Windows en español,
+  Palitoon en memoria, modo inicial apagado, conversión tras pausa, deshacer/rehacer,
+  píxeles del fondo, guardado/recuperación, F13 personalizado, protección de Ctrl+S y
+  Ctrl+Shift+M, cancelación al desactivar y aislamiento al crear otro documento.
+- **10 comprobaciones del selector de fuentes** con el diálogo real de Windows,
+  selección de Consolas e inserción de texto; captura inspeccionada.
+- **86 comprobaciones de regresión de Board**: Windows Ink sintético (1 down, 10 updates,
+  1 up, presión 64–864), ratón de compatibilidad, panel 300 %, pantalla completa,
+  selección, capturas, exportación y recuperación. Cierre Board/Idle con código 0.
+- El ensayo aislado de reconocimiento convierte trazos en texto con el motor español
+  instalado. La precisión depende de la escritura; estas pruebas no sustituyen una
+  nueva comprobación física con la XP-Pen. Si no hay texto reconocido, se conserva tinta.
+- Palitoon original OTF: SHA-256 `D7C747CE8207DA6BAB68AEDBC728199D23994331CFB0E6303FA1E1D5AFEADDE6`.
+  Copyright de metadatos: Daniel Maciel; SIL OFL 1.1 completa en `NOTICE` y `resources/fonts/OFL.txt`.
+- Build, portable e instalación 2.18.0: SHA-256 `E93536675CE118FFE7926A10F217993EC2824B4AA4196064DB26503A547CE734`.
+  Respaldo verificado: `backups/update-2.18.0-20261021-122614`. INI antes/después con hash idéntico.
+  La app se encontró cerrada al instalar y se abrió después con Board en pantalla completa.
+  La recuperación conserva el único objeto de la sesión: al normalizar ambos archivos
+  con el lector actual, el documento coincide exactamente con el respaldo previo.
+- Evidencia local: `artifacts/board-2.18.0/` y `artifacts/qa/board-captures/`, ignoradas por Git.
 
 ## Pantalla completa de pizarra — 2.17.2
 

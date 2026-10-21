@@ -1,6 +1,6 @@
 // Independent native board. The screen overlay remains an independent document.
 namespace board_ui {
-constexpr UINT_PTR kSaveTimer = 0xB01, kCaptureTimer = 0xB02;
+constexpr UINT_PTR kSaveTimer = 0xB01, kCaptureTimer = 0xB02, kRecognitionTimer = 0xB03;
 constexpr UINT kQa = WM_APP + 200;
 constexpr std::array<Color, 8> kColors{
     {kBlack, {255, 255, 255, 255}, kYellow, kBlue, kRed, kGreen, kPurple, {249, 115, 22, 255}}};
@@ -166,6 +166,15 @@ void icon(ID2D1DeviceContext *c, ID2D1SolidColorBrush *brush, int id, RectF boun
         path({{21, 15}, {15, 15}, {15, 21}});
         path({{9, 21}, {9, 15}, {3, 15}});
         break;
+    case 33:
+        c->DrawRectangle({3, 4, 21, 20}, brush, 1.6F);
+        line(4, 17, 19, 6, 4);
+        break;
+    case 34:
+        path({{3, 18}, {7, 7}, {11, 18}});
+        line(5, 14, 9, 14);
+        path({{14, 7}, {22, 7}, {18, 7}, {18, 19}});
+        break;
     case 29:
         line(4, 19, 20, 5);
         break;
@@ -291,6 +300,9 @@ class BoardWindow final : public WindowBase {
     explicit BoardWindow(Controller &c) : WindowBase(c) {}
     ~BoardWindow() override {
         flush();
+        font_collection_.Reset();
+        if (font_factory_ && font_loader_)
+            font_factory_->UnregisterFontFileLoader(font_loader_.Get());
         if (edit_)
             DestroyWindow(edit_);
     }
@@ -328,6 +340,19 @@ class BoardWindow final : public WindowBase {
     Drag drag_{Drag::None};
     Color color_{kBlack};
     float thickness_{4};
+    std::optional<Color> background_;
+    bool auto_text_{};
+    std::wstring text_font_{L"Palitoon"};
+    float text_size_{28};
+    ComPtr<IDWriteFactory5> font_factory_;
+    ComPtr<IDWriteInMemoryFontFileLoader> font_loader_;
+    ComPtr<IDWriteFontCollection1> font_collection_;
+    std::future<BoardRecognition> recognition_;
+    BoardObjects pending_ink_, recognizing_ink_;
+    std::uint64_t ink_at_{}, recognition_generation_{}, recognizing_generation_{};
+    std::wstring recognizing_font_;
+    float recognizing_size_{};
+    std::optional<BoardObject> editing_text_;
     bool dark_{}, pressure_{true}, grid_{}, capturing_{}, pointer_{}, pointer_controls_{}, toolbar_{true},
         fullscreen_{}, panel_drag_{}, panel_moved_{}, panel_pinned_{true}, panel_collapsed_{};
     int scale_{100}, toolbar_scroll_{};
@@ -350,6 +375,7 @@ class BoardWindow final : public WindowBase {
     std::size_t cache_count_{};
     BoardCamera cache_camera_{};
     bool cache_dark_{}, cache_grid_{};
+    std::optional<Color> cache_background_;
     ComPtr<ID2D1Bitmap1> cache_;
     std::vector<ImageCache> images_;
     std::size_t image_bytes_{};
@@ -371,6 +397,15 @@ class BoardWindow final : public WindowBase {
     void file_menu();
     void options_menu();
     void context_menu(PointF p);
+    void initialize_font();
+    void font_menu();
+    void background_menu();
+    void set_background(Color color);
+    void recognition_tick();
+    void cancel_recognition();
+    BoardObject make_text(std::wstring text, PointF position, Color color, const std::wstring &font,
+                          float size);
+    ComPtr<IDWriteTextFormat> text_format(const std::wstring &font, float size);
     void changed(const wchar_t *status = nullptr);
     BoardFile snapshot() const;
     void collect_save();
@@ -416,6 +451,208 @@ class BoardWindow final : public WindowBase {
     void draw_object(ID2D1DeviceContext *, DrawableRenderResources &, const BoardObject &);
 };
 
+void BoardWindow::initialize_font() {
+    auto *factory = controller_.graphics().dwrite();
+    if (!factory || FAILED(factory->QueryInterface(IID_PPV_ARGS(font_factory_.GetAddressOf()))))
+        return;
+    const HRSRC resource = FindResourceW(nullptr, MAKEINTRESOURCEW(201), RT_RCDATA);
+    const HGLOBAL loaded = resource ? LoadResource(nullptr, resource) : nullptr;
+    const void *data = loaded ? LockResource(loaded) : nullptr;
+    if (!data || FAILED(font_factory_->CreateInMemoryFontFileLoader(font_loader_.GetAddressOf())))
+        return;
+    if (FAILED(font_factory_->RegisterFontFileLoader(font_loader_.Get()))) {
+        font_loader_.Reset();
+        return;
+    }
+    ComPtr<IDWriteFontFile> file;
+    ComPtr<IDWriteFontSetBuilder1> builder;
+    ComPtr<IDWriteFontSet> set;
+    if (SUCCEEDED(font_loader_->CreateInMemoryFontFileReference(
+            factory, data, SizeofResource(nullptr, resource), nullptr, file.GetAddressOf())) &&
+        SUCCEEDED(font_factory_->CreateFontSetBuilder(builder.GetAddressOf())) &&
+        SUCCEEDED(builder->AddFontFile(file.Get())) && SUCCEEDED(builder->CreateFontSet(set.GetAddressOf())))
+        font_factory_->CreateFontCollectionFromFontSet(set.Get(), font_collection_.GetAddressOf());
+}
+ComPtr<IDWriteTextFormat> BoardWindow::text_format(const std::wstring &font, float size) {
+    ComPtr<IDWriteTextFormat> format;
+    controller_.graphics().dwrite()->CreateTextFormat(
+        font.c_str(), font == L"Palitoon" ? font_collection_.Get() : nullptr, DWRITE_FONT_WEIGHT_NORMAL,
+        DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, size, L"es-CO", format.GetAddressOf());
+    if (format)
+        format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+    return format;
+}
+BoardObject BoardWindow::make_text(std::wstring value, PointF position, Color color, const std::wstring &font,
+                                   float size) {
+    BoardObject object;
+    object.ink.kind = Tool::Text;
+    object.ink.color = color;
+    object.ink.width = 4;
+    object.ink.points = {position};
+    object.ink.text = std::move(value);
+    object.font = font;
+    object.font_size = size;
+    auto format = text_format(font, size);
+    ComPtr<IDWriteTextLayout> layout;
+    DWRITE_TEXT_METRICS metrics{};
+    if (format && SUCCEEDED(controller_.graphics().dwrite()->CreateTextLayout(
+                      object.ink.text.c_str(), static_cast<UINT32>(object.ink.text.size()), format.Get(),
+                      1000000, 1000000, layout.GetAddressOf())))
+        layout->GetMetrics(&metrics);
+    object.text_bounds = {position.x, position.y,
+                          position.x + std::max(1.0F, metrics.widthIncludingTrailingWhitespace),
+                          position.y + std::max(size, metrics.height)};
+    return object;
+}
+void BoardWindow::font_menu() {
+    commit_text();
+    static constexpr std::array<const wchar_t *, 7> recommended{
+        L"Palitoon", L"Segoe UI", L"Calibri", L"Aptos", L"Arial", L"Comic Sans MS", L"Consolas"};
+    ComPtr<IDWriteFontCollection> installed;
+    controller_.graphics().dwrite()->GetSystemFontCollection(installed.GetAddressOf());
+    std::vector<std::pair<int, std::wstring>> entries{{0, L"Recomendadas para la pizarra"}};
+    for (std::size_t n = 0; n < recommended.size(); ++n) {
+        UINT32 index{};
+        BOOL exists{};
+        if (installed)
+            installed->FindFamilyName(recommended[n], &index, &exists);
+        if (n == 0 || exists)
+            entries.push_back({100 + static_cast<int>(n),
+                               std::wstring(recommended[n]) + (text_font_ == recommended[n] ? L" ✓" : L"")});
+    }
+    entries.push_back({0, L""});
+    entries.push_back({1, L"Todas las fuentes instaladas / tamaño…"});
+    entries.push_back({0, L"Tamaño del texto"});
+    for (int size : {20, 28, 36, 48, 64})
+        entries.push_back({1000 + size, std::to_wstring(size) + L" px" +
+                                            (text_size_ == static_cast<float>(size) ? L" ✓" : L"")});
+    const int id = menu(entries);
+    if (id >= 100 && id < 107)
+        text_font_ = recommended[static_cast<std::size_t>(id - 100)];
+    else if (id >= 1020 && id <= 1064)
+        text_size_ = static_cast<float>(id - 1000);
+    else if (id == 1) {
+        LOGFONTW font{};
+        wcsncpy_s(font.lfFaceName, text_font_.c_str(), _TRUNCATE);
+        const HDC screen = GetDC(window_);
+        const int dpi = GetDeviceCaps(screen, LOGPIXELSY);
+        ReleaseDC(window_, screen);
+        font.lfHeight = -static_cast<LONG>(text_size_ * static_cast<float>(dpi) / 96);
+        CHOOSEFONTW chooser{};
+        chooser.lStructSize = sizeof(chooser);
+        chooser.hwndOwner = window_;
+        chooser.lpLogFont = &font;
+        chooser.Flags = CF_SCREENFONTS | CF_INITTOLOGFONTSTRUCT | CF_FORCEFONTEXIST | CF_LIMITSIZE;
+        chooser.nSizeMin = 6;
+        chooser.nSizeMax = 192;
+        if (!ChooseFontW(&chooser))
+            return;
+        text_font_ = font.lfFaceName;
+        text_size_ = std::clamp(static_cast<float>(chooser.iPointSize) * (96.0F / 720), 8.0F, 256.0F);
+    } else
+        return;
+    changed(
+        (L"Fuente: " + text_font_ + L" · " + std::to_wstring(static_cast<int>(text_size_)) + L" px").c_str());
+}
+void BoardWindow::set_background(Color color) {
+    color.a = 255;
+    background_ = color;
+    dark_ = (299 * static_cast<int>(color.r) + 587 * color.g + 114 * color.b) < 128000;
+    if (color_ == kBlack || color_ == Color{245, 245, 247, 255})
+        color_ = dark_ ? Color{245, 245, 247, 255} : kBlack;
+    cache_.Reset();
+    changed(L"Color de fondo guardado · Fondo sigue alternando blanco / negro");
+}
+void BoardWindow::background_menu() {
+    const int id = menu({{1, L"Elegir cualquier color…"},
+                         {0, L""},
+                         {2, L"Blanco"},
+                         {3, L"Negro"},
+                         {4, L"Azul noche"},
+                         {5, L"Verde pizarra"},
+                         {6, L"Crema"}});
+    static constexpr std::array<Color, 5> colors{{{255, 255, 255, 255},
+                                                  {17, 20, 27, 255},
+                                                  {23, 37, 84, 255},
+                                                  {20, 61, 48, 255},
+                                                  {255, 248, 230, 255}}};
+    if (id >= 2 && id <= 6) {
+        set_background(colors[static_cast<std::size_t>(id - 2)]);
+        return;
+    }
+    if (id != 1)
+        return;
+    static COLORREF custom[16]{};
+    const auto color = background_.value_or(dark_ ? Color{17, 20, 27, 255} : Color{255, 255, 255, 255});
+    CHOOSECOLORW chooser{};
+    chooser.lStructSize = sizeof(chooser);
+    chooser.hwndOwner = window_;
+    chooser.rgbResult = RGB(color.r, color.g, color.b);
+    chooser.lpCustColors = custom;
+    chooser.Flags = CC_RGBINIT | CC_FULLOPEN;
+    if (ChooseColorW(&chooser))
+        set_background(
+            {GetRValue(chooser.rgbResult), GetGValue(chooser.rgbResult), GetBValue(chooser.rgbResult), 255});
+}
+void BoardWindow::cancel_recognition() {
+    ++recognition_generation_;
+    pending_ink_.clear();
+}
+void BoardWindow::recognition_tick() {
+    if (drag_ != Drag::None || edit_)
+        return;
+    if (recognition_.valid() && recognition_.wait_for(std::chrono::seconds(0)) == std::future_status::ready) {
+        auto result = recognition_.get();
+        const bool current =
+            recognizing_generation_ == recognition_generation_ &&
+            std::all_of(recognizing_ink_.begin(), recognizing_ink_.end(), [&](const auto &o) {
+                return !o->locked && std::find(document_.objects().begin(), document_.objects().end(), o) !=
+                                         document_.objects().end();
+            });
+        if (current) {
+            BoardIds ids;
+            for (const auto &o : recognizing_ink_)
+                ids.push_back(o->id);
+            if (!result.text.empty()) {
+                const auto bounds = document_.selection_bounds(ids);
+                auto text =
+                    make_text(std::move(result.text), {bounds.left, bounds.top},
+                              recognizing_ink_.front()->ink.color, recognizing_font_, recognizing_size_);
+                if (document_.replace(ids, std::move(text))) {
+                    selected_.clear();
+                    changed(L"Escritura convertida · Ctrl+Z recupera los trazos · clic derecho para editar "
+                            L"texto");
+                }
+            } else {
+                status_ =
+                    result.error.empty() ? L"No se reconoció texto; se conserva tu escritura" : result.error;
+                invalidate();
+            }
+        }
+        recognizing_ink_.clear();
+    }
+    if (recognition_.valid() || pending_ink_.empty() || monotonic_milliseconds() - ink_at_ < 1400)
+        return;
+    recognizing_ink_ = std::move(pending_ink_);
+    pending_ink_.clear();
+    std::erase_if(recognizing_ink_, [&](const auto &o) {
+        return o->locked || std::find(document_.objects().begin(), document_.objects().end(), o) ==
+                                document_.objects().end();
+    });
+    if (recognizing_ink_.empty())
+        return;
+    std::vector<std::vector<PointF>> strokes;
+    for (const auto &o : recognizing_ink_)
+        strokes.push_back(o->ink.points);
+    recognizing_generation_ = recognition_generation_;
+    recognizing_font_ = text_font_;
+    recognizing_size_ = text_size_;
+    recognition_ = std::async(std::launch::async,
+                              [strokes = std::move(strokes)] { return recognize_board_ink(strokes); });
+    status_ = L"Reconociendo escritura en este equipo…";
+    invalidate();
+}
+
 bool BoardWindow::initialize() {
     RECT bounds{100, 80, 1500, 980};
     HMONITOR monitor = MonitorFromWindow(controller_.palette()->hwnd(), MONITOR_DEFAULTTONEAREST);
@@ -426,10 +663,12 @@ bool BoardWindow::initialize() {
         const int margin = std::max(10, static_cast<int>((bounds.right - bounds.left) / 18));
         InflateRect(&bounds, -margin, -margin);
     }
-    if (!create(L"ElitePenBoardWindow", L"Elite Pen · Whiteboard / Blackboard",
-                WS_EX_APPWINDOW | WS_EX_NOREDIRECTIONBITMAP, WS_OVERLAPPEDWINDOW, bounds) ||
+    if (!create(L"ElitePenBoardWindow", L"Elite Pen · Board", WS_EX_APPWINDOW | WS_EX_NOREDIRECTIONBITMAP,
+                WS_OVERLAPPEDWINDOW, bounds) ||
         !initialize_surface(controller_.graphics()))
         return false;
+    initialize_font();
+    SetTimer(window_, board_ui::kRecognitionTimer, 200, nullptr);
     apply_premium_window_chrome(window_);
     DragAcceptFiles(window_, TRUE);
     recovery_ = controller_.board_directory() / L"recovery.epboard";
@@ -489,6 +728,10 @@ BoardFile BoardWindow::snapshot() const {
     file.objects = document_.objects();
     file.camera = camera_;
     file.dark = dark_;
+    file.background = background_;
+    file.auto_text = auto_text_;
+    file.text_font = text_font_;
+    file.text_size = text_size_;
     file.pressure = pressure_;
     file.grid = grid_;
     file.panel_scale = static_cast<std::uint32_t>(scale_);
@@ -580,9 +823,14 @@ bool BoardWindow::load(const std::filesystem::path &path, bool recovery) {
             error("La pizarra contiene una imagen dañada o no admitida.");
             return false;
         }
+    cancel_recognition();
     document_.restore(std::move(file.objects));
     camera_ = file.camera;
     dark_ = file.dark;
+    background_ = file.background;
+    auto_text_ = file.auto_text;
+    text_font_ = file.text_font;
+    text_size_ = file.text_size;
     pressure_ = file.pressure;
     grid_ = file.grid;
     scale_ = static_cast<int>(file.panel_scale);
@@ -646,6 +894,7 @@ void BoardWindow::open() {
 void BoardWindow::new_board() {
     if (!archive())
         return;
+    cancel_recognition();
     document_.restore({});
     selected_.clear();
     images_.clear();
@@ -663,14 +912,14 @@ void BoardWindow::layout() {
         return;
     }
     const float width = static_cast<float>(surface_.width()), height = static_cast<float>(surface_.height());
-    toolbar_height_ = fullscreen_ ? 0.0F : 50.0F;
+    toolbar_height_ = fullscreen_ ? 0.0F : 42.0F;
     const auto add = [&](int id, const wchar_t *name, float x, float y, float w, float h) {
         buttons_.push_back({id, name, {x, y, x + w, y + h}});
     };
     if (!fullscreen_) {
-        add(1, L"Archivo", 148, 8, 32, 34);
-        add(21, L"Guardar · Ctrl+S", 186, 8, 32, 34);
-        add(14, L"Opciones · tamaño del panel", 224, 8, 32, 34);
+        add(1, L"Archivo", 10, 4, 32, 34);
+        add(21, L"Guardar · Ctrl+S", 48, 4, 32, 34);
+        add(14, L"Opciones · tamaño del panel", 86, 4, 32, 34);
         add(18, L"Alejar", width - 174, 8, 32, 34);
         add(19, L"Acercar", width - 82, 8, 32, 34);
         add(20, L"Encuadrar todo", width - 44, 8, 32, 34);
@@ -681,7 +930,7 @@ void BoardWindow::layout() {
     const float panel_width = std::min(344 * s, width - 24);
     const int columns = std::clamp(static_cast<int>((panel_width / s - 24) / 52), 2, 6);
     const float cell = (panel_width / s - 24) / static_cast<float>(columns);
-    const int rows = (16 + columns - 1) / columns;
+    const int rows = (18 + columns - 1) / columns;
     toolbar_total_ = (42 + static_cast<float>(rows) * 54 + 168) * s;
     const float panel_height =
         panel_collapsed_ ? 38 * s : std::min(toolbar_total_, height - (fullscreen_ ? 24.0F : 90.0F));
@@ -696,8 +945,12 @@ void BoardWindow::layout() {
     panel_body_ = {panel_bounds_.left, panel_bounds_.top + 38 * s, panel_bounds_.right, panel_bounds_.bottom};
     add(31, L"Opciones · tamaño del panel", panel_bounds_.right - 131 * s, panel_bounds_.top + 4 * s, 29 * s,
         29 * s);
-    add(30, fullscreen_ ? L"Salir de pantalla completa · F11 / Esc" : L"Pantalla completa · F11",
-        panel_bounds_.right - 99 * s, panel_bounds_.top + 4 * s, 29 * s, 29 * s);
+    const auto full_label =
+        (fullscreen_ ? std::wstring(L"Salir de pantalla completa · ")
+                     : std::wstring(L"Pantalla completa · ")) +
+        hotkey_text(
+            controller_.preferences().hotkeys[static_cast<std::size_t>(HotkeyAction::BoardFullscreen)]);
+    add(30, full_label.c_str(), panel_bounds_.right - 99 * s, panel_bounds_.top + 4 * s, 29 * s, 29 * s);
     add(24, L"Fijar / mover el panel", panel_bounds_.right - 67 * s, panel_bounds_.top + 4 * s, 29 * s,
         29 * s);
     add(25, L"Contraer / desplegar panel", panel_bounds_.right - 35 * s, panel_bounds_.top + 4 * s, 29 * s,
@@ -710,7 +963,7 @@ void BoardWindow::layout() {
         add(id, name, panel_bounds_.left + x * s,
             panel_bounds_.top + y * s - static_cast<float>(toolbar_scroll_), w * s, h * s);
     };
-    static constexpr std::array<std::pair<int, const wchar_t *>, 16> tools{{{2, L"Lápiz"},
+    static constexpr std::array<std::pair<int, const wchar_t *>, 18> tools{{{2, L"Lápiz"},
                                                                             {3, L"Resaltar"},
                                                                             {4, L"Borrador"},
                                                                             {5, L"Selección"},
@@ -725,7 +978,9 @@ void BoardWindow::layout() {
                                                                             {10, L"Captura"},
                                                                             {11, L"Deshacer"},
                                                                             {12, L"Rehacer"},
-                                                                            {13, L"Fondo"}}};
+                                                                            {13, L"Fondo"},
+                                                                            {33, L"Color fondo"},
+                                                                            {34, L"A texto"}}};
     for (std::size_t n = 0; n < tools.size(); ++n)
         item(tools[n].first, tools[n].second,
              12 + static_cast<float>(n % static_cast<std::size_t>(columns)) * cell,
@@ -791,8 +1046,10 @@ void BoardWindow::control_up() {
 int BoardWindow::menu(const std::vector<std::pair<int, std::wstring>> &entries) {
     HMENU popup = CreatePopupMenu();
     for (const auto &[id, label] : entries) {
-        if (!id)
+        if (!id && label.empty())
             AppendMenuW(popup, MF_SEPARATOR, 0, nullptr);
+        else if (!id)
+            AppendMenuW(popup, MF_STRING | MF_GRAYED, 0, label.c_str());
         else
             AppendMenuW(popup, MF_STRING, static_cast<UINT_PTR>(id), label.c_str());
     }
@@ -887,11 +1144,20 @@ void BoardWindow::options_menu() {
     std::vector<std::pair<int, std::wstring>> e{
         {1, pressure_ ? L"✓ Presión del lápiz" : L"Presión del lápiz"},
         {2, grid_ ? L"✓ Cuadrícula" : L"Cuadrícula"},
-        {3, L"Pantalla completa\tF11"},
+        {3,
+         L"Pantalla completa\t" +
+             hotkey_text(
+                 controller_.preferences().hotkeys[static_cast<std::size_t>(HotkeyAction::BoardFullscreen)])},
         {4, L"Ocultar herramientas\tTab"},
         {0, L""}};
     for (const int size : {80, 100, 125, 150, 200, 300})
         e.push_back({size, L"Panel al " + std::to_wstring(size) + L" %" + (scale_ == size ? L" ✓" : L"")});
+    e.push_back({0, L""});
+    e.push_back({7, auto_text_ ? L"✓ Convertir escritura a texto" : L"Convertir escritura a texto"});
+    e.push_back(
+        {8, L"Fuente: " + text_font_ + L" · " + std::to_wstring(static_cast<int>(text_size_)) + L" px…"});
+    e.push_back({9, L"Color de fondo…"});
+    e.push_back({10, L"Personalizar atajos de teclado…"});
     e.push_back({0, L""});
     e.push_back({5, L"Limpiar pizarra…"});
     e.push_back({6, L"Ayuda de controles"});
@@ -914,10 +1180,19 @@ void BoardWindow::options_menu() {
         changed();
     } else if (id == 5 && MessageBoxW(window_, L"¿Limpiar la pizarra? Puedes deshacer esta acción.",
                                       L"Elite Pen", MB_YESNO | MB_ICONQUESTION) == IDYES) {
+        cancel_recognition();
         document_.clear();
         selected_.clear();
         changed();
-    } else if (id == 6)
+    } else if (id == 7)
+        command(34);
+    else if (id == 8)
+        font_menu();
+    else if (id == 9)
+        background_menu();
+    else if (id == 10)
+        controller_.show_board_shortcuts_window();
+    else if (id == 6)
         MessageBoxW(window_,
                     L"Lápiz: presión por punto con Windows Ink.\nEspacio + "
                     L"arrastrar, botón central o Mano: "
@@ -982,21 +1257,33 @@ void BoardWindow::command(int id) {
         break;
     case 11:
         commit_text();
+        cancel_recognition();
         document_.undo();
         selected_.clear();
         changed();
         break;
     case 12:
+        cancel_recognition();
         document_.redo();
         selected_.clear();
         changed();
         break;
     case 13:
+        background_.reset();
         dark_ = !dark_;
         if (color_ == kBlack || color_ == Color{245, 245, 247, 255})
             color_ = dark_ ? Color{245, 245, 247, 255} : kBlack;
         cache_.Reset();
         changed();
+        break;
+    case 33:
+        background_menu();
+        break;
+    case 34:
+        cancel_recognition();
+        auto_text_ = !auto_text_;
+        changed(auto_text_ ? L"A texto activado · escribe y haz una pausa · Deshacer recupera tus trazos"
+                           : L"Caligrafía original · conversión desactivada");
         break;
     case 14:
     case 31:
@@ -1245,13 +1532,31 @@ void BoardWindow::context_menu(PointF p) {
         selected_ = {hit->id};
     if (selected_.empty())
         return;
-    const int id = menu({{1, L"Duplicar\tCtrl+D"},
-                         {2, L"Traer al frente"},
-                         {3, L"Enviar al fondo"},
-                         {4, L"Bloquear"},
-                         {5, L"Desbloquear"},
-                         {6, L"Eliminar\tSupr"}});
-    if (id == 1)
+    std::vector<std::pair<int, std::wstring>> entries;
+    if (selected_.size() == 1 && hit && !hit->locked && hit->ink.kind == Tool::Text)
+        entries.push_back({7, L"Editar texto…"});
+    entries.push_back({8, L"Convertir trazos seleccionados a texto"});
+    const std::vector<std::pair<int, std::wstring>> standard{
+        {1, L"Duplicar\tCtrl+D"}, {2, L"Traer al frente"}, {3, L"Enviar al fondo"},
+        {4, L"Bloquear"},         {5, L"Desbloquear"},     {6, L"Eliminar\tSupr"}};
+    entries.insert(entries.end(), standard.begin(), standard.end());
+    const int id = menu(entries);
+    if (id == 7 && hit) {
+        commit_text();
+        text(hit->ink.points.front());
+        if (edit_) {
+            editing_text_ = *hit;
+            SetWindowTextW(edit_, hit->ink.text.c_str());
+            SendMessageW(edit_, EM_SETSEL, 0, -1);
+        }
+    } else if (id == 8) {
+        cancel_recognition();
+        for (const auto &o : document_.objects())
+            if (!o->locked && o->ink.kind == Tool::Pen &&
+                std::find(selected_.begin(), selected_.end(), o->id) != selected_.end())
+                pending_ink_.push_back(o);
+        ink_at_ = 0;
+    } else if (id == 1)
         document_.duplicate(selected_);
     else if (id == 2 || id == 3)
         document_.reorder(selected_, id == 2);
@@ -1388,9 +1693,14 @@ void BoardWindow::finish(PointF view, float pressure) {
         if (ink.kind == Tool::Emoji && distance(ink.points.front(), ink.points.back()) < 5 / camera_.zoom)
             ink.points.back() = {ink.points.front().x + 72 / camera_.zoom,
                                  ink.points.front().y + 72 / camera_.zoom};
-        if (document_.add(std::move(*preview_)))
+        const bool recognize = auto_text_ && ink.kind == Tool::Pen;
+        if (document_.add(std::move(*preview_))) {
+            if (recognize) {
+                pending_ink_.push_back(document_.objects().back());
+                ink_at_ = monotonic_milliseconds();
+            }
             changed();
-        else
+        } else
             status_ = L"No se pudo añadir el trazo";
     } else if (drag_ == Drag::Move || drag_ == Drag::Resize) {
         if (distance(start_, view) > 1 && document_.transform(selected_, selection_start_, selection_target_))
@@ -1491,15 +1801,17 @@ void BoardWindow::commit_text() {
     DestroyWindow(edit_);
     edit_ = nullptr;
     if (!value.empty()) {
-        BoardObject object;
-        object.ink.kind = Tool::Text;
-        object.ink.color = color_;
-        object.ink.width = thickness_;
-        object.ink.points = {text_position_};
-        object.ink.text = std::move(value);
-        if (document_.add(std::move(object)))
+        const auto font = editing_text_ && !editing_text_->font.empty() ? editing_text_->font : text_font_;
+        const auto size =
+            editing_text_ && !editing_text_->font.empty() ? editing_text_->font_size : text_size_;
+        const auto color = editing_text_ ? editing_text_->ink.color : color_;
+        auto object = make_text(std::move(value), text_position_, color, font, size);
+        const bool ok = editing_text_ ? document_.replace(BoardIds{editing_text_->id}, std::move(object))
+                                      : document_.add(std::move(object));
+        if (ok)
             changed();
     }
+    editing_text_.reset();
     SetFocus(window_);
 }
 LRESULT CALLBACK BoardWindow::edit_proc(HWND window, UINT message, WPARAM wparam, LPARAM lparam, UINT_PTR,
@@ -1512,6 +1824,7 @@ LRESULT CALLBACK BoardWindow::edit_proc(HWND window, UINT message, WPARAM wparam
     if (message == WM_KEYDOWN && wparam == VK_ESCAPE) {
         DestroyWindow(window);
         board->edit_ = nullptr;
+        board->editing_text_.reset();
         SetFocus(board->hwnd());
         return 0;
     }
@@ -1553,16 +1866,44 @@ bool BoardWindow::execute(HotkeyAction a) {
         return true;
     }
     switch (a) {
+    case HotkeyAction::BoardPen:
+        command(2);
+        break;
+    case HotkeyAction::BoardHighlighter:
+        command(3);
+        break;
+    case HotkeyAction::BoardEraser:
+        command(4);
+        break;
+    case HotkeyAction::BoardSelect:
+        command(5);
+        break;
+    case HotkeyAction::BoardHand:
+        command(6);
+        break;
+    case HotkeyAction::BoardFullscreen:
+        toggle_fullscreen();
+        break;
+    case HotkeyAction::BoardBackground:
+        command(13);
+        break;
+    case HotkeyAction::BoardInkToText:
+        command(34);
+        break;
     case HotkeyAction::Interact:
         mode_ = mode_ == Mode::Ink ? Mode::Select : Mode::Ink;
         break;
     case HotkeyAction::Whiteboard:
-        if (dark_)
+        if (dark_ || background_) {
+            dark_ = true;
             command(13);
+        }
         break;
     case HotkeyAction::Blackboard:
-        if (!dark_)
+        if (!dark_ || background_) {
+            dark_ = false;
             command(13);
+        }
         break;
     case HotkeyAction::Undo:
         command(11);
@@ -1572,6 +1913,7 @@ bool BoardWindow::execute(HotkeyAction a) {
         break;
     case HotkeyAction::Clear:
         if (MessageBoxW(window_, L"¿Limpiar la pizarra? Puedes deshacer.", L"Elite Pen", MB_YESNO) == IDYES) {
+            cancel_recognition();
             document_.clear();
             changed();
         }
@@ -1715,6 +2057,16 @@ void BoardWindow::draw_object(ID2D1DeviceContext *context, DrawableRenderResourc
         return;
     }
     const auto &ink = object.ink;
+    if (!object.font.empty()) {
+        auto format = text_format(object.font, std::clamp(object.font_size * camera_.zoom, .1F, 100000.0F));
+        if (format) {
+            const auto a = camera_.to_view({object.text_bounds.left, object.text_bounds.top});
+            resources.brush->SetColor(d2d_color(ink.color));
+            context->DrawTextW(ink.text.c_str(), static_cast<UINT32>(ink.text.size()), format.Get(),
+                               D2D1::RectF(a.x, a.y, a.x + 1000000, a.y + 1000000), resources.brush.Get());
+        }
+        return;
+    }
     if ((ink.kind == Tool::Pen || ink.kind == Tool::Highlighter) && !object.pressures.empty()) {
         resources.brush->SetColor(d2d_color(ink.color, ink.kind == Tool::Highlighter ? .35F : 1));
         if (ink.points.size() == 1) {
@@ -1747,7 +2099,7 @@ bool BoardWindow::update_cache() {
                       cache_->GetPixelSize().width == width && cache_->GetPixelSize().height == height &&
                       cache_camera_.origin.x == camera_.origin.x &&
                       cache_camera_.origin.y == camera_.origin.y && cache_camera_.zoom == camera_.zoom &&
-                      cache_dark_ == dark_ && cache_grid_ == grid_;
+                      cache_dark_ == dark_ && cache_grid_ == grid_ && cache_background_ == background_;
     if (same && cache_revision_ == document_.revision())
         return true;
     if (!same) {
@@ -1777,7 +2129,7 @@ bool BoardWindow::update_cache() {
     const bool append = same && document_.append_only() && cache_revision_ + 1 == document_.revision() &&
                         cache_count_ + 1 == document_.objects().size();
     if (!append) {
-        context->Clear(D2D1::ColorF(dark_ ? 0x11141B : 0xFFFFFF));
+        context->Clear(background_ ? d2d_color(*background_) : D2D1::ColorF(dark_ ? 0x11141B : 0xFFFFFF));
         if (grid_) {
             resources.brush->SetColor(D2D1::ColorF(dark_ ? 0x303440 : 0xE6E9EF));
             float step = 40 * camera_.zoom;
@@ -1807,6 +2159,7 @@ bool BoardWindow::update_cache() {
     cache_count_ = document_.objects().size();
     cache_camera_ = camera_;
     cache_dark_ = dark_;
+    cache_background_ = background_;
     cache_grid_ = grid_;
     return true;
 }
@@ -1837,8 +2190,6 @@ void BoardWindow::render_controls(ID2D1DeviceContext *context, DrawableRenderRes
         brush->SetColor(theme_color(theme.line));
         context->DrawLine({0, toolbar_height_ - .5F},
                           {static_cast<float>(surface_.width()), toolbar_height_ - .5F}, brush);
-        label(L"ELITE PEN", {18, 5, 140, 23}, 10, theme.violet_strong);
-        label(L"Pizarra", {18, 21, 140, 46}, 17, theme.text);
         label(std::to_wstring(static_cast<int>(camera_.zoom * 100)) + L" %",
               {static_cast<float>(surface_.width()) - 144, 8, static_cast<float>(surface_.width()) - 84, 42},
               12, theme.text, true);
@@ -1883,7 +2234,8 @@ void BoardWindow::render_controls(ID2D1DeviceContext *context, DrawableRenderRes
                  tool_ != Tool::Arrow) ||
                 (id == 8 && mode_ == Mode::Ink && tool_ == Tool::Text) ||
                 (id == 9 && mode_ == Mode::Ink && tool_ == Tool::Emoji) || (id == 22 && pressure_) ||
-                (id == 23 && grid_) || (id == 24 && panel_pinned_) || (id == 30 && fullscreen_) ||
+                (id == 34 && auto_text_) || (id == 33 && background_.has_value()) || (id == 23 && grid_) ||
+                (id == 24 && panel_pinned_) || (id == 30 && fullscreen_) ||
                 (id == 26 && mode_ == Mode::Ink && tool_ == Tool::Rectangle) ||
                 (id == 27 && mode_ == Mode::Ink && tool_ == Tool::Ellipse) ||
                 (id == 28 && mode_ == Mode::Ink && tool_ == Tool::Arrow) ||
@@ -1988,7 +2340,8 @@ void BoardWindow::render() {
     if (cached)
         context->DrawBitmap(cache_.Get());
     else {
-        resources.brush->SetColor(D2D1::ColorF(dark_ ? 0x11141B : 0xFFFFFF));
+        resources.brush->SetColor(background_ ? d2d_color(*background_)
+                                              : D2D1::ColorF(dark_ ? 0x11141B : 0xFFFFFF));
         context->FillRectangle(D2D1::RectF(0, 0, viewport().x, viewport().y), resources.brush.Get());
         const auto a = camera_.to_world({0, 0}), b = camera_.to_world(viewport());
         for (const auto &object : document_.objects())
@@ -2078,6 +2431,10 @@ LRESULT BoardWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
     case WM_ERASEBKGND:
         return 1;
     case WM_TIMER:
+        if (wparam == board_ui::kRecognitionTimer) {
+            recognition_tick();
+            return 0;
+        }
         if (wparam == board_ui::kSaveTimer) {
             autosave();
             return 0;
@@ -2208,7 +2565,15 @@ LRESULT BoardWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
         return 0;
     }
     case WM_KEYDOWN: {
+        for (std::size_t n = kBoardHotkeyBegin; n < kHotkeyActionCount; ++n) {
+            const auto action = static_cast<HotkeyAction>(n);
+            if (controller_.matches_hotkey(action, wparam)) {
+                execute(action);
+                return 0;
+            }
+        }
         const bool ctrl = board_ui::down(VK_CONTROL), shift = board_ui::down(VK_SHIFT);
+        const bool extra = board_ui::down(VK_MENU) || board_ui::down(VK_LWIN) || board_ui::down(VK_RWIN);
         if (wparam == VK_ESCAPE) {
             if (drag_ != Drag::None)
                 cancel();
@@ -2221,16 +2586,12 @@ LRESULT BoardWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
                 hide();
             return 0;
         }
-        if (wparam == VK_F11) {
-            toggle_fullscreen();
-            return 0;
-        }
-        if (wparam == VK_TAB) {
+        if (wparam == VK_TAB && !ctrl && !shift && !extra) {
             toolbar_ = !toolbar_;
             changed();
             return 0;
         }
-        if (ctrl) {
+        if (ctrl && !extra && (!shift || wparam == 'S' || wparam == 'Z')) {
             switch (wparam) {
             case 'S':
                 save(shift);
@@ -2265,27 +2626,13 @@ LRESULT BoardWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
             default:
                 break;
             }
-        } else {
+        } else if (!ctrl && !shift && !extra) {
             switch (wparam) {
             case VK_DELETE:
                 if (document_.remove(selected_)) {
                     selected_.clear();
                     changed();
                 }
-                return 0;
-            case 'P':
-                set_tool(Tool::Pen);
-                return 0;
-            case 'E':
-                set_tool(Tool::Eraser);
-                return 0;
-            case 'V':
-                mode_ = Mode::Select;
-                invalidate();
-                return 0;
-            case 'H':
-                mode_ = Mode::Hand;
-                invalidate();
                 return 0;
             case '0':
                 command(20);
@@ -2331,7 +2678,7 @@ LRESULT BoardWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
     // Only isolated QA processes opt into test messages; normal user sessions
     // ignore them.
     wchar_t enabled[2]{};
-    if (message >= board_ui::kQa && message < board_ui::kQa + 50 &&
+    if (message >= board_ui::kQa && message < board_ui::kQa + 64 &&
         GetEnvironmentVariableW(L"ELITE_PEN_BOARD_QA", enabled, 2) == 1) {
         switch (message - board_ui::kQa) {
         case 0:
@@ -2465,6 +2812,49 @@ LRESULT BoardWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
             return fullscreen_;
         case 44:
             return static_cast<LRESULT>(std::lround(viewport().y));
+        case 45: {
+            UINT32 index{};
+            BOOL exists{};
+            if (font_collection_)
+                font_collection_->FindFamilyName(L"Palitoon", &index, &exists);
+            return exists;
+        }
+        case 46:
+            return auto_text_;
+        case 47:
+            return static_cast<LRESULT>(
+                std::count_if(document_.objects().begin(), document_.objects().end(),
+                              [](const auto &o) { return o->ink.kind == Tool::Text; }));
+        case 48:
+            for (const auto &o : document_.objects())
+                if (o->ink.kind == Tool::Text && !o->ink.text.empty())
+                    return o->ink.text.front();
+            return 0;
+        case 49:
+            set_background({static_cast<std::uint8_t>(wparam >> 16), static_cast<std::uint8_t>(wparam >> 8),
+                            static_cast<std::uint8_t>(wparam), 255});
+            return 1;
+        case 50:
+            return background_ ? static_cast<LRESULT>(background_->argb() & 0xffffff) : -1;
+        case 51:
+            for (const auto &o : document_.objects())
+                if (o->ink.kind == Tool::Text)
+                    return o->font == L"Palitoon";
+            return 0;
+        case 52:
+            return recognition_.valid() || !pending_ink_.empty();
+        case 53:
+            return controller_.set_hotkey_binding(static_cast<HotkeyAction>(wparam),
+                                                  {LOWORD(lparam), HIWORD(lparam)});
+        case 54:
+            return static_cast<LRESULT>(mode_);
+        case 55:
+            font_menu();
+            return 1;
+        case 56:
+            return text_font_ == L"Palitoon";
+        case 57:
+            return static_cast<LRESULT>(text_size_);
         default:
             break;
         }

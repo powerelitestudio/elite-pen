@@ -79,11 +79,33 @@ int main() {
     check(std::filesystem::path(store.path()).parent_path() == data,
           "portable settings stay beside the executable");
     const Preferences fresh = store.load();
+    const auto board_hand = static_cast<std::size_t>(HotkeyAction::BoardHand);
+    const auto board_pen = static_cast<std::size_t>(HotkeyAction::BoardPen);
+    check(hotkey_binding_available(kDefaultHotkeys, board_hand, {0, VK_F13}), "board supports macropad function keys");
+    check(!hotkey_binding_available(kDefaultHotkeys, board_hand, {0, 'P'}), "duplicate board key rejected");
+    check(hotkey_binding_available(kDefaultHotkeys, board_pen, {0, 'P'}), "board and zoom may share exclusive context keys");
+    check(!hotkey_binding_available(kDefaultHotkeys, board_hand, {MOD_CONTROL | MOD_SHIFT, 'M'}), "board cannot steal focus zoom");
+    check(!hotkey_binding_available(kDefaultHotkeys, board_hand, {MOD_CONTROL, 'S'}), "board cannot steal save");
+    check(!hotkey_binding_available(kDefaultHotkeys, static_cast<std::size_t>(HotkeyAction::Pen), {0, VK_F11}), "global cannot steal board fullscreen");
+    check(!hotkey_binding_available(kDefaultHotkeys, static_cast<std::size_t>(HotkeyAction::Pen), {MOD_CONTROL, 'Z'}), "global cannot steal board undo");
+    std::filesystem::create_directories(data);
+    {
+        std::ofstream existing{std::filesystem::path(store.path())};
+        existing << "[ElitePen]\r\nHotkeySchemeVersion=2\r\nHotkeyPen=0,122\r\nHotkeyBoardHand=0,124\r\nHotkeyBoardInkToText=2,83\r\n";
+    }
+    WritePrivateProfileStringW(nullptr, nullptr, nullptr, store.path().c_str());
+    const auto custom = store.load();
+    check(custom.hotkeys[static_cast<std::size_t>(HotkeyAction::Pen)] == HotkeyBinding{0, VK_F11} &&
+          custom.hotkeys[static_cast<std::size_t>(HotkeyAction::BoardFullscreen)] == HotkeyBinding{}, "new defaults preserve existing global F11");
+    check(custom.hotkeys[board_hand] == HotkeyBinding{0, VK_F13}, "board macropad assignment loads");
+    check(custom.hotkeys[static_cast<std::size_t>(HotkeyAction::BoardInkToText)] == HotkeyBinding{}, "reserved saved board assignment rejected");
+    std::filesystem::remove(store.path());
+
     check(fresh.geometry_size == 1 && !fresh.geometry_pinned &&
           !fresh.geometry_visible && !fresh.has_geometry_position,
           "figures start at 100 percent as an optional transient panel");
-    check(kHotkeyActionCount == 80 && kGlobalHotkeyActionCount == 70,
-          "board adds one assignable action while ten classic zoom actions stay contextual");
+    check(kHotkeyActionCount == 88 && kGlobalHotkeyActionCount == 70,
+          "eight board actions and ten zoom actions are contextual; global IDs remain stable");
     check(fresh.hotkeys[static_cast<std::size_t>(HotkeyAction::BoardOpen)] == HotkeyBinding{},
           "board shortcut starts unassigned to preserve existing combinations");
     check(fresh.emoji_size == 1 && !fresh.emoji_pinned && !fresh.emoji_visible &&

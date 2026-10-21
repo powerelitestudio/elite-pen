@@ -429,3 +429,13 @@ zoom congelado y Zoom editable) comparten el renderizador y el historial por obj
 - No hay bloqueos de interfaz durante trazos largos ni crecimiento de memoria sin
   limite.
 - El paquete portable inicia en Windows 10 22H2 y Windows 11 sin runtimes externos.
+
+## Board 2.18 — claridad y personalización
+
+- Título Elite Pen · Board, cabecera compacta y sin marca duplicada; F11 mantiene el lienzo inmersivo.
+- A texto: conversión local opcional tras una pausa al escribir con Lápiz. Empieza apagada.
+  Palitoon incluida como primera fuente, recomendadas y selector de cualquier fuente instalada.
+  Texto editable y Deshacer para recuperar los trazos en la sesión actual.
+- Color fondo: color arbitrario y preajustes. Fondo conserva el clic blanco/negro.
+- Configuración de los ocho atajos Board con detección de conflictos y acceso directo desde Opciones.
+- Guardado formato 2 con lectura de documentos anteriores y recuperación de ajustes y textos.

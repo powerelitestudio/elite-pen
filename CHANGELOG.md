@@ -1,5 +1,17 @@
 # Historial de cambios
 
+## 2.18.0 — 2026-10-21
+
+- Board incorpora conversión opcional de escritura a texto con el reconocedor local de Windows;
+  conserva la tinta si no se reconoce y permite recuperar los trazos con Deshacer.
+- Palitoon incluida bajo SIL OFL; fuente y tamaño elegibles, recomendadas y selector de fuentes instaladas.
+  Texto reconocido editable mediante Selección y clic derecho.
+- Título `Elite Pen · Board`, cabecera compacta sin marca repetida y controles a la izquierda.
+- Fondos de cualquier color y preajustes, conservando el cambio rápido blanco/negro.
+- Ocho atajos locales de Board personalizables con protección de combinaciones reservadas/globales.
+  Cambiar una asignación local no vuelve a registrar los atajos globales.
+- Formato de pizarra 2 con fuente, texto, fondo y modo de conversión; lectura compatible con formato 1.
+
 ## 2.17.2 — 2026-10-21
 
 - F11 muestra únicamente el lienzo y la caja de herramientas: oculta título,

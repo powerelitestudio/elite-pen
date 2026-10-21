@@ -115,6 +115,8 @@ enum class HotkeyAction : std::uint8_t {
     ZoomIn,
     ZoomOut,
     ZoomEdit,
+    BoardPen, BoardHighlighter, BoardEraser, BoardSelect, BoardHand,
+    BoardFullscreen, BoardBackground, BoardInkToText,
     Count
 };
 
@@ -129,6 +131,33 @@ inline constexpr std::size_t kHotkeyActionCount =
     static_cast<std::size_t>(HotkeyAction::Count);
 inline constexpr std::size_t kGlobalHotkeyActionCount =
     static_cast<std::size_t>(HotkeyAction::ZoomFreeze);
+inline constexpr std::size_t kBoardHotkeyBegin = static_cast<std::size_t>(HotkeyAction::BoardPen);
+constexpr int hotkey_scope(std::size_t index) {
+    return index < kGlobalHotkeyActionCount ? 0 : (index < kBoardHotkeyBegin ? 1 : 2);
+}
+constexpr bool hotkey_scopes_overlap(std::size_t a, std::size_t b) {
+    return hotkey_scope(a) == 0 || hotkey_scope(b) == 0 || hotkey_scope(a) == hotkey_scope(b);
+}
+constexpr bool reserved_board_binding(HotkeyBinding b) {
+    if (!b.virtual_key) return false;
+    if (b.virtual_key == VK_ESCAPE || b.virtual_key == VK_TAB || b.virtual_key == VK_SPACE) return true;
+    if (b.modifiers == 0 && (b.virtual_key == VK_DELETE || b.virtual_key == '0' ||
+        b.virtual_key == VK_OEM_PLUS || b.virtual_key == VK_OEM_MINUS)) return true;
+    if (b.modifiers == (MOD_CONTROL | MOD_SHIFT)) return b.virtual_key == 'S' || b.virtual_key == 'Z';
+    if (b.modifiers == MOD_CONTROL)
+        for (auto key : {'S', 'O', 'N', 'V', 'Z', 'Y', 'A', 'D'})
+            if (b.virtual_key == static_cast<UINT>(key)) return true;
+    return false;
+}
+inline bool hotkey_binding_available(const std::array<HotkeyBinding, kHotkeyActionCount> &bindings,
+                                     std::size_t index, HotkeyBinding binding) {
+    if (index >= bindings.size()) return false;
+    if (!binding.virtual_key || binding == bindings[index]) return true;
+    if ((index >= kBoardHotkeyBegin || index < kGlobalHotkeyActionCount) && reserved_board_binding(binding)) return false;
+    for (std::size_t other = 0; other < bindings.size(); ++other)
+        if (other != index && hotkey_scopes_overlap(index, other) && bindings[other] == binding) return false;
+    return true;
+}
 inline constexpr int kCurrentHotkeySchemeVersion = 2;
 
 inline constexpr std::array<HotkeyBinding, kHotkeyActionCount> kDefaultHotkeys{{
@@ -191,7 +220,8 @@ inline constexpr std::array<HotkeyBinding, kHotkeyActionCount> kDefaultHotkeys{{
     {0, '0'},
     {0, VK_OEM_PLUS},
     {0, VK_OEM_MINUS},
-    {0, 'E'}
+    {0, 'E'},
+    {0, 'P'}, {0, 'R'}, {0, 'E'}, {0, 'V'}, {0, 'H'}, {0, VK_F11}, {0, 0}, {0, 0}
 }};
 
 // Defaults shipped through 2.3. Existing installations are migrated only when
@@ -249,7 +279,8 @@ inline constexpr std::array<HotkeyBinding, kHotkeyActionCount> kLegacyDefaultHot
     {0, '0'},
     {0, VK_OEM_PLUS},
     {0, VK_OEM_MINUS},
-    {0, 'E'}
+    {0, 'E'},
+    {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}, {0, 0}
 }};
 
 struct Preferences {

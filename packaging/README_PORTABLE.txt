@@ -1,4 +1,4 @@
-ELITE PEN 2.17.2 — EDICION PORTABLE
+ELITE PEN 2.18.0 — EDICION PORTABLE
 ================================
 
 Elite Pen es la herramienta de anotacion, pizarra y ampliacion de pantalla de
@@ -163,7 +163,7 @@ Configuracion.
 
 SOPORTE
 -------
-Producto de Power Elite Studio. Version 2.17.2.
+Producto de Power Elite Studio. Version 2.18.0.
 Sitio oficial: https://powerelite.studio/
 Codigo fuente: https://github.com/powerelitestudio/elite-pen
 
@@ -173,3 +173,13 @@ Elite Pen se distribuye bajo Apache License 2.0. Puedes usarlo, modificarlo y
 redistribuirlo, incluso con fines comerciales, sujeto a los terminos de LICENSE.txt.
 NOTICE conserva la atribucion del proyecto. TRADEMARKS.md explica el uso separado de
 los nombres, logotipos e identidad visual de Elite Pen y Power Elite Studio.
+
+BOARD: TEXTO, FUENTES Y COLORES (2.18)
+- A texto: convierte trazos de Lapiz tras una pausa. Es opcional y empieza apagado.
+- Palitoon viene incluida. Opciones > Fuente: recomendadas, fuentes instaladas y tamano.
+- Ctrl+Z recupera los trazos; Ctrl+Y rehace. Seleccion > clic derecho > Editar texto.
+- Reconocimiento local con Windows. Requiere un reconocedor de escritura instalado.
+- Fondo: blanco/negro con un clic. Color fondo: cualquier color y fondos recomendados.
+- Atajos de Board: P lapiz, R resaltador, E borrador, V seleccion, H mano, F11 completa.
+- Configuracion > Atajos > Board: personaliza herramientas, fondo y A texto para macropad.
+- Formato .epboard 2: abre archivos previos; los archivos nuevos requieren 2.18 o posterior.

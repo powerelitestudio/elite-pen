@@ -6,6 +6,8 @@
 #include "graphics.hpp"
 #include "history_shortcuts.hpp"
 #include "preferences.hpp"
+#include "board_recognition.hpp"
+#include <dwrite_3.h>
 
 #include <windows.h>
 #include <commctrl.h>
@@ -656,7 +658,15 @@ constexpr std::array<HotkeyInfo, kHotkeyActionCount> kHotkeyInfo{{
     {L"Zoom: vision general", L"Alterna ampliacion 1x"},
     {L"Zoom: acercar", L"Aumenta el nivel de zoom"},
     {L"Zoom: alejar", L"Reduce el nivel de zoom"},
-    {L"Zoom: editar", L"Navega y anota sobre contenido ampliado"}
+    {L"Zoom: editar", L"Navega y anota sobre contenido ampliado"},
+    {L"Board: lápiz", L"Solo en la pizarra · dibujo libre"},
+    {L"Board: resaltador", L"Solo en la pizarra · tinta translúcida"},
+    {L"Board: borrador", L"Solo en la pizarra · borra objetos"},
+    {L"Board: selección", L"Solo en la pizarra · selecciona y mueve objetos"},
+    {L"Board: mano", L"Solo en la pizarra · desplaza el lienzo"},
+    {L"Board: pantalla completa", L"Solo en la pizarra · muestra u oculta la cabecera"},
+    {L"Board: fondo", L"Solo en la pizarra · alterna blanco / negro"},
+    {L"Board: escritura a texto", L"Solo en la pizarra · convierte al terminar de escribir"}
 }};
 
 constexpr std::size_t kVisibleShortcutRows = 6;
@@ -959,6 +969,7 @@ public:
     ~SettingsWindow() override;
     bool initialize();
     void show_settings();
+    void show_board_shortcuts();
     void apply_theme();
     bool capture_registered_hotkey(HotkeyBinding binding);
 
@@ -1419,6 +1430,7 @@ public:
     void request_exit();
     void save_palette_position();
     void show_settings_window();
+    void show_board_shortcuts_window();
     void apply_capture_preference();
     void set_palette_size(int size);
     void set_control_mode(ControlMode mode);
@@ -5432,7 +5444,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.17.2",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.18.0",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
@@ -5584,7 +5596,7 @@ bool SettingsWindow::initialize() {
                                     reinterpret_cast<HMENU>(4300),
                                     GetModuleHandleW(nullptr), nullptr);
     help_ = CreateWindowW(L"STATIC",
-        L"Ayuda de Elite Pen 2.17.2. Anotación, pizarra, captura y zoom para Windows. "
+        L"Ayuda de Elite Pen 2.18.0. Anotación, pizarra, captura y zoom para Windows. "
         L"Código abierto bajo Apache License 2.0. Desarrollado por Power Elite Studio.",
         WS_CHILD | SS_OWNERDRAW, 24, 119, 540, 400, window_,
         reinterpret_cast<HMENU>(4105), GetModuleHandleW(nullptr), nullptr);
@@ -5828,7 +5840,7 @@ void SettingsWindow::paint_help(HDC dc, RECT bounds) {
     SelectObject(dc, small_font_);
     SetTextColor(dc, theme_colorref(theme.text_muted));
     RECT version{bounds.left, bounds.top + 73, bounds.right, bounds.top + 94};
-    DrawTextW(dc, L"Version 2.17.2 · Windows 10 y 11 · x64", -1, &version,
+    DrawTextW(dc, L"Version 2.18.0 · Windows 10 y 11 · x64", -1, &version,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
 
     SelectObject(dc, body_font_);
@@ -6063,7 +6075,7 @@ void SettingsWindow::finish_hotkey_capture(
     const auto action = static_cast<HotkeyAction>(capture_index);
     const HotkeyBinding binding{modifiers, virtual_key};
     if (!controller_.set_hotkey_binding(action, binding)) {
-        MessageBoxW(window_, L"La combinación ya está en uso por Elite Pen o por Windows. "
+        MessageBoxW(window_, L"La combinación está reservada o ya está en uso por Elite Pen o Windows. "
                     L"Prueba otra.", L"Atajo no disponible — Elite Pen",
                     MB_OK | MB_ICONWARNING);
         return;
@@ -6089,6 +6101,12 @@ void SettingsWindow::show_settings() {
     SetForegroundWindow(window_);
     SetFocus(active_tab_ == 0 ? capture_ :
              (active_tab_ == 1 ? tab_shortcuts_ : help_website_));
+}
+
+void SettingsWindow::show_board_shortcuts() {
+    shortcut_scroll_offset_ = kBoardHotkeyBegin;
+    show_tab(1);
+    show_settings();
 }
 
 LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
@@ -7356,7 +7374,7 @@ LRESULT ZoomInkWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam
             return 0;
         case WM_KEYDOWN:
             for (std::size_t index = kGlobalHotkeyActionCount;
-                 index < kHotkeyActionCount; ++index) {
+                 index < kBoardHotkeyBegin; ++index) {
                 const auto action = static_cast<HotkeyAction>(index);
                 if (controller_.matches_hotkey(action, wparam)) {
                     controller_.execute_hotkey(action);
@@ -9037,7 +9055,7 @@ LRESULT ZoomWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
                 return 0;
             }
             for (std::size_t index = kGlobalHotkeyActionCount;
-                 index < kHotkeyActionCount; ++index) {
+                 index < kBoardHotkeyBegin; ++index) {
                 const auto action = static_cast<HotkeyAction>(index);
                 if (controller_.matches_hotkey(action, wparam)) {
                     execute_action(action);
@@ -9547,6 +9565,7 @@ void Controller::execute_hotkey(HotkeyAction action) {
     const auto index = static_cast<std::size_t>(action);
     if (settings_ && index < preferences_.hotkeys.size() &&
         settings_->capture_registered_hotkey(preferences_.hotkeys[index])) return;
+    if (action >= HotkeyAction::BoardPen) { if (board_active()) board_->execute(action); return; }
     if (action == HotkeyAction::BoardOpen) { open_board(); return; }
     if (board_active() && board_->execute(action)) return;
     if (board_active()) board_->hide();
@@ -9970,6 +9989,12 @@ void Controller::show_settings_window() {
     if (settings_) settings_->show_settings();
 }
 
+void Controller::show_board_shortcuts_window() {
+    if (board_active()) board_->hide();
+    close_panels();
+    if (settings_) settings_->show_board_shortcuts();
+}
+
 void Controller::apply_capture_preference() {
     const DWORD affinity = preferences_.exclude_palette_from_capture
         ? WDA_EXCLUDEFROMCAPTURE : WDA_NONE;
@@ -10032,16 +10057,10 @@ void Controller::set_theme(AppTheme theme) {
 bool Controller::set_hotkey_binding(HotkeyAction action, HotkeyBinding binding) {
     const std::size_t index = static_cast<std::size_t>(action);
     if (index >= preferences_.hotkeys.size() || !palette_) return false;
-    const bool global = index < kGlobalHotkeyActionCount;
-    for (std::size_t current = 0; binding.virtual_key != 0 &&
-         current < preferences_.hotkeys.size(); ++current) {
-        const bool current_global = current < kGlobalHotkeyActionCount;
-        if (current != index && global == current_global &&
-            preferences_.hotkeys[current] == binding) return false;
-    }
+    if (!hotkey_binding_available(preferences_.hotkeys, index, binding)) return false;
     auto candidate = preferences_.hotkeys;
     candidate[index] = binding;
-    if (!palette_->apply_hotkeys(candidate)) return false;
+    if (index < kGlobalHotkeyActionCount && !palette_->apply_hotkeys(candidate)) return false;
     preferences_.hotkeys = candidate;
     save_preferences();
     return true;

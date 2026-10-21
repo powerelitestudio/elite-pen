@@ -20,7 +20,12 @@ struct BoardObject {
     std::shared_ptr<const BoardImage> image;
     RectF image_bounds{};
     bool locked{};
-    [[nodiscard]] RectF bounds() const noexcept { return image ? image_bounds : ink.bounds(); }
+    std::wstring font; // Empty for legacy text; otherwise a Board-only text style.
+    float font_size{28};
+    RectF text_bounds{};
+    [[nodiscard]] RectF bounds() const noexcept {
+        return image ? image_bounds : (!font.empty() ? text_bounds : ink.bounds());
+    }
 };
 
 using BoardObjects = std::vector<std::shared_ptr<const BoardObject>>;
@@ -53,6 +58,7 @@ class BoardDocument {
     [[nodiscard]] BoardIds all_ids() const;
     [[nodiscard]] RectF selection_bounds(std::span<const std::uint64_t> ids) const;
     bool add(BoardObject object);
+    bool replace(std::span<const std::uint64_t> ids, BoardObject object);
     bool erase(PointF point, float tolerance);
     bool remove(std::span<const std::uint64_t> ids);
     bool transform(std::span<const std::uint64_t> ids, RectF from, RectF to);
@@ -79,6 +85,10 @@ struct BoardFile {
     BoardObjects objects;
     BoardCamera camera;
     bool dark{};
+    std::optional<Color> background;
+    bool auto_text{};
+    std::wstring text_font{L"Palitoon"};
+    float text_size{28};
     bool pressure{true};
     bool grid{};
     bool panel_visible{true};
