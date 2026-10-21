@@ -1,4 +1,4 @@
-ELITE PEN 2.16.1 — EDICION PORTABLE
+ELITE PEN 2.17.0 — EDICION PORTABLE
 ================================
 
 Elite Pen es la herramienta de anotacion, pizarra y ampliacion de pantalla de
@@ -45,6 +45,9 @@ CONTROLES PRINCIPALES
 PIZARRA EDITABLE (WHITEBOARD / BLACKBOARD)
 ----------------------------------------
 - Herramientas > Pizarra editable abre una ventana con documento independiente.
+- Panel flotante con iconos, colores y muestras de grosor. Opciones: escala 80-300 %.
+  Chincheta: fijar/desbloquear; arrastra la cabecera para mover. Flecha: contraer.
+  Rueda sobre el panel: recorrer controles grandes. Tab: ocultar/mostrar.
 - Dibujo con presion de Windows Ink, figuras, texto y emojis. Fondo blanco o negro.
 - Mano, boton central o Espacio + arrastrar: mover; rueda: zoom; Encuadrar: ver todo.
 - Seleccion: clic o area; Shift: multiple; arrastrar: mover; esquina: escalar.
@@ -158,7 +161,7 @@ Configuracion.
 
 SOPORTE
 -------
-Producto de Power Elite Studio. Version 2.16.1.
+Producto de Power Elite Studio. Version 2.17.0.
 Sitio oficial: https://powerelite.studio/
 Codigo fuente: https://github.com/powerelitestudio/elite-pen
 

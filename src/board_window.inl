@@ -2,6 +2,170 @@
 namespace board_ui {
 constexpr UINT_PTR kSaveTimer = 0xB01, kCaptureTimer = 0xB02;
 constexpr UINT kQa = WM_APP + 200;
+constexpr std::array<Color, 8> kColors{
+    {kBlack, {255, 255, 255, 255}, kYellow, kBlue, kRed, kGreen, kPurple, {249, 115, 22, 255}}};
+constexpr std::array<float, 4> kWidths{2, 4, 8, 16};
+constexpr bool chrome(int id) {
+    return id == 1 || id == 14 || id == 18 || id == 19 || id == 20 || id == 21 || id == 24 || id == 25;
+}
+
+// Original 24-unit outline glyphs, rendered as vectors at every panel scale.
+void icon(ID2D1DeviceContext *c, ID2D1SolidColorBrush *brush, int id, RectF bounds) {
+    D2D1_MATRIX_3X2_F previous;
+    c->GetTransform(&previous);
+    const float side = std::min(bounds.width(), bounds.height());
+    c->SetTransform(D2D1::Matrix3x2F::Scale(side / 24, side / 24) *
+                    D2D1::Matrix3x2F::Translation((bounds.left + bounds.right - side) / 2,
+                                                  (bounds.top + bounds.bottom - side) / 2) *
+                    previous);
+    const auto line = [&](float x, float y, float a, float b, float w = 1.65F) {
+        c->DrawLine({x, y}, {a, b}, brush, w);
+        c->FillEllipse(D2D1::Ellipse({x, y}, w / 2, w / 2), brush);
+        c->FillEllipse(D2D1::Ellipse({a, b}, w / 2, w / 2), brush);
+    };
+    const auto path = [&](std::initializer_list<PointF> points, bool close = false) {
+        auto first = points.begin(), prev = first;
+        for (auto next = first + 1; next != points.end(); ++next) {
+            line(prev->x, prev->y, next->x, next->y);
+            prev = next;
+        }
+        if (close)
+            line(prev->x, prev->y, first->x, first->y);
+    };
+    switch (id) {
+    case 1:
+        path({{5, 3}, {14, 3}, {19, 8}, {19, 21}, {5, 21}}, true);
+        path({{14, 3}, {14, 8}, {19, 8}});
+        break;
+    case 2:
+        path({{6, 3}, {18, 3}, {16, 11}, {12, 19}, {8, 11}}, true);
+        line(12, 13, 12, 21);
+        line(7, 7, 17, 7);
+        break;
+    case 3:
+        path({{5, 3}, {19, 3}, {19, 10}, {16, 12}, {16, 17}, {8, 21}, {8, 12}, {5, 10}}, true);
+        line(6, 8, 18, 8);
+        line(8, 14, 16, 14);
+        break;
+    case 4:
+        path({{4, 14}, {14, 4}, {21, 11}, {11, 21}, {8, 21}}, true);
+        line(8, 10, 15, 17);
+        line(9, 21, 21, 21);
+        break;
+    case 5:
+        for (float n : {4.0F, 10.0F, 16.0F}) {
+            line(n, 4, n + 3, 4);
+            line(n, 20, n + 3, 20);
+            line(4, n, 4, n + 3);
+            line(20, n, 20, n + 3);
+        }
+        break;
+    case 6:
+        line(4, 12, 20, 12);
+        line(12, 4, 12, 20);
+        path({{9, 7}, {12, 4}, {15, 7}});
+        path({{9, 17}, {12, 20}, {15, 17}});
+        path({{7, 9}, {4, 12}, {7, 15}});
+        path({{17, 9}, {20, 12}, {17, 15}});
+        break;
+    case 7:
+        path({{12, 3}, {18, 10}, {6, 10}}, true);
+        c->DrawRectangle({3, 13, 11, 21}, brush, 1.6F);
+        c->DrawEllipse(D2D1::Ellipse({17, 17}, 4, 4), brush, 1.6F);
+        break;
+    case 8:
+        line(5, 4, 19, 4);
+        line(12, 4, 12, 21);
+        line(8, 21, 16, 21);
+        break;
+    case 9:
+        c->DrawEllipse(D2D1::Ellipse({12, 12}, 9, 9), brush, 1.6F);
+        c->FillEllipse(D2D1::Ellipse({9, 9}, 1, 1), brush);
+        c->FillEllipse(D2D1::Ellipse({15, 9}, 1, 1), brush);
+        path({{7, 14}, {9, 17}, {15, 17}, {17, 14}});
+        break;
+    case 10:
+        path({{3, 8}, {7, 8}, {9, 5}, {15, 5}, {17, 8}, {21, 8}, {21, 20}, {3, 20}}, true);
+        c->DrawEllipse(D2D1::Ellipse({12, 13}, 4, 4), brush, 1.6F);
+        break;
+    case 11:
+    case 12: {
+        const float d = id == 11 ? 1.0F : -1.0F;
+        const auto x = [&](float v) { return 12 + d * (v - 12); };
+        path({{x(8), 5}, {x(4), 9}, {x(8), 13}});
+        path({{x(5), 9}, {x(15), 9}, {x(19), 12}, {x(19), 16}, {x(16), 19}});
+        break;
+    }
+    case 13:
+        c->DrawRoundedRectangle(D2D1::RoundedRect({3, 5, 21, 19}, 3, 3), brush, 1.6F);
+        c->FillRoundedRectangle(D2D1::RoundedRect({5, 7, 12, 17}, 1, 1), brush);
+        break;
+    case 14:
+        for (float y : {6.0F, 12.0F, 18.0F})
+            line(3, y, 21, y);
+        for (auto p : {PointF{8, 6}, PointF{16, 12}, PointF{10, 18}})
+            c->FillEllipse(D2D1::Ellipse({p.x, p.y}, 2.5F, 2.5F), brush);
+        break;
+    case 15:
+        c->DrawEllipse(D2D1::Ellipse({12, 12}, 8, 8), brush, 1.6F);
+        line(8, 12, 16, 12);
+        line(12, 8, 12, 16);
+        break;
+    case 16:
+    case 18:
+        line(5, 12, 19, 12);
+        break;
+    case 17:
+    case 19:
+        line(5, 12, 19, 12);
+        line(12, 5, 12, 19);
+        break;
+    case 20:
+        path({{3, 9}, {3, 3}, {9, 3}});
+        path({{15, 3}, {21, 3}, {21, 9}});
+        path({{21, 15}, {21, 21}, {15, 21}});
+        path({{9, 21}, {3, 21}, {3, 15}});
+        break;
+    case 21:
+        path({{4, 3}, {17, 3}, {21, 7}, {21, 21}, {3, 21}, {3, 3}}, true);
+        c->DrawRectangle({7, 3, 16, 9}, brush, 1.6F);
+        c->DrawRectangle({7, 14, 17, 21}, brush, 1.6F);
+        break;
+    case 22:
+        path({{5, 16}, {9, 11}, {13, 14}, {19, 7}});
+        line(5, 20, 5, 16);
+        break;
+    case 23:
+        for (float p : {5.0F, 12.0F, 19.0F}) {
+            line(p, 3, p, 21);
+            line(3, p, 21, p);
+        }
+        break;
+    case 24:
+        path({{8, 3}, {16, 3}, {15, 10}, {19, 14}, {5, 14}, {9, 10}}, true);
+        line(12, 14, 12, 21);
+        break;
+    case 25:
+        path({{5, 9}, {12, 16}, {19, 9}});
+        break;
+    case 26:
+        c->DrawRectangle({4, 6, 20, 19}, brush, 1.6F);
+        break;
+    case 27:
+        c->DrawEllipse(D2D1::Ellipse({12, 12}, 8, 7), brush, 1.6F);
+        break;
+    case 28:
+        line(4, 19, 20, 5);
+        path({{12, 5}, {20, 5}, {20, 13}});
+        break;
+    case 29:
+        line(4, 19, 20, 5);
+        break;
+    default:
+        break;
+    }
+    c->SetTransform(previous);
+}
 std::wstring wide(const std::string &text) {
     if (text.empty())
         return {};
@@ -157,11 +321,14 @@ class BoardWindow final : public WindowBase {
     Color color_{kBlack};
     float thickness_{4};
     bool dark_{}, pressure_{true}, grid_{}, capturing_{}, pointer_{}, pointer_controls_{}, toolbar_{true},
-        fullscreen_{};
+        fullscreen_{}, panel_drag_{}, panel_moved_{}, panel_pinned_{true}, panel_collapsed_{};
     int scale_{100}, toolbar_scroll_{};
     UINT32 pointer_id_{};
     std::array<unsigned, 6> pointer_events_{};
     float toolbar_height_{}, toolbar_total_{};
+    RectF panel_bounds_{}, panel_body_{};
+    PointF panel_position_{}, panel_drag_offset_{};
+    int hover_command_{};
     PointF start_{}, last_{}, current_{};
     RectF selection_start_{}, selection_target_{};
     RECT normal_bounds_{};
@@ -184,6 +351,11 @@ class BoardWindow final : public WindowBase {
     std::optional<RECT> capture_area_;
     std::vector<Button> buttons_;
     void layout();
+    bool controls(PointF p) const;
+    void control_down(PointF p);
+    void control_move(PointF p);
+    void control_up();
+    void render_controls(ID2D1DeviceContext *, DrawableRenderResources &);
     void command(int id);
     int menu(const std::vector<std::pair<int, std::wstring>> &entries);
     void shape_menu();
@@ -280,7 +452,8 @@ void BoardWindow::hide() {
     cancel();
     if (!flush()) {
         MessageBoxW(window_,
-                    L"No se pudo guardar la recuperación. La pizarra sigue abierta para que puedas guardarla "
+                    L"No se pudo guardar la recuperación. La pizarra sigue abierta "
+                    L"para que puedas guardarla "
                     L"en otra carpeta.",
                     L"Elite Pen", MB_OK | MB_ICONERROR);
         return;
@@ -331,7 +504,8 @@ void BoardWindow::collect_save() {
 void BoardWindow::autosave() {
     collect_save();
     const auto now = monotonic_milliseconds();
-    // A continuous explanation still checkpoints completed objects at least every 15 s.
+    // A continuous explanation still checkpoints completed objects at least every
+    // 15 s.
     if (change_ == saved_change_ || saving_.valid() ||
         (now - last_edit_ < 2000 && now - last_snapshot_at_ < 15000))
         return;
@@ -476,51 +650,125 @@ void BoardWindow::layout() {
     buttons_.clear();
     if (!toolbar_) {
         toolbar_height_ = toolbar_total_ = 0;
+        panel_bounds_ = panel_body_ = {};
         return;
     }
-    const float scale = static_cast<float>(scale_) / 100, width = static_cast<float>(surface_.width());
-    const float bw = 105 * scale, bh = 33 * scale, gap = 5 * scale;
-    float x = gap, y = gap;
-    const auto add = [&](int id, const std::wstring &label, float w) {
-        if (x + w + gap > width && x > gap) {
-            x = gap;
-            y += bh + gap;
-        }
-        buttons_.push_back({id, label, {x, y, x + w, y + bh}});
-        x += w + gap;
+    const float width = static_cast<float>(surface_.width()), height = static_cast<float>(surface_.height());
+    toolbar_height_ = 50;
+    const auto add = [&](int id, const wchar_t *name, float x, float y, float w, float h) {
+        buttons_.push_back({id, name, {x, y, x + w, y + h}});
     };
-    add(1, L"Archivo", bw);
-    add(2, L"Lápiz", bw);
-    add(3, L"Resaltador", bw);
-    add(4, L"Borrador", bw);
-    add(5, L"Selección", bw);
-    add(6, L"Mano", bw);
-    add(7, L"Figuras", bw);
-    add(8, L"Texto", bw);
-    add(9, L"Emojis", bw);
-    add(10, L"Captura", bw);
-    add(11, L"Deshacer", bw);
-    add(12, L"Rehacer", bw);
-    add(13, dark_ ? L"Whiteboard" : L"Blackboard", bw);
-    add(14, L"Opciones", bw);
-    x = gap;
-    y += bh + gap;
-    for (int n = 0; n < 8; ++n)
-        add(100 + n, L"", bh);
-    add(15, L"Color…", bw * .85F);
-    add(16, L"− Trazo", bw * .85F);
-    add(17, L"+ Trazo", bw * .85F);
-    add(18, L"− Zoom", bw * .85F);
-    add(19, L"+ Zoom", bw * .85F);
-    add(20, L"Encuadrar", bw);
-    toolbar_total_ = y + bh + gap;
-    toolbar_height_ = std::min(toolbar_total_, static_cast<float>(surface_.height()) * .55F);
+    add(1, L"Archivo", 148, 8, 32, 34);
+    add(21, L"Guardar · Ctrl+S", 186, 8, 32, 34);
+    add(14, L"Opciones · tamaño del panel", 224, 8, 32, 34);
+    add(18, L"Alejar", width - 174, 8, 32, 34);
+    add(19, L"Acercar", width - 82, 8, 32, 34);
+    add(20, L"Encuadrar todo", width - 44, 8, 32, 34);
+    // Fit horizontally without reducing the requested icon size: narrow windows
+    // reflow columns, while an oversized panel scrolls vertically below its grip.
+    const float s = static_cast<float>(scale_) / 100;
+    const float panel_width = std::min(344 * s, width - 24);
+    const int columns = std::clamp(static_cast<int>((panel_width / s - 24) / 52), 2, 6);
+    const float cell = (panel_width / s - 24) / static_cast<float>(columns);
+    const int rows = (16 + columns - 1) / columns;
+    toolbar_total_ = (42 + static_cast<float>(rows) * 54 + 168) * s;
+    const float panel_height = panel_collapsed_ ? 38 * s : std::min(toolbar_total_, height - 90);
+    if (!panel_moved_)
+        panel_position_ = {width - panel_width - 16, 66};
+    panel_position_.x = std::clamp(panel_position_.x, 12.0F, std::max(12.0F, width - panel_width - 12));
+    panel_position_.y = std::clamp(panel_position_.y, 58.0F, std::max(58.0F, height - panel_height - 32));
+    panel_bounds_ = {panel_position_.x, panel_position_.y, panel_position_.x + panel_width,
+                     panel_position_.y + panel_height};
+    panel_body_ = {panel_bounds_.left, panel_bounds_.top + 38 * s, panel_bounds_.right, panel_bounds_.bottom};
+    add(24, L"Fijar / mover el panel", panel_bounds_.right - 67 * s, panel_bounds_.top + 4 * s, 29 * s,
+        29 * s);
+    add(25, L"Contraer / desplegar panel", panel_bounds_.right - 35 * s, panel_bounds_.top + 4 * s, 29 * s,
+        29 * s);
+    if (panel_collapsed_)
+        return;
     toolbar_scroll_ =
-        std::clamp(toolbar_scroll_, 0, std::max(0, static_cast<int>(toolbar_total_ - toolbar_height_)));
-    for (auto &b : buttons_) {
-        b.bounds.top -= static_cast<float>(toolbar_scroll_);
-        b.bounds.bottom -= static_cast<float>(toolbar_scroll_);
+        std::clamp(toolbar_scroll_, 0, std::max(0, static_cast<int>(toolbar_total_ - panel_height)));
+    const auto item = [&](int id, const wchar_t *name, float x, float y, float w, float h) {
+        add(id, name, panel_bounds_.left + x * s,
+            panel_bounds_.top + y * s - static_cast<float>(toolbar_scroll_), w * s, h * s);
+    };
+    static constexpr std::array<std::pair<int, const wchar_t *>, 16> tools{{{2, L"Lápiz"},
+                                                                            {3, L"Resaltar"},
+                                                                            {4, L"Borrador"},
+                                                                            {5, L"Selección"},
+                                                                            {6, L"Mano"},
+                                                                            {7, L"Figuras"},
+                                                                            {26, L"Rectángulo"},
+                                                                            {27, L"Elipse"},
+                                                                            {28, L"Flecha"},
+                                                                            {29, L"Línea"},
+                                                                            {8, L"Texto"},
+                                                                            {9, L"Emojis"},
+                                                                            {10, L"Captura"},
+                                                                            {11, L"Deshacer"},
+                                                                            {12, L"Rehacer"},
+                                                                            {13, L"Fondo"}}};
+    for (std::size_t n = 0; n < tools.size(); ++n)
+        item(tools[n].first, tools[n].second,
+             12 + static_cast<float>(n % static_cast<std::size_t>(columns)) * cell,
+             42 + static_cast<float>(n / static_cast<std::size_t>(columns)) * 54, cell - 4, 50);
+    const float y = 42 + static_cast<float>(rows) * 54;
+    const float available = panel_width / s - 24, swatch = available / 9;
+    static constexpr std::array<const wchar_t *, 8> names{L"Negro", L"Blanco", L"Amarillo", L"Azul",
+                                                          L"Rojo",  L"Verde",  L"Violeta",  L"Naranja"};
+    for (int n = 0; n < 8; ++n)
+        item(100 + n, names[static_cast<std::size_t>(n)], 12 + static_cast<float>(n) * swatch, y + 16, swatch,
+             32);
+    item(15, L"Más colores…", 12 + 8 * swatch, y + 16, swatch, 32);
+    const float chip = (available - 64) / 4;
+    for (int n = 0; n < 4; ++n)
+        item(200 + n, L"Grosor del trazo", 12 + static_cast<float>(n) * chip, y + 64, chip - 3, 34);
+    item(16, L"Reducir grosor", 12 + 4 * chip, y + 64, 30, 34);
+    item(17, L"Aumentar grosor", 44 + 4 * chip, y + 64, 30, 34);
+    item(22, L"Presión del lápiz", 12, y + 112, available / 2 - 3, 32);
+    item(23, L"Cuadrícula", 15 + available / 2, y + 112, available / 2 - 3, 32);
+}
+bool BoardWindow::controls(PointF p) const {
+    return toolbar_ && (p.y < toolbar_height_ || panel_bounds_.contains(p));
+}
+void BoardWindow::control_down(PointF p) {
+    for (const auto &b : buttons_) {
+        if (b.bounds.contains(p) && (board_ui::chrome(b.command) || panel_body_.contains(p))) {
+            command(b.command);
+            return;
+        }
     }
+    if (!panel_pinned_ && panel_bounds_.contains(p) && p.y < panel_body_.top) {
+        panel_drag_ = true;
+        panel_moved_ = true;
+        panel_drag_offset_ = {p.x - panel_position_.x, p.y - panel_position_.y};
+        if (!pointer_)
+            SetCapture(window_);
+    }
+}
+void BoardWindow::control_move(PointF p) {
+    if (panel_drag_) {
+        panel_position_ = {p.x - panel_drag_offset_.x, p.y - panel_drag_offset_.y};
+        layout();
+        invalidate();
+        return;
+    }
+    int hover = 0;
+    if (controls(p))
+        for (const auto &b : buttons_)
+            if (b.bounds.contains(p) && (board_ui::chrome(b.command) || panel_body_.contains(p))) {
+                hover = b.command;
+                break;
+            }
+    if (hover != hover_command_) {
+        hover_command_ = hover;
+        invalidate();
+    }
+}
+void BoardWindow::control_up() {
+    panel_drag_ = false;
+    if (GetCapture() == window_)
+        ReleaseCapture();
 }
 int BoardWindow::menu(const std::vector<std::pair<int, std::wstring>> &entries) {
     HMENU popup = CreatePopupMenu();
@@ -652,23 +900,32 @@ void BoardWindow::options_menu() {
         selected_.clear();
         changed();
     } else if (id == 6)
-        MessageBoxW(
-            window_,
-            L"Lápiz: presión por punto con Windows Ink.\nEspacio + arrastrar, botón central o Mano: "
-            L"desplazar.\nRueda: zoom alrededor del cursor. Shift + rueda: horizontal.\nSelección: clic o "
-            L"arrastrar un área; Shift añade o quita.\nArrastra la selección para mover; esquina inferior "
-            L"derecha para escalar.\nClic derecho: capas, bloquear, duplicar o eliminar.\nCtrl+A: "
-            L"seleccionar todo; Supr: eliminar; Ctrl+D: duplicar.\nCtrl+Z / Ctrl+Y: deshacer / rehacer. "
-            L"Ctrl+V: pegar imagen.\nTab: mostrar/ocultar panel; F11: pantalla completa.\nEsc: cancelar o "
-            L"volver al escritorio.\nLos atajos globales de Elite Pen también funcionan aquí.\nLa "
-            L"recuperación se guarda automáticamente en el equipo.",
-            L"Controles de la pizarra", MB_OK);
+        MessageBoxW(window_,
+                    L"Lápiz: presión por punto con Windows Ink.\nEspacio + "
+                    L"arrastrar, botón central o Mano: "
+                    L"desplazar.\nRueda: zoom alrededor del cursor. Shift + rueda: "
+                    L"horizontal.\nSelección: clic o "
+                    L"arrastrar un área; Shift añade o quita.\nArrastra la "
+                    L"selección para mover; esquina inferior "
+                    L"derecha para escalar.\nClic derecho: capas, bloquear, "
+                    L"duplicar o eliminar.\nCtrl+A: "
+                    L"seleccionar todo; Supr: eliminar; Ctrl+D: duplicar.\nCtrl+Z "
+                    L"/ Ctrl+Y: deshacer / rehacer. "
+                    L"Ctrl+V: pegar imagen.\nTab: mostrar/ocultar panel; F11: "
+                    L"pantalla completa.\nEsc: cancelar o "
+                    L"volver al escritorio.\nLos atajos globales de Elite Pen "
+                    L"también funcionan aquí.\nLa "
+                    L"recuperación se guarda automáticamente en el equipo.",
+                    L"Controles de la pizarra", MB_OK);
 }
 void BoardWindow::command(int id) {
-    static constexpr std::array<Color, 8> colors{
-        {kBlack, {255, 255, 255, 255}, kYellow, kBlue, kRed, kGreen, kPurple, {249, 115, 22, 255}}};
     if (id >= 100 && id < 108) {
-        color_ = colors[static_cast<std::size_t>(id - 100)];
+        color_ = board_ui::kColors[static_cast<std::size_t>(id - 100)];
+        changed();
+        return;
+    }
+    if (id >= 200 && id < 204) {
+        thickness_ = board_ui::kWidths[static_cast<std::size_t>(id - 200)];
         changed();
         return;
     }
@@ -754,6 +1011,36 @@ void BoardWindow::command(int id) {
         camera_.frame(document_.bounds(), viewport());
         changed();
         break;
+    case 21:
+        save();
+        break;
+    case 22:
+        pressure_ = !pressure_;
+        changed();
+        break;
+    case 23:
+        grid_ = !grid_;
+        cache_.Reset();
+        changed();
+        break;
+    case 24:
+        panel_pinned_ = !panel_pinned_;
+        break;
+    case 25:
+        panel_collapsed_ = !panel_collapsed_;
+        break;
+    case 26:
+        set_tool(Tool::Rectangle);
+        break;
+    case 27:
+        set_tool(Tool::Ellipse);
+        break;
+    case 28:
+        set_tool(Tool::Arrow);
+        break;
+    case 29:
+        set_tool(Tool::Line);
+        break;
     default:
         break;
     }
@@ -764,7 +1051,8 @@ void BoardWindow::command(int id) {
 
 void BoardWindow::insert_image(std::shared_ptr<const BoardImage> image) {
     if (!image) {
-        error("No se pudo insertar la imagen. Usa PNG, JPEG, BMP o una captura válida (máximo 64 "
+        error("No se pudo insertar la imagen. Usa PNG, JPEG, BMP o una captura "
+              "válida (máximo 64 "
               "megapíxeles).");
         return;
     }
@@ -782,7 +1070,8 @@ void BoardWindow::insert_image(std::shared_ptr<const BoardImage> image) {
     if (document_.add(std::move(object))) {
         selected_ = {document_.objects().back()->id};
         mode_ = Mode::Select;
-        changed(L"Imagen insertada · arrastra para mover y usa la esquina para escalar");
+        changed(L"Imagen insertada · arrastra para mover y usa la esquina para "
+                L"escalar");
     } else
         error("No se pudo añadir la imagen al documento.");
 }
@@ -1105,6 +1394,7 @@ void BoardWindow::cancel() {
     drag_ = Drag::None;
     pointer_ = false;
     pointer_controls_ = false;
+    panel_drag_ = false;
     preview_.reset();
     if (GetCapture() == window_)
         ReleaseCapture();
@@ -1114,9 +1404,16 @@ void BoardWindow::pen_samples(WPARAM wparam, bool end) {
     if (!pointer_ || GET_POINTERID_WPARAM(wparam) != pointer_id_)
         return;
     if (pointer_controls_) {
+        POINTER_PEN_INFO pen{};
+        if (panel_drag_ && GetPointerPenInfo(pointer_id_, &pen)) {
+            POINT p = pen.pointerInfo.ptPixelLocation;
+            ScreenToClient(window_, &p);
+            control_move({static_cast<float>(p.x), static_cast<float>(p.y)});
+        }
         if (end) {
             pointer_ = false;
             pointer_controls_ = false;
+            control_up();
         }
         return;
     }
@@ -1491,6 +1788,162 @@ bool BoardWindow::update_cache() {
     cache_grid_ = grid_;
     return true;
 }
+void BoardWindow::render_controls(ID2D1DeviceContext *context, DrawableRenderResources &resources) {
+    if (!toolbar_)
+        return;
+    const auto &theme = current_ui_theme();
+    auto *brush = resources.brush.Get();
+    const float s = static_cast<float>(scale_) / 100;
+    const auto fill = [&](RectF r, std::uint32_t color, float radius, float opacity = 1.0F) {
+        brush->SetColor(theme_color(color, opacity));
+        context->FillRoundedRectangle(D2D1::RoundedRect(board_ui::rect(r), radius, radius), brush);
+    };
+    const auto label = [&](const std::wstring &value, RectF r, float size, std::uint32_t color,
+                           bool center = false) {
+        auto *format = resources.text_format(controller_.graphics(), size);
+        if (!format)
+            return;
+        format->SetTextAlignment(center ? DWRITE_TEXT_ALIGNMENT_CENTER : DWRITE_TEXT_ALIGNMENT_LEADING);
+        format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
+        format->SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP);
+        brush->SetColor(theme_color(color));
+        context->DrawTextW(value.c_str(), static_cast<UINT32>(value.size()), format, board_ui::rect(r), brush,
+                           D2D1_DRAW_TEXT_OPTIONS_CLIP);
+    };
+    fill({0, 0, static_cast<float>(surface_.width()), toolbar_height_}, theme.surface_1, 0);
+    brush->SetColor(theme_color(theme.line));
+    context->DrawLine({0, toolbar_height_ - .5F},
+                      {static_cast<float>(surface_.width()), toolbar_height_ - .5F}, brush);
+    label(L"ELITE PEN", {18, 5, 140, 23}, 10, theme.violet_strong);
+    label(L"Pizarra", {18, 21, 140, 46}, 17, theme.text);
+    label(std::to_wstring(static_cast<int>(camera_.zoom * 100)) + L" %",
+          {static_cast<float>(surface_.width()) - 144, 8, static_cast<float>(surface_.width()) - 84, 42}, 12,
+          theme.text, true);
+    const auto panel = panel_bounds_;
+    // A small bounded shadow stays on the GPU; no canvas readback or CPU blur.
+    for (int n = 6; n >= 1; --n) {
+        const float d = static_cast<float>(n);
+        fill({panel.left - d, panel.top - d / 2, panel.right + d, panel.bottom + d}, 0x000000, 14 * s, .008F);
+    }
+    fill(panel, theme.surface_1, 12 * s);
+    brush->SetColor(theme_color(theme.line));
+    context->DrawRoundedRectangle(D2D1::RoundedRect(board_ui::rect(panel), 12 * s, 12 * s), brush);
+    label(panel_pinned_ ? L"HERRAMIENTAS" : L"ARRASTRA PARA MOVER",
+          {panel.left + 16 * s, panel.top + 3 * s, panel.right - 72 * s, panel.top + 35 * s}, 10 * s,
+          theme.text_soft);
+    if (!panel_collapsed_) {
+        brush->SetColor(theme_color(theme.line));
+        context->DrawLine({panel.left + 12 * s, panel_body_.top}, {panel.right - 12 * s, panel_body_.top},
+                          brush);
+    }
+    // Paint the scrollable body first; its clipping never includes the grip.
+    for (int layer = 0; layer < 2; ++layer) {
+        if (layer == 0)
+            context->PushAxisAlignedClip(board_ui::rect(panel_body_), D2D1_ANTIALIAS_MODE_ALIASED);
+        for (const auto &b : buttons_) {
+            const bool chrome = board_ui::chrome(b.command);
+            if (chrome != (layer == 1))
+                continue;
+            const int id = b.command;
+            if (!chrome && !b.bounds.intersects(panel_body_))
+                continue;
+            const bool swatch = id >= 100 && id < 108, width = id >= 200 && id < 204;
+            const bool active =
+                (id == 2 && mode_ == Mode::Ink && tool_ == Tool::Pen) ||
+                (id == 3 && mode_ == Mode::Ink && tool_ == Tool::Highlighter) ||
+                (id == 4 && mode_ == Mode::Ink && tool_ == Tool::Eraser) ||
+                (id == 5 && mode_ == Mode::Select) || (id == 6 && mode_ == Mode::Hand) ||
+                (id == 7 && mode_ == Mode::Ink &&
+                 std::find(kGeometryTools.begin(), kGeometryTools.end(), tool_) != kGeometryTools.end() &&
+                 tool_ != Tool::Rectangle && tool_ != Tool::Ellipse && tool_ != Tool::Line &&
+                 tool_ != Tool::Arrow) ||
+                (id == 8 && mode_ == Mode::Ink && tool_ == Tool::Text) ||
+                (id == 9 && mode_ == Mode::Ink && tool_ == Tool::Emoji) || (id == 22 && pressure_) ||
+                (id == 23 && grid_) || (id == 24 && panel_pinned_) ||
+                (id == 26 && mode_ == Mode::Ink && tool_ == Tool::Rectangle) ||
+                (id == 27 && mode_ == Mode::Ink && tool_ == Tool::Ellipse) ||
+                (id == 28 && mode_ == Mode::Ink && tool_ == Tool::Arrow) ||
+                (id == 29 && mode_ == Mode::Ink && tool_ == Tool::Line) ||
+                (swatch && color_ == board_ui::kColors[static_cast<std::size_t>(id - 100)]) ||
+                (width &&
+                 std::abs(thickness_ - board_ui::kWidths[static_cast<std::size_t>(id - 200)]) < .01F);
+            const bool disabled = (id == 11 && !document_.can_undo()) || (id == 12 && !document_.can_redo());
+            const auto r = b.bounds;
+            if (active)
+                fill(r, theme.violet, 7 * s, .12F);
+            else if (id == hover_command_ && !disabled)
+                fill(r, theme.text, 7 * s, .055F);
+            if (active && !swatch) {
+                brush->SetColor(theme_color(theme.violet_strong, .7F));
+                context->DrawRoundedRectangle(D2D1::RoundedRect(board_ui::rect(r), 7 * s, 7 * s), brush,
+                                              1.3F);
+            }
+            const float cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
+            if (swatch) {
+                const float radius = std::min(r.width(), r.height()) * .32F;
+                brush->SetColor(d2d_color(board_ui::kColors[static_cast<std::size_t>(id - 100)]));
+                context->FillEllipse(D2D1::Ellipse({cx, cy}, radius, radius), brush);
+                brush->SetColor(theme_color(theme.text, .15F));
+                context->DrawEllipse(D2D1::Ellipse({cx, cy}, radius, radius), brush, 1);
+                if (active) {
+                    brush->SetColor(theme_color(theme.violet_strong));
+                    context->DrawEllipse(D2D1::Ellipse({cx, cy}, radius + 3 * s, radius + 3 * s), brush,
+                                         1.8F * s);
+                }
+                continue;
+            }
+            const auto foreground = disabled ? theme.text_muted : (active ? theme.violet_strong : theme.text);
+            brush->SetColor(theme_color(foreground));
+            if (width) {
+                const float w = board_ui::kWidths[static_cast<std::size_t>(id - 200)] * .65F * s;
+                brush->SetColor(d2d_color(color_));
+                // Keep a white pen visible on the light panel.
+                if (color_.r > 235 && color_.g > 235 && color_.b > 235)
+                    brush->SetColor(theme_color(theme.text_soft));
+                context->FillRoundedRectangle(
+                    D2D1::RoundedRect({r.left + 10 * s, cy - w / 2, r.right - 10 * s, cy + w / 2}, w / 2,
+                                      w / 2),
+                    brush);
+            } else if (id == 22 || id == 23) {
+                board_ui::icon(context, brush, id,
+                               {r.left + 7 * s, cy - 10 * s, r.left + 27 * s, cy + 10 * s});
+                label(id == 22 ? L"Presión" : L"Cuadrícula",
+                      {r.left + 33 * s, r.top, r.right - 4 * s, r.bottom}, 10 * s, foreground);
+            } else {
+                const bool tool = !chrome && id != 15 && id != 16 && id != 17;
+                const float size = (id == 24 || id == 25) ? 21 * s : (chrome ? 21.0F : 22 * s);
+                const float icon_y = tool ? r.top + 17 * s : cy;
+                board_ui::icon(context, brush, id,
+                               {cx - size / 2, icon_y - size / 2, cx + size / 2, icon_y + size / 2});
+                if (tool)
+                    label(b.label, {r.left, r.top + 32 * s, r.right, r.bottom - 2 * s}, 8.5F * s, foreground,
+                          true);
+            }
+        }
+        if (layer == 0) {
+            for (const auto &b : buttons_) {
+                if (b.command == 100)
+                    label(L"COLOR",
+                          {panel.left + 16 * s, b.bounds.top - 16 * s, panel.right - 12 * s, b.bounds.top},
+                          9 * s, theme.text_soft);
+                if (b.command == 200)
+                    label(L"TRAZO  ·  " + std::to_wstring(static_cast<int>(thickness_)) + L" px",
+                          {panel.left + 16 * s, b.bounds.top - 16 * s, panel.right - 12 * s, b.bounds.top},
+                          9 * s, theme.text_soft);
+            }
+            context->PopAxisAlignedClip();
+        }
+    }
+    if (!panel_collapsed_ && toolbar_total_ > panel.height() + 1) {
+        const float track = panel_body_.height() - 12 * s,
+                    thumb = std::max(18 * s, track * panel.height() / toolbar_total_);
+        const float y =
+            panel_body_.top + 6 * s +
+            (track - thumb) * static_cast<float>(toolbar_scroll_) / (toolbar_total_ - panel.height());
+        fill({panel.right - 5 * s, y, panel.right - 2 * s, y + thumb}, theme.text_soft, 2 * s, .3F);
+    }
+}
+
 void BoardWindow::render() {
     if (!surface_.context())
         return;
@@ -1542,46 +1995,21 @@ void BoardWindow::render() {
     context->PopAxisAlignedClip();
     context->SetTransform(D2D1::Matrix3x2F::Identity());
     const auto &theme = current_ui_theme();
-    resources.brush->SetColor(theme_color(theme.surface_1));
-    context->FillRectangle(D2D1::RectF(0, 0, static_cast<float>(surface_.width()), toolbar_height_),
-                           resources.brush.Get());
-    static constexpr std::array<Color, 8> colors{
-        {kBlack, {255, 255, 255, 255}, kYellow, kBlue, kRed, kGreen, kPurple, {249, 115, 22, 255}}};
-    context->PushAxisAlignedClip(D2D1::RectF(0, 0, static_cast<float>(surface_.width()), toolbar_height_),
-                                 D2D1_ANTIALIAS_MODE_ALIASED);
-    for (const auto &b : buttons_) {
-        const bool active = (b.command == 2 && mode_ == Mode::Ink && tool_ == Tool::Pen) ||
-                            (b.command == 3 && mode_ == Mode::Ink && tool_ == Tool::Highlighter) ||
-                            (b.command == 4 && mode_ == Mode::Ink && tool_ == Tool::Eraser) ||
-                            (b.command == 5 && mode_ == Mode::Select) ||
-                            (b.command == 6 && mode_ == Mode::Hand);
-        resources.brush->SetColor(theme_color(active ? theme.violet_strong : theme.surface_3));
-        if (b.command >= 100)
-            resources.brush->SetColor(d2d_color(colors[static_cast<std::size_t>(b.command - 100)]));
-        const auto r = board_ui::rect(b.bounds);
-        context->FillRoundedRectangle(D2D1::RoundedRect(r, 5, 5), resources.brush.Get());
-        resources.brush->SetColor(theme_color(theme.line));
-        context->DrawRoundedRectangle(D2D1::RoundedRect(r, 5, 5), resources.brush.Get(), 1);
-        resources.brush->SetColor(theme_color(active ? 0xFFFFFF : theme.text));
-        auto *format =
-            resources.text_format(controller_.graphics(), 12.5F * static_cast<float>(scale_) / 100);
-        if (format) {
-            format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER);
-            format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
-            context->DrawTextW(b.label.c_str(), static_cast<UINT32>(b.label.size()), format, r,
-                               resources.brush.Get());
-        }
-    }
-    context->PopAxisAlignedClip();
+    render_controls(context, resources);
     const float bottom = static_cast<float>(surface_.height());
     resources.brush->SetColor(theme_color(theme.surface_2));
     context->FillRectangle(D2D1::RectF(0, bottom - 28, static_cast<float>(surface_.width()), bottom),
                            resources.brush.Get());
     resources.brush->SetColor(theme_color(theme.text_soft));
-    const std::wstring description = std::to_wstring(static_cast<int>(camera_.zoom * 100)) + L" % · " +
-                                     std::to_wstring(document_.objects().size()) + L" objetos · " +
-                                     tool_name(tool_) + L" " + std::to_wstring(static_cast<int>(thickness_)) +
-                                     L" px · " + status_;
+    std::wstring description = std::to_wstring(static_cast<int>(camera_.zoom * 100)) + L" % · " +
+                               std::to_wstring(document_.objects().size()) + L" objetos · " +
+                               tool_name(tool_) + L" " + std::to_wstring(static_cast<int>(thickness_)) +
+                               L" px · " + status_;
+    for (const auto &b : buttons_)
+        if (b.command == hover_command_) {
+            description = b.label;
+            break;
+        }
     auto *format = resources.text_format(controller_.graphics(), 12);
     if (format) {
         format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
@@ -1638,31 +2066,43 @@ LRESULT BoardWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
         if (pointer_)
             return 0;
         layout();
-        if (static_cast<float>(GET_Y_LPARAM(lparam)) < toolbar_height_) {
-            for (const auto &b : buttons_)
-                if (b.bounds.contains({static_cast<float>(GET_X_LPARAM(lparam)),
-                                       static_cast<float>(GET_Y_LPARAM(lparam))})) {
-                    command(b.command);
-                    break;
-                }
+        if (controls({static_cast<float>(GET_X_LPARAM(lparam)), static_cast<float>(GET_Y_LPARAM(lparam))})) {
+            control_down(
+                {static_cast<float>(GET_X_LPARAM(lparam)), static_cast<float>(GET_Y_LPARAM(lparam))});
             return 0;
         }
         begin(view_point(lparam), 1);
         return 0;
     case WM_MBUTTONDOWN:
-        begin(view_point(lparam), 1, false, true);
+        if (!controls({static_cast<float>(GET_X_LPARAM(lparam)), static_cast<float>(GET_Y_LPARAM(lparam))}))
+            begin(view_point(lparam), 1, false, true);
         return 0;
     case WM_MOUSEMOVE:
-        if (!pointer_)
-            move(view_point(lparam), 1);
+        if (!pointer_) {
+            control_move(
+                {static_cast<float>(GET_X_LPARAM(lparam)), static_cast<float>(GET_Y_LPARAM(lparam))});
+            TRACKMOUSEEVENT tracking{sizeof(TRACKMOUSEEVENT), TME_LEAVE, window_, 0};
+            TrackMouseEvent(&tracking);
+            if (!panel_drag_)
+                move(view_point(lparam), 1);
+        }
+        return 0;
+    case WM_MOUSELEAVE:
+        hover_command_ = 0;
+        invalidate();
         return 0;
     case WM_LBUTTONUP:
     case WM_MBUTTONUP:
+        if (panel_drag_ && !pointer_) {
+            control_up();
+            return 0;
+        }
         if (!pointer_ && drag_ != Drag::None)
             finish(view_point(lparam), 1);
         return 0;
     case WM_RBUTTONUP:
-        if (drag_ == Drag::None)
+        if (drag_ == Drag::None &&
+            !controls({static_cast<float>(GET_X_LPARAM(lparam)), static_cast<float>(GET_Y_LPARAM(lparam))}))
             context_menu(view_point(lparam));
         return 0;
     case WM_POINTERDOWN: {
@@ -1677,13 +2117,9 @@ LRESULT BoardWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
         layout();
         pointer_id_ = GET_POINTERID_WPARAM(wparam);
         pointer_ = true;
-        pointer_controls_ = static_cast<float>(p.y) < toolbar_height_;
+        pointer_controls_ = controls({static_cast<float>(p.x), static_cast<float>(p.y)});
         if (pointer_controls_) {
-            for (const auto &b : buttons_)
-                if (b.bounds.contains({static_cast<float>(p.x), static_cast<float>(p.y)})) {
-                    command(b.command);
-                    break;
-                }
+            control_down({static_cast<float>(p.x), static_cast<float>(p.y)});
             return 0;
         }
         begin({static_cast<float>(p.x), static_cast<float>(p.y) - toolbar_height_},
@@ -1713,10 +2149,14 @@ LRESULT BoardWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
             cancel();
         return 0;
     case WM_CANCELMODE:
+        control_up();
         cancel();
         return 0;
     case WM_CAPTURECHANGED:
-        // WM_POINTERCAPTURECHANGED owns pen cancellation; mouse capture is separate.
+        if (!pointer_)
+            panel_drag_ = false;
+        // WM_POINTERCAPTURECHANGED owns pen cancellation; mouse capture is
+        // separate.
         if (!pointer_ && drag_ != Drag::None)
             cancel();
         return 0;
@@ -1724,7 +2164,7 @@ LRESULT BoardWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
         POINT p{GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
         ScreenToClient(window_, &p);
         const float delta = static_cast<float>(GET_WHEEL_DELTA_WPARAM(wparam)) / WHEEL_DELTA;
-        if (static_cast<float>(p.y) < toolbar_height_) {
+        if (controls({static_cast<float>(p.x), static_cast<float>(p.y)})) {
             toolbar_scroll_ -= static_cast<int>(delta * 60);
             invalidate();
             return 0;
@@ -1859,7 +2299,8 @@ LRESULT BoardWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
     default:
         break;
     }
-    // Only isolated QA processes opt into test messages; normal user sessions ignore them.
+    // Only isolated QA processes opt into test messages; normal user sessions
+    // ignore them.
     wchar_t enabled[2]{};
     if (message >= board_ui::kQa && message < board_ui::kQa + 50 &&
         GetEnvironmentVariableW(L"ELITE_PEN_BOARD_QA", enabled, 2) == 1) {
@@ -1962,6 +2403,35 @@ LRESULT BoardWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
                 std::lround(camera_.to_view({0, document_.selection_bounds(selected_).bottom}).y));
         case 32:
             return GetCapture() != nullptr;
+        case 33:
+        case 34:
+            layout();
+            for (const auto &b : buttons_)
+                if (b.command == static_cast<int>(wparam)) {
+                    if (!board_ui::chrome(b.command) &&
+                        (b.bounds.top < panel_body_.top || b.bounds.bottom > panel_body_.bottom))
+                        return -1;
+                    return static_cast<LRESULT>(std::lround(message - board_ui::kQa == 33
+                                                                ? (b.bounds.left + b.bounds.right) / 2
+                                                                : (b.bounds.top + b.bounds.bottom) / 2));
+                }
+            return -1;
+        case 35:
+            return static_cast<LRESULT>(panel_bounds_.width());
+        case 36:
+            return static_cast<LRESULT>(std::lround(thickness_ * 100));
+        case 37:
+            return panel_pinned_;
+        case 38:
+            return panel_collapsed_;
+        case 39:
+            return static_cast<LRESULT>(std::lround(panel_bounds_.left));
+        case 40:
+            return static_cast<LRESULT>(std::lround(panel_bounds_.top));
+        case 41:
+            return toolbar_scroll_;
+        case 42:
+            return static_cast<LRESULT>(tool_);
         default:
             break;
         }

@@ -1,6 +1,6 @@
-# Elite Pen 2.16.0 — contrato de producto
+# Elite Pen 2.17.0 — contrato de producto
 
-Estado: versión 2.16.0 implementada como software de código abierto bajo Apache
+Estado: versión 2.17.0 implementada como software de código abierto bajo Apache
 License 2.0, con actualización instalada y distribución portable local.
 
 ## 0. Pizarra editable
@@ -13,6 +13,8 @@ temporalmente; minimizarla o cerrarla recupera esos controles sin descartar el d
 - Lienzo navegable sin tamaño fijo de página, zoom al cursor y encuadre de contenido.
 - Lápiz con muestras de presión Windows Ink, resaltador, figuras, símbolos, texto y emojis.
 - Selección individual, múltiple y por área; movimiento, escalado, orden y bloqueo.
+- Panel flotante con iconos vectoriales, colores y muestras de grosor; pin,
+  arrastre, contracción, escala 80–300 % y desplazamiento de controles grandes.
 - Imágenes, capturas estáticas, pegado y PNG de la vista actual.
 - Guardado editable `.epboard` con recursos incluidos, checksum y copia anterior.
 - Recuperación tras pausas y puntos periódicos durante el dibujo continuo; al

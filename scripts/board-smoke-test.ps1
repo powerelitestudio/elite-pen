@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$ExecutablePath,[switch]$PenCompatibilityOnly)
+param([string]$ExecutablePath,[switch]$PenCompatibilityOnly,[switch]$SkipGlobalHotkeys)
 $ErrorActionPreference='Stop'
 $repoRoot=Split-Path -Parent $PSScriptRoot
 if(-not $ExecutablePath){$ExecutablePath=Join-Path $repoRoot 'build\release\Elite Pen.exe'}
@@ -70,12 +70,14 @@ Set-Content -LiteralPath (Join-Path $sandbox 'portable.flag') -Value 'Isolated b
 Set-Content -LiteralPath (Join-Path $sandbox 'data\settings.ini') -Encoding ascii -Value "[ElitePen]`r`nHotkeySchemeVersion=2`r`nExcludePaletteFromCapture=0`r`nStartInInteractMode=1`r`nHasPalettePosition=1`r`nPaletteX=50`r`nPaletteY=50`r`nHotkeyBoardOpen=7,123`r`n"
 $oldInstance=$env:ELITE_PEN_QA_INSTANCE_ID;$oldBoard=$env:ELITE_PEN_BOARD_QA;$oldRealHotkeys=$env:ELITE_PEN_QA_REAL_HOTKEYS
 $env:ELITE_PEN_QA_INSTANCE_ID=[Guid]::NewGuid().ToString('N');$env:ELITE_PEN_BOARD_QA='1';$env:ELITE_PEN_QA_REAL_HOTKEYS='1'
-if($PenCompatibilityOnly){Remove-Item Env:ELITE_PEN_QA_REAL_HOTKEYS -ErrorAction SilentlyContinue}
+if($PenCompatibilityOnly -or $SkipGlobalHotkeys){Remove-Item Env:ELITE_PEN_QA_REAL_HOTKEYS -ErrorAction SilentlyContinue}
 $failures=[Collections.Generic.List[string]]::new();$checks=0
 function Check([bool]$Condition,[string]$Message){$script:checks++;if(-not $Condition){$script:failures.Add($Message);Write-Output "FAIL: $Message"}}
 function Find([int]$ProcessId,[string]$Class){for($n=0;$n -lt 120;$n++){$w=[BoardNative]::Find([uint32]$ProcessId,$Class);if($w -ne [IntPtr]::Zero){return $w};Start-Sleep -Milliseconds 50};throw "Missing $Class"}
 function Send([IntPtr]$Window,[uint32]$Message,[long]$W=0,[long]$L=0){$result=[IntPtr]::Zero;if([BoardNative]::SendMessageTimeout($Window,$Message,[IntPtr]$W,[IntPtr]$L,2,7000,[ref]$result) -eq [IntPtr]::Zero){throw "UI command timed out: $Message"};return $result.ToInt64()}
 function Qa([int]$Offset,[long]$W=0,[int]$X=0,[int]$Y=0){return Send $script:board (0x80C8+$Offset) $W (($Y -shl 16) -bor ($X -band 0xffff))}
+function Button([int]$Command){$x=Qa 33 $Command;$y=Qa 34 $Command;if($x -lt 0 -or $y -lt 0){throw "Control $Command is outside the visible panel"};return @([int]$x,[int]$y)}
+function Tap-Command([int]$Command,[bool]$Pen=$false){$p=Button $Command;Mouse $p[0] $p[1] 2 $Pen;Mouse $p[0] $p[1] 4 $Pen;Wait-Frame}
 function Wait-Frame {$null=[BoardNative]::DwmFlush();Start-Sleep -Milliseconds 180}
 function Key([int[]]$Modifiers,[int]$Code){foreach($m in $Modifiers){[BoardNative]::keybd_event([byte]$m,0,0,[UIntPtr]::Zero)};[BoardNative]::keybd_event([byte]$Code,0,0,[UIntPtr]::Zero);[BoardNative]::keybd_event([byte]$Code,0,2,[UIntPtr]::Zero);for($n=$Modifiers.Count-1;$n -ge 0;$n--){[BoardNative]::keybd_event([byte]$Modifiers[$n],0,2,[UIntPtr]::Zero)};Wait-Frame}
 function Mouse([int]$X,[int]$Y,[uint32]$Flags,[bool]$Pen){$p=[BoardNative+POINT]::new();$p.X=$X;$p.Y=$Y;$null=[BoardNative]::ClientToScreen($script:board,[ref]$p);if(-not [BoardNative]::Mouse($p.X,$p.Y,$Flags,$Pen)){throw 'Mouse/pen input injection failed'};Start-Sleep -Milliseconds 45}
@@ -96,10 +98,9 @@ try {
  Check ((Send $palette 0x805E) -eq 0) 'Desktop document starts unchanged'
  if($PenCompatibilityOnly){
   Check ([BoardNative]::Foreground($board)) 'Compatibility test owns foreground focus';Wait-Frame
-  $client=[BoardNative+RECT]::new();$null=[BoardNative]::GetClientRect($board,[ref]$client)
-  $columns=[Math]::Max(1,[Math]::Floor(($client.Right-5)/110));$colorY=[int](5+[Math]::Ceiling(14/$columns)*38+16);$top=[int](Qa 7)
+  $top=[int](Qa 7)
   # This is a real WM_MOUSE stream tagged as pen, as produced by compatibility drivers.
-  Mouse 173 $colorY 2 $true;Mouse 173 $colorY 4 $true
+  Tap-Command 104 $true
   Pointer-Stroke $false ($top+160)
   Check ((Qa 0) -eq 1) 'Ordinary mouse still draws after a pen toolbar tap'
   Check (Red-Stroke 160) 'Pen compatibility tap selects the red swatch'
@@ -114,10 +115,12 @@ try {
   if($failures.Count){throw "$($failures.Count) of $checks pen compatibility checks failed"}
   Write-Output "$checks pen compatibility checks passed";return
  }
- $null=[BoardNative]::Foreground($board);Key @(0x11,0x10,0x12) 123
- Check (-not [BoardNative]::IsWindowVisible($board)) 'Assigned macropad shortcut closes the board'
- Key @(0x11,0x10,0x12) 123
- Check ([BoardNative]::IsWindowVisible($board)) 'Assigned macropad shortcut reopens the board'
+ if(-not $SkipGlobalHotkeys){
+  $null=[BoardNative]::Foreground($board);Key @(0x11,0x10,0x12) 123
+  Check (-not [BoardNative]::IsWindowVisible($board)) 'Assigned macropad shortcut closes the board'
+  Key @(0x11,0x10,0x12) 123
+  Check ([BoardNative]::IsWindowVisible($board)) 'Assigned macropad shortcut reopens the board'
+ }
  $null=Qa 28 40
  $null=Qa 3 64 100 160;$null=Qa 4 64 200 160;$null=Qa 4 1024 350 160;$null=Qa 4 1024 500 160;$null=Qa 5 1024 580 160
  Check ((Qa 0) -eq 1 -and (Qa 8) -ge 4) 'Pressure points use the drawing input path'
@@ -144,18 +147,15 @@ try {
   Check ((Qa 21) -lt 150 -and (Qa 22) -gt 500) 'Native pen pressure varies across samples'
   $nativePenVerified=(Qa 30 0) -gt 0 -and (Qa 0) -eq 2
   # Native controls must consume one contact and then release ownership for the next tool.
-  $client=[BoardNative+RECT]::new();$null=[BoardNative]::GetClientRect($board,[ref]$client)
-  $columns=[int][Math]::Max(1,[Math]::Floor(($client.Right-5)/110))
-  $toggleX=[int](5+(12%$columns)*110+52);$toggleY=[int](5+[Math]::Floor(12/$columns)*38+16)
-  Pen-Tap $device $toggleX $toggleY;Check ((Qa 10) -eq 1) 'Native pen toolbar contact toggles blackboard exactly once'
-  Pen-Tap $device $toggleX $toggleY;Check ((Qa 10) -eq 0) 'Native pen can immediately toggle whiteboard again'
-  $colorY=[int](5+[Math]::Ceiling(14/$columns)*38+16)
-  Pen-Tap $device 173 $colorY
+  $toggle=Button 13
+  Pen-Tap $device $toggle[0] $toggle[1];Check ((Qa 10) -eq 1) 'Native pen toolbar contact toggles blackboard exactly once'
+  Pen-Tap $device $toggle[0] $toggle[1];Check ((Qa 10) -eq 0) 'Native pen can immediately toggle whiteboard again'
+  $red=Button 104;Pen-Tap $device $red[0] $red[1]
   Pointer-Stroke $false ($top+350)
   Check (Red-Stroke 350) 'Native pen tap selects the red color for subsequent drawing'
   $objects=Qa 0;Pen-Tap $device 850 ($top+410)
   Check ((Qa 0) -eq $objects+1) 'Native pen draws again after using toolbar controls'
-  Mouse 21 $colorY 2 $false;Mouse 21 $colorY 4 $false
+  Tap-Command 100
   [BoardNative]::DestroySyntheticPointerDevice($device);$device=[IntPtr]::Zero
  }
  $before=Qa 0;$null=[BoardNative]::Foreground($board);Key @(0x11) 0x5A
@@ -180,11 +180,46 @@ try {
  $bitmap=[Drawing.Bitmap]::new(200,120);$graphics=[Drawing.Graphics]::FromImage($bitmap);$graphics.Clear([Drawing.Color]::RoyalBlue);$graphics.Dispose();[Windows.Forms.Clipboard]::SetImage($bitmap);$bitmap.Dispose()
  $null=Qa 16;Check ((Qa 19) -eq 1 -and (Qa 0) -eq $before+1) 'Clipboard image embeds as a selectable object'
  $null=Qa 14;Check (Test-Path -LiteralPath (Join-Path $sandbox 'data\boards\qa-named.epboard')) 'Named editable board saves locally'
- $null=Qa 9 300;Wait-Frame;Check ((Qa 23) -eq 300) 'Toolbar supports 300 percent'
+ # Floating controls use real clicks at their current layout positions.
+ $objects=Qa 0;Tap-Command 202
+ Check ((Qa 36) -eq 800 -and (Qa 0) -eq $objects) 'Visual width chip selects 8 px without adding ink'
+ foreach($scale in @(80,100,125,150,200,300)){
+  $null=Qa 9 $scale;Wait-Frame
+  Check ((Qa 23) -eq $scale) "Panel retains requested scale $scale"
+  $p=Button 2;Check ($p[0] -gt 0 -and $p[1] -gt 50) "Pen tool remains visible at scale $scale"
+ }
+ Check ((Qa 7) -eq 50) 'Panel enlargement preserves the canvas viewport height'
  Frame 'whiteboard-panel-300.png'
  $null=Qa 11;Wait-Frame;Check ((Qa 10) -eq 1) 'Blackboard changes the background'
  $null=Qa 20;$black=[Drawing.Bitmap]::FromFile((Join-Path $sandbox 'data\boards\qa-view.png'));try{Check ($black.GetPixel(10,10).R -lt 30) 'Blackboard renders a dark background'}finally{$black.Dispose()}
  Frame 'blackboard-panel-300.png'
+ $p=Button 2;$pt=[BoardNative+POINT]::new();$pt.X=$p[0];$pt.Y=$p[1];$null=[BoardNative]::ClientToScreen($board,[ref]$pt)
+ $null=Send $board 0x20A ([long](-120 -shl 16)) (($pt.Y -shl 16) -bor ($pt.X -band 0xffff));Wait-Frame
+ Check ((Qa 41) -gt 0) 'Wheel scrolls oversized panel instead of zooming the canvas'
+ $null=Qa 9 100;Wait-Frame
+ Tap-Command 25;Check ((Qa 38) -eq 1) 'Panel collapses without hiding the canvas'
+ Tap-Command 25;Check ((Qa 38) -eq 0) 'Panel expands from its header'
+ $left=Qa 39;$panelY=Qa 40
+ Drag $board ($left+25) ($panelY+18) ($left-70) ($panelY+60)
+ Check ((Qa 39) -eq $left) 'Pinned panel ignores header dragging'
+ Tap-Command 24;Check ((Qa 37) -eq 0) 'Pin unlocks panel movement'
+ Drag $board ($left+25) ($panelY+18) ($left-70) ($panelY+60)
+ Check ((Qa 39) -lt $left-50) 'Unlocked panel moves by its header'
+ Tap-Command 24;Check ((Qa 37) -eq 1) 'Panel can be fixed at its new position'
+ # Portrait/narrow window at 300%: the scale is retained and the body reflows.
+ $bounds=[BoardNative+RECT]::new();$null=[BoardNative]::GetWindowRect($board,[ref]$bounds)
+ $null=[BoardNative]::SetWindowPos($board,[IntPtr]::Zero,0,0,760,800,0x16);Wait-Frame
+ $null=Qa 9 300;Wait-Frame;$panelWidth=Qa 35
+ $p=Button 2;Tap-Command 2
+ Check ($panelWidth -le 736 -and (Qa 23) -eq 300) 'Narrow window reflows the panel without silently shrinking the scale'
+ Check ((Qa 42) -eq 1) 'Pen remains actionable on narrow window at 300 percent'
+ $pt=[BoardNative+POINT]::new();$pt.X=$p[0];$pt.Y=$p[1];$null=[BoardNative]::ClientToScreen($board,[ref]$pt)
+ for($n=0;$n -lt 16;$n++){$null=Send $board 0x20A ([long](-120 -shl 16)) (($pt.Y -shl 16) -bor ($pt.X -band 0xffff))}
+ Wait-Frame;$p=Button 203;Tap-Command 203
+ Check ((Qa 36) -eq 1600) 'Scrolled 300 percent width controls remain actionable'
+ Frame 'whiteboard-narrow-300.png'
+ $null=[BoardNative]::SetWindowPos($board,[IntPtr]::Zero,0,0,($bounds.Right-$bounds.Left),($bounds.Bottom-$bounds.Top),0x16);Wait-Frame
+ $null=Qa 9 300;Wait-Frame
  $null=Qa 6;Check (Test-Path -LiteralPath (Join-Path $sandbox 'data\boards\recovery.epboard')) 'Recovery snapshot exists'
  $null=[BoardNative]::ShowWindow($board,6);Wait-Frame
  Check ([BoardNative]::IsWindowVisible($palette)) 'Minimizing restores the desktop palette'

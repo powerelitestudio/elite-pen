@@ -1,4 +1,38 @@
-# Informe de calidad — Elite Pen 2.16.1
+# Informe de calidad — Elite Pen 2.17.0
+
+## Panel visual de pizarra — 2.17.0
+
+Validación local: 2026-10-21.
+
+- Release final sin errores ni advertencias; núcleo, preferencias, rendimiento
+  CPU y **399 comprobaciones de modelo/persistencia** aprobados.
+- **75 comprobaciones nativas de interfaz** con el ejecutable de entrega:
+  Windows Ink, presión, colores y contactos sucesivos, atajo global real,
+  selección, escalado, imágenes, capturas, guardado, minimización y recuperación
+  tras cierre y terminación forzada de una copia aislada.
+- Panel: seis escalas 80/100/125/150/200/300 %, chips de grosor accionados con
+  clics reales, pin, arrastre, contracción y expansión. Una ventana de 760×800
+  mantiene escala 300 %, reorganiza columnas, desplaza el cuerpo con la rueda
+  y permite seleccionar 16 px al final de la lista. La cabecera conserva 50 px;
+  no se resta al lienzo toda la altura del panel. Capturas inspeccionadas.
+- Regresión de compatibilidad: diez comprobaciones con SendInput etiquetado
+  como lápiz aprobadas durante la integración. La prueba física XP-Pen del
+  usuario corresponde a 2.16.1, documentada abajo; las pruebas de 2.17.0 usan
+  entrada nativa sintética y ratón, sin atribuirles una nueva validación física.
+- Rendimiento gráfico existente: 5.000 trazos y 240 cuadros, población
+  242,276 ms, primer render 53,664 ms, cuadro en caché 1,032 ms y activo
+  0,964 ms. Zoom editable: primer Lápiz 120,226 ms, Mano 0,139 ms y retorno
+  caliente 22,034 ms. Memoria 302,32 MiB. Todos los presupuestos pasan.
+  Este benchmark mide los motores existentes; no es un benchmark comparativo
+  frente a SQLBI o Excalidraw.
+- Build, portable e instalación 2.17.0 comparten SHA-256
+  `4AD8EDA3D1F7C3339829BB9A2435918DAA9A401CF829FB2AF1601B85A12521A5`.
+  Respaldo de aplicación, registro, ajustes y pizarras verificado en
+  `backups/update-2.17.0-20261021-110837` de la carpeta local de datos.
+  `settings.ini` conserva su SHA-256 exacto antes/después de sustituir archivos.
+- Evidencia local ignorada por Git:
+  `artifacts/whiteboard-ui-2.17.0-20261021/` y `artifacts/qa/board-captures/`.
+  La publicación de código en GitHub no sustituye la Release descargable histórica.
 
 ## Toque del lápiz en la pizarra — 2.16.1
 

@@ -44,6 +44,21 @@ real o portable de preferencias. No se abre automáticamente una pizarra privada
 al arrancar. Una nueva acción global nombrada `HotkeyBoardOpen` llega sin asignar;
 las claves anteriores siguen estables y el zoom conserva diez acciones contextuales.
 
+## Panel visual de pizarra — 2.17.0
+
+El panel usa el mismo contexto Direct2D que la ventana, con iconos vectoriales
+propios sobre una cuadrícula de 24 unidades. La cabecera mide 50 px y el panel
+flota sobre el viewport; ampliar sus controles no reduce la altura del lienzo.
+El layout comparte límites entre render, ratón y lápiz. La cabecera del panel
+se dibuja después del cuerpo recortado y desplazable; sus comandos se identifican
+por ID, nunca por una coordenada que cambie al desplazar. El agarre tiene su
+propio estado de contacto, separado de la tinta.
+
+No se modifica el formato .epboard: escala/visibilidad siguen recuperándose y
+posición, pin y contracción viven durante la instancia. La caché de tinta y la
+vista previa continúan independientes del panel. Estudio de referencias y
+decisiones en [WHITEBOARD_REFERENCE_STUDY.md](WHITEBOARD_REFERENCE_STUDY.md).
+
 ## Capas
 
 - `core`: modelo vectorial, geometria, generación determinista de polígonos,

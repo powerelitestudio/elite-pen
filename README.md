@@ -10,8 +10,9 @@ pantalla para Windows, desarrollada por [Power Elite Studio](https://powerelite.
 Permite explicar sobre cualquier aplicación sin convertir la presentación en una
 sucesión de ventanas y menús.
 
-> **Estado:** acceso anticipado. La versión 2.16.1 corrige los toques de lápiz
-> en modo de compatibilidad y conserva la pizarra editable
+> **Estado:** acceso anticipado. La versión 2.17.0 renueva la pizarra con un
+> panel flotante de iconos y conserva los toques de lápiz corregidos en 2.16.1.
+> Incluye la pizarra editable
 > Whiteboard / Blackboard con lienzo navegable, presión del lápiz, imágenes,
 > selección y recuperación local. Conserva Zoom de enfoque, emojis y macropad.
 
@@ -31,10 +32,15 @@ memoria y rutas de compatibilidad.
 
 Abre **Herramientas > Pizarra editable**. Es una ventana independiente que puedes
 mover a otro monitor, maximizar o minimizar. Tus anotaciones del escritorio y los
-fondos rápidos blanco/negro se conservan. **Blackboard / Whiteboard** cambia el fondo
-del documento; **Opciones** activa cuadrícula y presión y amplía el panel del 80 %
+fondos rápidos blanco/negro se conservan. **Fondo** alterna entre Whiteboard y
+Blackboard; **Opciones** activa cuadrícula y presión y amplía el panel del 80 %
 al 300 %. El panel permanece disponible y recuerda su escala; **Tab** lo oculta o
-recupera. Si ocupa más de media ventana, desplaza el panel con la rueda.
+recupera. Los iconos muestran sus nombres y la herramienta activa. Los colores
+circulares y las muestras de trazo permiten escoger color y grosor directamente.
+El botón de chincheta fija/desbloquea el panel para arrastrarlo por su cabecera;
+la flecha lo contrae. Si no cabe en la ventana, usa la rueda sobre el panel:
+sus columnas se adaptan y el lienzo mantiene su tamaño. La posición y el estado
+contraído se conservan mientras siga abierta esa sesión de la app.
 
 - Dibuja con lápiz o resaltador, figuras, símbolos, texto y emojis. El lápiz de
   Windows Ink conserva la presión en cada punto; el ratón usa grosor constante.
@@ -137,7 +143,7 @@ Los paquetes oficiales listos para usar se publican en
 [GitHub Releases](https://github.com/powerelitestudio/elite-pen/releases):
 
 La distribución publicada que se enlaza a continuación es 2.10.3. Los símbolos y
-tamaños nuevos, emojis, Zoom de enfoque y pizarra editable están en el código 2.16.0 y pueden compilarse con los scripts del repositorio.
+tamaños nuevos, emojis, Zoom de enfoque y pizarra editable están en el código 2.17.0 y pueden compilarse con los scripts del repositorio.
 
 - [Descargar portable 2.10.3](https://github.com/powerelitestudio/elite-pen/releases/download/v2.10.3/Elite.Pen.Portable.2.10.3.zip):
   descomprime la carpeta y ejecuta `Elite Pen.exe`.

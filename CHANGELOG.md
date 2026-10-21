@@ -1,5 +1,20 @@
 # Historial de cambios
 
+## 2.17.0 — 2026-10-21
+
+- Pizarra con panel flotante de iconos vectoriales, etiquetas, estados activos,
+  colores circulares y cuatro muestras visuales de grosor. Acceso directo a
+  rectángulo, elipse, flecha y línea; las demás figuras siguen disponibles.
+- Panel fijado inicialmente, desbloqueable para arrastrar y contraíble desde su
+  cabecera. Escala independiente de 80 % a 300 %, columnas adaptables y rueda
+  para recorrer el contenido grande, sin reducir el espacio vertical del lienzo.
+- Cabecera compacta con Archivo, Guardar, Opciones y controles de zoom.
+  Presión y cuadrícula tienen controles visibles; Deshacer/Rehacer indican
+  cuándo están disponibles. Conserva la entrada XP-Pen corregida en 2.16.1.
+- Estudio directo del código MIT de SQLBI Whiteboard y Excalidraw, con decisiones
+  y revisiones exactas documentadas. Implementación C++/Direct2D propia, sin
+  incorporar los entornos WPF, React o un navegador a Elite Pen.
+
 ## 2.16.1 — 2026-10-21
 
 - Corrige los toques del lápiz en la Pizarra editable cuando el controlador

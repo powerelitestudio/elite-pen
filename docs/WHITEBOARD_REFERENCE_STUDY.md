@@ -1,4 +1,42 @@
-# Estudio de SQLBI Whiteboard y diseño de Elite Pen 2.16
+# Estudio de referencias y diseño de la pizarra de Elite Pen
+
+## Código abierto e interfaz — Elite Pen 2.17
+
+Estudio adicional solicitado por el usuario el 2026-10-21. Se descargaron copias
+locales de los dos repositorios públicos, sin ejecutar sus scripts ni instalar
+dependencias. Ambos declaran licencia MIT; los avisos se conservan en `NOTICE`.
+
+| Referencia y revisión examinada | Código leído | Decisión para Elite Pen |
+| --- | --- | --- |
+| [SQLBI Whiteboard, `4cf5355685345e7cb7b63786408d7c18e02f8d77`](https://github.com/sql-bi/SQLBI-Whiteboard/tree/4cf5355685345e7cb7b63786408d7c18e02f8d77) | `MainWindow.xaml`, `MainWindow.xaml.cs`: grupos duales, FillSwatches, FillSizes y sincronización de selección; `Themes/Toolbar.xaml`, `PropertyBar.xaml`, `StrokePreview.cs` | Panel de bordes redondeados, estado activo suave, colores circulares con aro, muestras de trazo y controles accionables al contacto del lápiz |
+| [Excalidraw, `1d4dc2c0e6e476911d0760e9c3cf3694f2d43384`](https://github.com/excalidraw/excalidraw/tree/1d4dc2c0e6e476911d0760e9c3cf3694f2d43384) | `packages/excalidraw/components/Toolbar.tsx`, `Toolbar.scss`, `LayerUI.tsx`, `Island.scss`; `renderer/staticScene.ts`, `interactiveScene.ts`, `renderNewElementScene.ts` | Controles agrupados sobre el lienzo, accesos directos a figuras, herramienta activa reconocible, vista de trabajo despejada y separación entre contenido estático e interacción |
+
+La revisión SQLBI coincide con la compilación instalada examinada por REA.
+El estudio del código aclara la relación entre el estilo de tinta, el color
+seleccionado y su muestra visible. No se traduce WPF o React literalmente: la
+ventana, el layout, los iconos de contorno y el render se implementan en C++/Win32
+y Direct2D sobre el motor existente. Los iconos se dibujaron expresamente para
+Elite Pen; no se incorporaron las geometrías Fluent que usa SQLBI.
+
+El panel flota inicialmente a la derecha. La chincheta evita movimientos
+accidentales; desbloqueado permite arrastre con ratón o lápiz. Puede contraerse,
+ocultarse con Tab y ampliarse al 300 %. En ventanas estrechas cambia el número
+de columnas y el cuerpo se desplaza con la rueda, conservando la cabecera y el
+tamaño solicitado. El mapa de controles es único para dibujo, hit testing y QA.
+Se conservan escala y visibilidad en la recuperación existente, sin cambiar
+el formato de archivo. La posición se conserva durante la instancia.
+
+Las referencias de rendimiento de Excalidraw refuerzan la separación ya existente
+entre documento, caché de tinta, elementos visibles y vista previa. No se cambió
+el motor por un navegador ni se añadieron capturas continuas de CPU al panel.
+Las pruebas de rendimiento se vuelven a ejecutar sobre la versión integrada.
+
+Este alcance incorpora la interfaz y accesos directos descritos; no equivale
+a portar todas las funciones de los dos productos. Quedan fuera el estilo de
+línea RoughJS, conectores enlazados, bibliotecas, colaboración, LiveViews y la
+compatibilidad con `.excalidraw` o `.wboard`.
+
+## Estudio inicial de la versión instalada — Elite Pen 2.16
 
 Fecha: 2026-10-21. Referencia solicitada por el propietario del equipo:
 `C:\Program Files\SQLBI\Whiteboard\SQLBI.Whiteboard.exe`.

@@ -1,6 +1,7 @@
 # Publicación abierta de Elite Pen
 
-Desarrollo 2.16.0 (21 de octubre de 2026): añade Pizarra editable con presión,
+Desarrollo 2.17.0 (21 de octubre de 2026): Pizarra editable con panel flotante
+de iconos, colores y grosores, fijación y escala hasta 300 %. Incluye presión,
 capturas, selección, guardado y recuperación local. Conserva Zoom de enfoque,
 emojis, favoritos y paneles independientes ampliables hasta el 300 %.
 La publicación histórica descrita a continuación corresponde a 2.10.3; actualizar
