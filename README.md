@@ -10,7 +10,7 @@ pantalla para Windows, desarrollada por [Power Elite Studio](https://powerelite.
 Permite explicar sobre cualquier aplicación sin convertir la presentación en una
 sucesión de ventanas y menús.
 
-> **Estado:** acceso anticipado. La versión 2.18.0 renueva la pizarra con un
+> **Estado:** acceso anticipado. La versión 2.18.1 renueva la pizarra con un
 > panel compacto de iconos, fondos de cualquier color y escritura a texto local con Palitoon.
 > Conserva los toques de lápiz corregidos en 2.16.1.
 > Incluye la pizarra editable
@@ -91,6 +91,19 @@ Esta primera versión usa capturas estáticas y su formato propio `.epboard`;
 no importa archivos `.wboard` ni integra ventanas de aplicaciones en vivo.
 El [estudio de la referencia SQLBI](docs/WHITEBOARD_REFERENCE_STUDY.md) explica
 qué se examinó y cómo se trasladó a una implementación propia.
+
+### Borrar todo y cursor de dibujo
+
+**Borrar todo** está en la cabecera de la caja de herramientas y permanece visible
+al desplazar el panel, contraerlo o ampliarlo al 300 %. Pide confirmación y conserva
+**Ctrl+Z** para recuperar todos los trazos, figuras, textos e imágenes. También está
+en Opciones y usa el atajo global **Limpiar** (inicialmente **Ctrl+Shift+E**), que
+puedes personalizar en Configuración → Atajos. El borrado solo afecta a Board.
+
+Sobre el lienzo, Lápiz y Resaltar muestran el cursor de lápiz de Elite Pen. Mano usa
+la mano de Windows; Selección y los botones recuperan el puntero configurado en
+Windows. Espacio muestra temporalmente la mano para navegar. El cursor de dibujo
+se ajusta al DPI al cambiar de monitor, sin modificar el esquema de cursores del sistema.
 
 ### Escritura a texto, fuentes y fondos
 
@@ -176,7 +189,7 @@ Los paquetes oficiales listos para usar se publican en
 [GitHub Releases](https://github.com/powerelitestudio/elite-pen/releases):
 
 La distribución publicada que se enlaza a continuación es 2.10.3. Los símbolos y
-tamaños nuevos, emojis, Zoom de enfoque y pizarra editable están en el código 2.18.0 y pueden compilarse con los scripts del repositorio.
+tamaños nuevos, emojis, Zoom de enfoque y pizarra editable están en el código 2.18.1 y pueden compilarse con los scripts del repositorio.
 
 - [Descargar portable 2.10.3](https://github.com/powerelitestudio/elite-pen/releases/download/v2.10.3/Elite.Pen.Portable.2.10.3.zip):
   descomprime la carpeta y ejecuta `Elite Pen.exe`.

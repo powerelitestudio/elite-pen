@@ -1,6 +1,6 @@
-# Elite Pen 2.17.2 — contrato de producto
+# Elite Pen 2.18.1 — contrato de producto
 
-Estado: versión 2.17.2 implementada como software de código abierto bajo Apache
+Estado: versión 2.18.1 implementada como software de código abierto bajo Apache
 License 2.0, con actualización instalada y distribución portable local.
 
 ## 0. Pizarra editable
@@ -439,3 +439,11 @@ zoom congelado y Zoom editable) comparten el renderizador y el historial por obj
 - Color fondo: color arbitrario y preajustes. Fondo conserva el clic blanco/negro.
 - Configuración de los ocho atajos Board con detección de conflictos y acceso directo desde Opciones.
 - Guardado formato 2 con lectura de documentos anteriores y recuperación de ajustes y textos.
+
+## Board 2.18.1 — borrado visible y cursor por herramienta
+
+Borrar todo permanece en la cabecera del panel, con confirmación y deshacer único.
+Mantiene el atajo Limpiar personalizable y no afecta al documento del escritorio.
+Lápiz/Resaltar usan el cursor propio sobre el lienzo; Mano y Selección recuperan
+los cursores estándar de Windows. Los controles, el texto y los bordes de ventana
+conservan sus cursores apropiados. El cursor se adapta a cambios de DPI.

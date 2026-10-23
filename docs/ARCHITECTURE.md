@@ -326,3 +326,18 @@ Win32 globales. La validación considera tres ámbitos: global, Zoom y Board. Zo
 Board pueden compartir teclas por ser contextos excluyentes; un atajo global se
 comprueba contra ambos. Las teclas reservadas de documento no se reasignan en Board.
 Cambiar un atajo contextual solo actualiza preferencias; no vuelve a registrar globals.
+
+### Acciones visibles y cursor de Board — 2.18.1
+
+Borrar todo vive en la cabecera, fuera del recorte/desplazamiento del cuerpo.
+Botón, Opciones y `HotkeyAction::Clear` llaman a `clear_all`: finalizan la edición,
+invalidan reconocimiento pendiente, confirman con No como valor inicial y limpian
+el documento en un único paso de historial. Se liberan previsualizaciones GPU;
+el historial conserva los recursos originales para reconstruirlos al deshacer.
+
+Board reutiliza `create_pencil_cursor` del escritorio y posee su HCURSOR. En el
+lienzo se elige por herramienta; los controles, Mano, Selección y texto consultan
+los cursores compartidos de Windows. Cambiar herramienta o Espacio actualiza el
+cursor con el puntero quieto; la captura de paneo también conserva su rol. Cambios
+de DPI/tema/ajustes regeneran el recurso propio y el destructor lo libera. No se
+sustituye ningún cursor del sistema ni se cambian preferencias de Windows.

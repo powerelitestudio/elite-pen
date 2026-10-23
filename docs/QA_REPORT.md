@@ -1,5 +1,34 @@
-# Informe de calidad — Elite Pen 2.18.0
+# Informe de calidad — Elite Pen 2.18.1
 
+
+
+## Borrar todo y cursor de Board — 2.18.1
+
+Validación local: 2026-10-22 (America/Bogota).
+
+- Compilación Release sin errores ni advertencias; núcleo, preferencias y
+  **417 comprobaciones del modelo y persistencia** aprobados.
+- **31 comprobaciones nuevas de interfaz** con una copia portable aislada:
+  cursor nativo de lápiz distinto de los de Windows, clase de ventana con mano
+  simulada, cambios P/H/V sin mover el puntero, Espacio temporal, texto, controles,
+  actualización de recursos tras ajustes de Windows y esquema del sistema intacto.
+- Borrar todo comprobado con trazo, figura e imagen: abrir/Cancelar no elimina,
+  Enter elige No, confirmar elimina todos los objetos y un solo Undo los recupera.
+  Redo y la acción global Limpiar comparten el mismo recorrido.
+- Botón visible en cabecera al 100/200/300 %, en ventana estrecha de 760×800,
+  con cuerpo desplazable y en pantalla completa. Cursor y botón inspeccionados en PNG.
+- **86 comprobaciones de regresión** aprobadas: lápiz nativo sintético (1 down,
+  10 updates, 1 up; presión 64–864), ratón compatible, selección, capturas,
+  pin/arrastre del panel, escalas, pantalla completa, guardado y recuperación.
+  Las copias de prueba terminan con código cero.
+- Build, portable e instalación 2.18.1 comparten SHA-256
+  `1C3D16CC36F320D5308008D843514BB8AB40C5BC7E39729CF9401685368789EC`.
+  Respaldo verificado en `backups/update-2.18.1-20261022-203359`; hash INI idéntico
+  antes/después de copiar. Sesión reabierta y documento recuperado idéntico al respaldo
+  al normalizar ambos archivos con el lector actual. No se publica contenido de la pizarra.
+- Evidencia local: `artifacts/board-2.18.1/` y `artifacts/qa/board-captures/`, ignoradas.
+  Las pruebas de entrada son sintéticas; no se atribuye una nueva prueba física XP-Pen
+  ni un cambio físico de monitor a este conjunto de verificaciones.
 
 ## Escritura a texto, fuentes, fondos y atajos — 2.18.0
 

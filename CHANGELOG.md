@@ -1,5 +1,16 @@
 # Historial de cambios
 
+## 2.18.1 — 2026-10-22
+
+- Board muestra Borrar todo con icono de papelera y texto en la cabecera del panel,
+  visible también al desplazar controles grandes y en pantalla completa.
+- Unifica botón, Opciones y atajo Limpiar en una confirmación con No como valor inicial;
+  Deshacer recupera todo el documento, incluidos textos e imágenes.
+- Lápiz y Resaltar usan el cursor de lápiz propio de Elite Pen sobre el lienzo;
+  Mano, Selección, texto y controles usan los cursores configurados de Windows.
+- Cambiar de herramienta actualiza el cursor sin mover el puntero; Espacio muestra
+  temporalmente la mano. El cursor propio se regenera al cambiar DPI/tema del sistema.
+
 ## 2.18.0 — 2026-10-21
 
 - Board incorpora conversión opcional de escritura a texto con el reconocedor local de Windows;

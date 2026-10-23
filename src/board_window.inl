@@ -7,7 +7,7 @@ constexpr std::array<Color, 8> kColors{
 constexpr std::array<float, 4> kWidths{2, 4, 8, 16};
 constexpr bool chrome(int id) {
     return id == 1 || id == 14 || id == 18 || id == 19 || id == 20 || id == 21 || id == 24 || id == 25 ||
-           id == 30 || id == 31;
+           id == 30 || id == 31 || id == 35;
 }
 
 // Original 24-unit outline glyphs, rendered as vectors at every panel scale.
@@ -175,6 +175,13 @@ void icon(ID2D1DeviceContext *c, ID2D1SolidColorBrush *brush, int id, RectF boun
         line(5, 14, 9, 14);
         path({{14, 7}, {22, 7}, {18, 7}, {18, 19}});
         break;
+    case 35:
+        line(4, 6, 20, 6);
+        path({{8, 6}, {8, 3}, {16, 3}, {16, 6}});
+        path({{6, 8}, {7, 21}, {17, 21}, {18, 8}});
+        line(10, 10, 10, 17);
+        line(14, 10, 14, 17);
+        break;
     case 29:
         line(4, 19, 20, 5);
         break;
@@ -300,6 +307,11 @@ class BoardWindow final : public WindowBase {
     explicit BoardWindow(Controller &c) : WindowBase(c) {}
     ~BoardWindow() override {
         flush();
+        if (pencil_cursor_) {
+            if (GetCursor() == pencil_cursor_)
+                SetCursor(LoadCursorW(nullptr, IDC_ARROW));
+            DestroyCursor(pencil_cursor_);
+        }
         font_collection_.Reset();
         if (font_factory_ && font_loader_)
             font_factory_->UnregisterFontFileLoader(font_loader_.Get());
@@ -336,6 +348,7 @@ class BoardWindow final : public WindowBase {
     BoardIds selected_;
     std::optional<BoardObject> preview_;
     Tool tool_{Tool::Pen};
+    HCURSOR pencil_cursor_{};
     Mode mode_{Mode::Ink};
     Drag drag_{Drag::None};
     Color color_{kBlack};
@@ -391,6 +404,10 @@ class BoardWindow final : public WindowBase {
     void control_up();
     void render_controls(ID2D1DeviceContext *, DrawableRenderResources &);
     void command(int id);
+    void clear_all();
+    void refresh_pencil_cursor(UINT dpi = 0);
+    HCURSOR cursor_for(PointF client) const;
+    void update_cursor();
     int menu(const std::vector<std::pair<int, std::wstring>> &entries);
     void shape_menu();
     void emoji_menu();
@@ -441,6 +458,7 @@ class BoardWindow final : public WindowBase {
         commit_text();
         tool_ = tool;
         mode_ = Mode::Ink;
+        update_cursor();
         invalidate();
     }
     void text(PointF p);
@@ -653,6 +671,59 @@ void BoardWindow::recognition_tick() {
     invalidate();
 }
 
+void BoardWindow::refresh_pencil_cursor(UINT dpi) {
+    if (!dpi)
+        dpi = GetDpiForWindow(window_);
+    HCURSOR replacement = create_pencil_cursor(dpi);
+    if (!replacement)
+        return;
+    if (GetCursor() == pencil_cursor_)
+        SetCursor(replacement);
+    if (pencil_cursor_)
+        DestroyCursor(pencil_cursor_);
+    pencil_cursor_ = replacement;
+}
+HCURSOR BoardWindow::cursor_for(PointF client) const {
+    if (drag_ == Drag::Pan)
+        return LoadCursorW(nullptr, IDC_HAND);
+    if (controls(client) || client.y < toolbar_height_ || client.y >= toolbar_height_ + viewport().y)
+        return LoadCursorW(nullptr, IDC_ARROW);
+    if (mode_ == Mode::Hand || board_ui::down(VK_SPACE))
+        return LoadCursorW(nullptr, IDC_HAND);
+    if (mode_ == Mode::Select)
+        return LoadCursorW(nullptr, IDC_ARROW);
+    if ((tool_ == Tool::Pen || tool_ == Tool::Highlighter) && pencil_cursor_)
+        return pencil_cursor_;
+    return LoadCursorW(nullptr, tool_ == Tool::Text ? IDC_IBEAM : IDC_CROSS);
+}
+void BoardWindow::update_cursor() {
+    POINT point{};
+    if (!GetCursorPos(&point) || WindowFromPoint(point) != window_)
+        return;
+    ScreenToClient(window_, &point);
+    RECT client{};
+    GetClientRect(window_, &client);
+    if (PtInRect(&client, point))
+        SetCursor(cursor_for({static_cast<float>(point.x), static_cast<float>(point.y)}));
+}
+void BoardWindow::clear_all() {
+    commit_text();
+    cancel();
+    cancel_recognition();
+    if (document_.objects().empty())
+        return;
+    if (MessageBoxW(window_, L"¿Borrar todo el contenido de esta pizarra?\nPuedes recuperarlo con Ctrl+Z.",
+                    L"Borrar todo · Elite Pen", MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2) != IDYES)
+        return;
+    if (document_.clear()) {
+        selected_.clear();
+        images_.clear();
+        image_bytes_ = 0;
+        cache_.Reset();
+        changed(L"Pizarra vacía · Ctrl+Z recupera todo el contenido");
+    }
+}
+
 bool BoardWindow::initialize() {
     RECT bounds{100, 80, 1500, 980};
     HMONITOR monitor = MonitorFromWindow(controller_.palette()->hwnd(), MONITOR_DEFAULTTONEAREST);
@@ -668,6 +739,7 @@ bool BoardWindow::initialize() {
         !initialize_surface(controller_.graphics()))
         return false;
     initialize_font();
+    refresh_pencil_cursor();
     SetTimer(window_, board_ui::kRecognitionTimer, 200, nullptr);
     apply_premium_window_chrome(window_);
     DragAcceptFiles(window_, TRUE);
@@ -943,6 +1015,11 @@ void BoardWindow::layout() {
     panel_bounds_ = {panel_position_.x, panel_position_.y, panel_position_.x + panel_width,
                      panel_position_.y + panel_height};
     panel_body_ = {panel_bounds_.left, panel_bounds_.top + 38 * s, panel_bounds_.right, panel_bounds_.bottom};
+    const auto clear_label =
+        L"Borrar todo · " +
+        hotkey_text(controller_.preferences().hotkeys[static_cast<std::size_t>(HotkeyAction::Clear)]);
+    add(35, clear_label.c_str(), panel_bounds_.left + 12 * s, panel_bounds_.top + 4 * s,
+        std::min(132 * s, panel_width - 148 * s), 29 * s);
     add(31, L"Opciones · tamaño del panel", panel_bounds_.right - 131 * s, panel_bounds_.top + 4 * s, 29 * s,
         29 * s);
     const auto full_label =
@@ -1159,7 +1236,10 @@ void BoardWindow::options_menu() {
     e.push_back({9, L"Color de fondo…"});
     e.push_back({10, L"Personalizar atajos de teclado…"});
     e.push_back({0, L""});
-    e.push_back({5, L"Limpiar pizarra…"});
+    e.push_back(
+        {5,
+         L"Borrar todo…\t" +
+             hotkey_text(controller_.preferences().hotkeys[static_cast<std::size_t>(HotkeyAction::Clear)])});
     e.push_back({6, L"Ayuda de controles"});
     const int id = menu(e);
     if (id == 1) {
@@ -1178,13 +1258,9 @@ void BoardWindow::options_menu() {
         scale_ = id;
         toolbar_scroll_ = 0;
         changed();
-    } else if (id == 5 && MessageBoxW(window_, L"¿Limpiar la pizarra? Puedes deshacer esta acción.",
-                                      L"Elite Pen", MB_YESNO | MB_ICONQUESTION) == IDYES) {
-        cancel_recognition();
-        document_.clear();
-        selected_.clear();
-        changed();
-    } else if (id == 7)
+    } else if (id == 5)
+        clear_all();
+    else if (id == 7)
         command(34);
     else if (id == 8)
         font_menu();
@@ -1276,6 +1352,9 @@ void BoardWindow::command(int id) {
         cache_.Reset();
         changed();
         break;
+    case 35:
+        clear_all();
+        break;
     case 33:
         background_menu();
         break;
@@ -1355,6 +1434,7 @@ void BoardWindow::command(int id) {
     }
     if (id == 15 || id == 16 || id == 17)
         changed();
+    update_cursor();
     invalidate();
 }
 
@@ -1579,6 +1659,7 @@ void BoardWindow::begin(PointF view, float pressure, bool erase, bool pan) {
     const auto world = camera_.to_world(view);
     if (pan || mode_ == Mode::Hand || board_ui::down(VK_SPACE)) {
         drag_ = Drag::Pan;
+        update_cursor();
         SetCapture(window_);
         return;
     }
@@ -1718,6 +1799,7 @@ void BoardWindow::finish(PointF view, float pressure) {
     pointer_controls_ = false;
     if (GetCapture() == window_)
         ReleaseCapture();
+    update_cursor();
     invalidate();
 }
 void BoardWindow::cancel() {
@@ -1730,6 +1812,7 @@ void BoardWindow::cancel() {
     preview_.reset();
     if (GetCapture() == window_)
         ReleaseCapture();
+    update_cursor();
     invalidate();
 }
 void BoardWindow::pen_samples(WPARAM wparam, bool end) {
@@ -1912,11 +1995,7 @@ bool BoardWindow::execute(HotkeyAction a) {
         command(12);
         break;
     case HotkeyAction::Clear:
-        if (MessageBoxW(window_, L"¿Limpiar la pizarra? Puedes deshacer.", L"Elite Pen", MB_YESNO) == IDYES) {
-            cancel_recognition();
-            document_.clear();
-            changed();
-        }
+        clear_all();
         break;
     case HotkeyAction::Pen:
         set_tool(Tool::Pen);
@@ -2004,6 +2083,7 @@ bool BoardWindow::execute(HotkeyAction a) {
     default:
         return false;
     }
+    update_cursor();
     invalidate();
     return true;
 }
@@ -2203,9 +2283,15 @@ void BoardWindow::render_controls(ID2D1DeviceContext *context, DrawableRenderRes
     fill(panel, theme.surface_1, 12 * s);
     brush->SetColor(theme_color(theme.line));
     context->DrawRoundedRectangle(D2D1::RoundedRect(board_ui::rect(panel), 12 * s, 12 * s), brush);
-    label(panel_pinned_ ? L"HERRAMIENTAS" : L"ARRASTRA PARA MOVER",
-          {panel.left + 16 * s, panel.top + 3 * s, panel.right - 136 * s, panel.top + 35 * s}, 10 * s,
-          theme.text_soft);
+    // Keep the destructive action discoverable even when the body scrolls at 300%.
+    // The free space between it and settings remains the panel's drag grip.
+    if (!panel_pinned_ && panel.width() > 300 * s) {
+        brush->SetColor(theme_color(theme.text_muted));
+        const float x = panel.left + 178 * s, y = panel.top + 18 * s;
+        for (float d : {-3.0F, 3.0F})
+            for (float v : {-4.0F, 0.0F, 4.0F})
+                context->FillEllipse(D2D1::Ellipse({x + d * s, y + v * s}, .9F * s, .9F * s), brush);
+    }
     if (!panel_collapsed_) {
         brush->SetColor(theme_color(theme.line));
         context->DrawLine({panel.left + 12 * s, panel_body_.top}, {panel.right - 12 * s, panel_body_.top},
@@ -2243,8 +2329,12 @@ void BoardWindow::render_controls(ID2D1DeviceContext *context, DrawableRenderRes
                 (swatch && color_ == board_ui::kColors[static_cast<std::size_t>(id - 100)]) ||
                 (width &&
                  std::abs(thickness_ - board_ui::kWidths[static_cast<std::size_t>(id - 200)]) < .01F);
-            const bool disabled = (id == 11 && !document_.can_undo()) || (id == 12 && !document_.can_redo());
+            const bool disabled = (id == 11 && !document_.can_undo()) ||
+                                  (id == 12 && !document_.can_redo()) ||
+                                  (id == 35 && document_.objects().empty() && !edit_);
             const auto r = b.bounds;
+            if (id == 35 && !disabled)
+                fill(r, theme.danger, 7 * s, .07F);
             if (active)
                 fill(r, theme.violet, 7 * s, .12F);
             else if (id == hover_command_ && !disabled)
@@ -2268,7 +2358,9 @@ void BoardWindow::render_controls(ID2D1DeviceContext *context, DrawableRenderRes
                 }
                 continue;
             }
-            const auto foreground = disabled ? theme.text_muted : (active ? theme.violet_strong : theme.text);
+            const auto foreground =
+                disabled ? theme.text_muted
+                         : (id == 35 ? theme.danger : (active ? theme.violet_strong : theme.text));
             brush->SetColor(theme_color(foreground));
             if (width) {
                 const float w = board_ui::kWidths[static_cast<std::size_t>(id - 200)] * .65F * s;
@@ -2280,6 +2372,10 @@ void BoardWindow::render_controls(ID2D1DeviceContext *context, DrawableRenderRes
                     D2D1::RoundedRect({r.left + 10 * s, cy - w / 2, r.right - 10 * s, cy + w / 2}, w / 2,
                                       w / 2),
                     brush);
+            } else if (id == 35) {
+                board_ui::icon(context, brush, id, {r.left + 6 * s, cy - 9 * s, r.left + 24 * s, cy + 9 * s});
+                label(L"Borrar todo", {r.left + 30 * s, r.top, r.right - 4 * s, r.bottom}, 10 * s,
+                      foreground);
             } else if (id == 22 || id == 23) {
                 board_ui::icon(context, brush, id,
                                {r.left + 7 * s, cy - 10 * s, r.left + 27 * s, cy + 10 * s});
@@ -2404,6 +2500,32 @@ void BoardWindow::render() {
 
 LRESULT BoardWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) {
     switch (message) {
+    case WM_SETCURSOR:
+        if (LOWORD(lparam) == HTCLIENT && reinterpret_cast<HWND>(wparam) == window_) {
+            POINT point{};
+            GetCursorPos(&point);
+            ScreenToClient(window_, &point);
+            SetCursor(cursor_for({static_cast<float>(point.x), static_cast<float>(point.y)}));
+            return TRUE;
+        }
+        break;
+    case WM_DPICHANGED: {
+        refresh_pencil_cursor(HIWORD(wparam));
+        if (!fullscreen_) {
+            const auto *bounds = reinterpret_cast<const RECT *>(lparam);
+            if (bounds)
+                SetWindowPos(window_, nullptr, bounds->left, bounds->top, bounds->right - bounds->left,
+                             bounds->bottom - bounds->top, SWP_NOZORDER | SWP_NOACTIVATE);
+        }
+        update_cursor();
+        invalidate();
+        return 0;
+    }
+    case WM_SETTINGCHANGE:
+    case WM_THEMECHANGED:
+        refresh_pencil_cursor();
+        update_cursor();
+        break;
     case WM_CLOSE:
         hide();
         return 0;
@@ -2462,6 +2584,7 @@ LRESULT BoardWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
             begin(view_point(lparam), 1, false, true);
         return 0;
     case WM_MOUSEMOVE:
+        update_cursor();
         if (!pointer_) {
             control_move(
                 {static_cast<float>(GET_X_LPARAM(lparam)), static_cast<float>(GET_Y_LPARAM(lparam))});
@@ -2564,7 +2687,17 @@ LRESULT BoardWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
         changed();
         return 0;
     }
+    case WM_KEYUP:
+        if (wparam == VK_SPACE) {
+            update_cursor();
+            return 0;
+        }
+        break;
     case WM_KEYDOWN: {
+        if (wparam == VK_SPACE) {
+            update_cursor();
+            return 0;
+        }
         for (std::size_t n = kBoardHotkeyBegin; n < kHotkeyActionCount; ++n) {
             const auto action = static_cast<HotkeyAction>(n);
             if (controller_.matches_hotkey(action, wparam)) {
@@ -2855,6 +2988,14 @@ LRESULT BoardWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
             return text_font_ == L"Palitoon";
         case 57:
             return static_cast<LRESULT>(text_size_);
+        case 58:
+            return reinterpret_cast<LRESULT>(pencil_cursor_);
+        case 59:
+            return static_cast<LRESULT>(SetClassLongPtrW(
+                window_, GCLP_HCURSOR,
+                reinterpret_cast<LONG_PTR>(LoadCursorW(nullptr, wparam ? IDC_HAND : IDC_ARROW))));
+        case 60:
+            return board_ui::down(VK_SPACE);
         default:
             break;
         }

@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$ExecutablePath,[switch]$PenCompatibilityOnly,[switch]$SkipGlobalHotkeys,[switch]$WritingOnly,[switch]$FontPickerOnly)
+param([string]$ExecutablePath,[switch]$PenCompatibilityOnly,[switch]$SkipGlobalHotkeys,[switch]$WritingOnly,[switch]$FontPickerOnly,[switch]$ClearCursorOnly)
 $ErrorActionPreference='Stop'
 $repoRoot=Split-Path -Parent $PSScriptRoot
 if(-not $ExecutablePath){$ExecutablePath=Join-Path $repoRoot 'build\release\Elite Pen.exe'}
@@ -10,6 +10,10 @@ using System;
 using System.Text;
 using System.Runtime.InteropServices;
 public static class BoardNative {
+ [StructLayout(LayoutKind.Sequential)]public struct CURSOR_INFO{public int Size;public uint Flags;public IntPtr Cursor;public POINT Point;}
+ [DllImport("user32.dll")]public static extern bool GetCursorInfo(ref CURSOR_INFO info);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode,EntryPoint="LoadCursorW")]public static extern IntPtr LoadCursor(IntPtr instance,IntPtr name);
+ [DllImport("user32.dll")]public static extern bool DrawIconEx(IntPtr dc,int x,int y,IntPtr icon,int width,int height,uint step,IntPtr brush,uint flags);
  [DllImport("user32.dll")]public static extern bool GetMenuItemRect(IntPtr owner,IntPtr menu,uint position,out RECT rect);
  [DllImport("user32.dll",CharSet=CharSet.Unicode,EntryPoint="SendMessageW")]public static extern IntPtr SendText(IntPtr window,uint message,IntPtr w,string text);
  [DllImport("user32.dll")]public static extern uint GetMenuItemID(IntPtr menu,int position);
@@ -77,7 +81,7 @@ Set-Content -LiteralPath (Join-Path $sandbox 'portable.flag') -Value 'Isolated b
 Set-Content -LiteralPath (Join-Path $sandbox 'data\settings.ini') -Encoding ascii -Value "[ElitePen]`r`nHotkeySchemeVersion=2`r`nExcludePaletteFromCapture=0`r`nStartInInteractMode=1`r`nHasPalettePosition=1`r`nPaletteX=50`r`nPaletteY=50`r`nHotkeyBoardOpen=7,123`r`n"
 $oldInstance=$env:ELITE_PEN_QA_INSTANCE_ID;$oldBoard=$env:ELITE_PEN_BOARD_QA;$oldRealHotkeys=$env:ELITE_PEN_QA_REAL_HOTKEYS
 $env:ELITE_PEN_QA_INSTANCE_ID=[Guid]::NewGuid().ToString('N');$env:ELITE_PEN_BOARD_QA='1';$env:ELITE_PEN_QA_REAL_HOTKEYS='1'
-if($PenCompatibilityOnly -or $SkipGlobalHotkeys -or $WritingOnly -or $FontPickerOnly){Remove-Item Env:ELITE_PEN_QA_REAL_HOTKEYS -ErrorAction SilentlyContinue}
+if($PenCompatibilityOnly -or $SkipGlobalHotkeys -or $WritingOnly -or $FontPickerOnly -or $ClearCursorOnly){Remove-Item Env:ELITE_PEN_QA_REAL_HOTKEYS -ErrorAction SilentlyContinue}
 $failures=[Collections.Generic.List[string]]::new();$checks=0
 function Check([bool]$Condition,[string]$Message){$script:checks++;if(-not $Condition){$script:failures.Add($Message);Write-Output "FAIL: $Message"}}
 function Find([int]$ProcessId,[string]$Class,[bool]$Visible=$false){for($n=0;$n -lt 120;$n++){$w=[BoardNative]::Find([uint32]$ProcessId,$Class,$Visible);if($w -ne [IntPtr]::Zero){return $w};Start-Sleep -Milliseconds 50};throw "Missing $Class"}
@@ -114,6 +118,80 @@ try {
  Check ([BoardNative]::IsWindowVisible($board)) 'Board opens from its global action'
  Check (-not [BoardNative]::IsWindowVisible($palette)) 'Desktop palette hides while drawing on board'
  Check ((Send $palette 0x805E) -eq 0) 'Desktop document starts unchanged'
+ if($ClearCursorOnly){
+  function Cursor-Handle {$c=[BoardNative+CURSOR_INFO]::new();$c.Size=[Runtime.InteropServices.Marshal]::SizeOf($c);if(-not [BoardNative]::GetCursorInfo([ref]$c)){throw 'Cannot read the visible cursor'};return $c.Cursor.ToInt64()}
+  $null=[BoardNative]::Foreground($board)
+  $arrow=[BoardNative]::LoadCursor([IntPtr]::Zero,[IntPtr]32512)
+  $hand=[BoardNative]::LoadCursor([IntPtr]::Zero,[IntPtr]32649)
+  $ibeam=[BoardNative]::LoadCursor([IntPtr]::Zero,[IntPtr]32513)
+  $pencil=Qa 58
+  Check ($pencil -ne 0 -and $pencil -ne $arrow.ToInt64() -and $pencil -ne $hand.ToInt64()) 'Board owns a distinct native Elite Pen pencil cursor'
+  # Alter only this isolated process's window-class cursor; never the Windows scheme.
+  $oldClassCursor=Qa 59 1
+  Check ($oldClassCursor -ne [IntPtr]::Zero) 'The isolated class can simulate a hand as its default cursor'
+  try {
+   Mouse 300 260 0 $false;Wait-Frame
+   Check ((Cursor-Handle) -eq (Qa 58)) 'Pen overrides the class hand with the actual pencil cursor'
+   Key @() 0x48;Check ((Cursor-Handle) -eq $hand.ToInt64()) 'Hand restores the Windows hand without moving the pointer'
+   Key @() 0x56;Check ((Cursor-Handle) -eq $arrow.ToInt64()) 'Selection restores the configured Windows arrow'
+   Key @() 0x50;Check ((Cursor-Handle) -eq (Qa 58)) 'P restores the pencil immediately over the canvas'
+   [BoardNative]::keybd_event(0x20,0,0,[UIntPtr]::Zero);Wait-Frame
+   Check ((Cursor-Handle) -eq $hand.ToInt64()) 'Space temporarily shows the Windows hand for panning'
+   [BoardNative]::keybd_event(0x20,0,2,[UIntPtr]::Zero);Wait-Frame
+   Check ((Cursor-Handle) -eq (Qa 58)) 'Releasing Space restores the pencil'
+   $null=Qa 2 3;Mouse 300 270 0 $false;Wait-Frame
+   Check ((Cursor-Handle) -eq (Qa 58)) 'Highlighter also uses the drawing pencil'
+   $null=Qa 2 8;Mouse 300 280 0 $false;Wait-Frame
+   Check ((Cursor-Handle) -eq $ibeam.ToInt64()) 'Text retains the configured Windows text cursor'
+   $null=Qa 2 2;$p=Button 2;Mouse $p[0] $p[1] 0 $false;Wait-Frame
+   Check ((Cursor-Handle) -eq $arrow.ToInt64()) 'Toolbox controls keep the Windows pointer while Pen is selected'
+   $null=Send $board 0x1A;Mouse 300 260 0 $false;Wait-Frame
+   Check ((Cursor-Handle) -eq (Qa 58)) 'Refreshing Windows settings keeps the owned pencil valid'
+   Check ([BoardNative]::LoadCursor([IntPtr]::Zero,[IntPtr]32512) -eq $arrow -and [BoardNative]::LoadCursor([IntPtr]::Zero,[IntPtr]32649) -eq $hand) 'Board never replaces the system cursor scheme'
+
+  } finally {$null=Qa 59 0}
+  $pencil=Qa 58
+  $preview=[Drawing.Bitmap]::new(96,96);$g=[Drawing.Graphics]::FromImage($preview);$g.Clear([Drawing.Color]::White);$dc=$g.GetHdc()
+  try{$null=[BoardNative]::DrawIconEx($dc,16,16,[IntPtr]$pencil,64,64,0,[IntPtr]::Zero,3)}finally{$g.ReleaseHdc($dc);$g.Dispose()}
+  $preview.Save((Join-Path $captures 'board-pencil-cursor.png'),[Drawing.Imaging.ImageFormat]::Png);$preview.Dispose()
+  $null=Qa 3 512 150 180;$null=Qa 4 512 330 220;$null=Qa 5 512 460 180
+  $null=Qa 2 26;$null=Qa 3 512 170 300;$null=Qa 5 512 380 410
+  $bitmap=[Drawing.Bitmap]::new(120,70);$g=[Drawing.Graphics]::FromImage($bitmap);$g.Clear([Drawing.Color]::RoyalBlue);$g.Dispose();[Windows.Forms.Clipboard]::SetImage($bitmap);$bitmap.Dispose()
+  $null=Qa 16
+  Check ((Qa 0) -eq 3 -and (Qa 19) -eq 1) 'Clear fixture includes pen, geometry and embedded image'
+  Check ((Qa 33 35) -gt 0) 'Borrar todo is visible in the toolbox header'
+  Tap-Command 35
+  $confirm=Find $app.Id '#32770' $true
+  Check ((Qa 0) -eq 3) 'Opening clear confirmation does not delete content'
+  Key @() 0x0D;Wait-Frame
+  Check ((Qa 0) -eq 3 -and -not [BoardNative]::IsWindowVisible($confirm)) 'Enter defaults to keeping the board'
+  Tap-Command 35;$confirm=Find $app.Id '#32770' $true
+  $null=Send ([BoardNative]::GetDlgItem($confirm,6)) 0xF5;Wait-Frame
+  Check ((Qa 0) -eq 0) 'Confirming Borrar todo removes all board objects'
+  $null=Qa 17;Check ((Qa 0) -eq 3 -and (Qa 19) -eq 1) 'One undo restores the complete board including images'
+  $null=Qa 18;Check ((Qa 0) -eq 0) 'Redo clears the entire board again'
+  Tap-Command 35;Wait-Frame
+  Check ([BoardNative]::Find([uint32]$app.Id,'#32770',$true) -eq [IntPtr]::Zero) 'Empty board does not open a redundant confirmation'
+  $null=Qa 17
+  $null=[BoardNative]::PostMessage($palette,0x312,[IntPtr]6,[IntPtr]::Zero);$confirm=Find $app.Id '#32770' $true
+  $null=Send ([BoardNative]::GetDlgItem($confirm,7)) 0xF5
+  Check ((Qa 0) -eq 3) 'Existing global Clear action uses the same recoverable workflow'
+  foreach($size in @(100,200,300)){$null=Qa 9 $size;Wait-Frame;Check ((Qa 33 35) -gt 0 -and (Qa 34 35) -gt 0) "Clear remains visible at $size percent"}
+  $bounds=[BoardNative+RECT]::new();$null=[BoardNative]::GetWindowRect($board,[ref]$bounds)
+  $null=[BoardNative]::SetWindowPos($board,[IntPtr]::Zero,0,0,760,800,0x16);Wait-Frame
+  Check ((Qa 33 35) -gt 0) 'Clear remains visible in a narrow window at 300 percent'
+  $null=Qa 2 30;Wait-Frame;Check ((Qa 33 35) -gt 0 -and (Qa 43) -eq 1) 'Clear remains available in immersive fullscreen'
+  $null=Qa 2 30;$null=Qa 9 100;Wait-Frame
+  $null=[BoardNative]::SetWindowPos($board,[IntPtr]::Zero,0,0,($bounds.Right-$bounds.Left),($bounds.Bottom-$bounds.Top),0x16);Wait-Frame
+  $null=Qa 2 2
+  Frame 'board-borrar-todo.png'
+  Check ((Send $palette 0x805E) -eq 0) 'Board clear leaves desktop annotations untouched'
+  Stop-App
+  $result=[ordered]@{Checks=$checks;Failures=@($failures);Mode='ClearAndDrawingCursor';Sandbox=$sandbox;Captures=$captures}
+  $result|ConvertTo-Json -Depth 4|Set-Content -LiteralPath (Join-Path $captures 'clear-cursor-result.json') -Encoding utf8
+  if($failures.Count){throw "$($failures.Count) of $checks clear/cursor checks failed"}
+  Write-Output "$checks clear/cursor UI checks passed. Evidence: $captures";return
+ }
  if($FontPickerOnly){
   function Menu-Choose([int]$QaOffset,[int]$Id){
    $null=[BoardNative]::PostMessage($board,[uint32](0x80C8+$QaOffset),[IntPtr]::Zero,[IntPtr]::Zero);Wait-Frame
@@ -360,10 +438,10 @@ try {
  Tap-Command 25;Check ((Qa 38) -eq 1) 'Panel collapses without hiding the canvas'
  Tap-Command 25;Check ((Qa 38) -eq 0) 'Panel expands from its header'
  $left=Qa 39;$panelY=Qa 40
- Drag $board ($left+25) ($panelY+18) ($left-70) ($panelY+60)
+ Drag $board ($left+178) ($panelY+18) ($left+83) ($panelY+60)
  Check ((Qa 39) -eq $left) 'Pinned panel ignores header dragging'
  Tap-Command 24;Check ((Qa 37) -eq 0) 'Pin unlocks panel movement'
- Drag $board ($left+25) ($panelY+18) ($left-70) ($panelY+60)
+ Drag $board ($left+178) ($panelY+18) ($left+83) ($panelY+60)
  Check ((Qa 39) -lt $left-50) 'Unlocked panel moves by its header'
  Tap-Command 24;Check ((Qa 37) -eq 1) 'Panel can be fixed at its new position'
  # Portrait/narrow window at 300%: the scale is retained and the body reflows.
