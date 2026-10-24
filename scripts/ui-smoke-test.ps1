@@ -567,6 +567,9 @@ try {
                    [ElitePenUiNative]::IsWindowVisible($shortcutScrollbar)) `
             'Scrollable shortcut rows or their pencil editors are missing from Settings.'
         $null = [ElitePenUiNative]::SendMessage($settings, 0x0115, [IntPtr]7, $shortcutScrollbar)
+        # Board actions now follow the zoom actions. Target the six-row zoom page
+        # explicitly instead of assuming editable zoom is the last action overall.
+        $null = [ElitePenUiNative]::SendMessage($settings, 0x0115, [IntPtr]((74 -shl 16) -bor 4), $shortcutScrollbar)
         Assert-Ui ([ElitePenUiNative]::IsWindowVisible($firstHotkeyEditor) -and
                    [ElitePenUiNative]::WindowText($lastHotkey) -eq 'E') `
             'Shortcut list did not expose the configurable E action for editable zoom.'
@@ -1819,12 +1822,19 @@ try {
         'Pinned figures did not restore visibility, 300 percent scale and position after restart.'
     $emojiPanel = Wait-Window 'ElitePen.Emojis'
     $emojiRestored = New-Object ElitePenUiNative+RECT
+    # The palette and figures become visible before startup restores emojis.
+    # Window creation alone is not proof that its saved layout has been applied.
+    for ($attempt = 0; $attempt -lt 100 -and -not [ElitePenUiNative]::IsWindowVisible($emojiPanel); $attempt++) {
+        Start-Sleep -Milliseconds 50
+    }
     $null = [ElitePenUiNative]::GetWindowRect($emojiPanel,[ref]$emojiRestored)
     Assert-Ui ([ElitePenUiNative]::IsWindowVisible($emojiPanel) -and
                ($emojiRestored.Right-$emojiRestored.Left) -eq 1098 -and
                ($emojiRestored.Bottom-$emojiRestored.Top) -eq 1008 -and
                $emojiRestored.Left -eq $emojiBeforeRestart.Left -and $emojiRestored.Top -eq $emojiBeforeRestart.Top) `
-        'Emoji panel did not restore its pinned visibility, 300 percent size and monitor position.'
+        ("Emoji panel did not restore its pinned visibility, 300 percent size and monitor position. " +
+         "visible=$([ElitePenUiNative]::IsWindowVisible($emojiPanel)); actual=$($emojiRestored.Left),$($emojiRestored.Top),$($emojiRestored.Right),$($emojiRestored.Bottom); " +
+         "expected=$($emojiBeforeRestart.Left),$($emojiBeforeRestart.Top),1098x1008")
     [ElitePenUiNative]::keybd_event([byte]0x80,0,0,[UIntPtr]::Zero)
     [ElitePenUiNative]::keybd_event([byte]0x80,0,2,[UIntPtr]::Zero)
     Start-Sleep -Milliseconds 100

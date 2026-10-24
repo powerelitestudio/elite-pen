@@ -9,6 +9,9 @@
 #include <array>
 #include <cstdint>
 #include <string>
+#include <optional>
+#include <string_view>
+#include <vector>
 
 namespace elite_pen::win {
 
@@ -322,15 +325,22 @@ struct Preferences {
     bool zoom_invert{false};
     float thickness{4.0F};
     Color color{kBlack};
+    std::vector<Color> custom_colors;
+    std::wstring board_font{L"Palitoon"};
+    float board_text_size{28.0F};
+    bool board_auto_text{false};
     std::array<HotkeyBinding, kHotkeyActionCount> hotkeys{kDefaultHotkeys};
 };
 
 class PreferencesStore {
 public:
     PreferencesStore();
+    explicit PreferencesStore(std::wstring path) : path_(std::move(path)) {}
 
     [[nodiscard]] Preferences load() const;
     bool save(const Preferences& preferences) const;
+    bool export_json(const std::wstring& target, const Preferences&, std::wstring& error) const;
+    bool read_json(const std::wstring& source, Preferences& result, std::wstring& error) const;
     [[nodiscard]] const std::wstring& path() const noexcept { return path_; }
     [[nodiscard]] bool portable() const noexcept { return portable_; }
 

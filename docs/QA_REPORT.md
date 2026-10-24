@@ -1,4 +1,38 @@
-# Informe de calidad — Elite Pen 2.18.1
+# Informe de calidad — Elite Pen 2.19.0
+
+## Colores personalizados y configuración portable — 2.19.0
+
+Validación local: 2026-10-24 (America/Bogota).
+
+- Release compilada sin errores ni advertencias. Núcleo, preferencias, reconocimiento
+  y rendimiento CPU aprobados; 417 comprobaciones del modelo y persistencia de Board.
+- Persistencia e ida/vuelta JSON con colores, fuentes Unicode, tamaño, conversión,
+  atajos y zonas con máscaras. Rechazo de duplicados, campos desconocidos, versiones
+  incompatibles, valores fuera de rango, controles/inyección y archivos mayores de 64 KiB;
+  la configuración activa y el resultado anterior quedan intactos ante rechazo.
+- Revisión de interfaz general aprobada. Se corrigieron dos supuestos de la prueba:
+  el final de la lista ya incluye atajos de Board, y los emojis necesitan una espera
+  de visibilidad independiente al restaurar. La carrera de emojis se reprodujo también
+  sobre una copia aislada de la versión instalada 2.18.1 antes de corregir la espera.
+- 86 comprobaciones de regresión de Board aprobadas, incluidos presión sintética
+  64–864, captura, selección, escalas, pantalla completa, guardado y recuperación.
+  No se atribuye a esta prueba una nueva validación física de la XP-Pen.
+- Editor revisado con controles nativos: #7C3AED sincroniza RGB 124/58/237; RGB rojo
+  999 deshabilita Guardar/Usar; corregirlo a 255 produce #FF3AED. Ambas muestras se
+  guardan inmediatamente en el INI de prueba y aparecen en la fila Mis colores.
+- Exportación e importación verificadas desde Archivo de Board con la aplicación real
+  en copia aislada. Se cambió la segunda muestra a #00AAFF y la fuente a Consolas 48 px;
+  el respaldo automático conserva la paleta y la fuente previas. Al cerrar Board,
+  la recuperación .epboard contiene Consolas/48: importar marca la revisión del
+  estilo de texto para que no se pierda si se cierra antes de dibujar.
+- Rendimiento GPU con 5.000 trazos: media de caché 1,464 ms, vivo 1,335 ms y navegación
+  editable 0,29 ms; todos los presupuestos existentes aprobados.
+- Actualización instalada 2.19.0 por respaldo y reemplazo del ejecutable: hash igual
+  al build y al portable; INI intacto durante el reemplazo. Cuatro archivos de pizarras
+  respaldados y verificados por SHA-256. En este equipo falta Inno Setup: no se generó
+  un instalador nuevo; no se atribuye una validación de instalación/desinstalación a esta entrega.
+- Evidencia privada y respaldos en artifacts/palette-2.19.0/; excluidos de Git.
+
 
 
 

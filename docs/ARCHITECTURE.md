@@ -341,3 +341,22 @@ los cursores compartidos de Windows. Cambiar herramienta o Espacio actualiza el
 cursor con el puntero quieto; la captura de paneo también conserva su rol. Cambios
 de DPI/tema/ajustes regeneran el recurso propio y el destructor lo libera. No se
 sustituye ningún cursor del sistema ni se cambian preferencias de Windows.
+
+## Paleta y preferencias portables — 2.19.0
+
+`color_values.hpp` valida HTML #RRGGBB/RRGGBB y canales RGB; `color_dialog.cpp`
+usa controles Win32 accesibles con campos sincronizados, muestra previa y hasta
+16 favoritos sin duplicados. El controlador persiste la lista al cerrar el editor,
+conserva la anterior si falla la escritura y la comparte con el panel de Board.
+Los favoritos de Board usan IDs 300–315: layout, render y entrada consumen los
+mismos botones; su altura adicional participa del desplazamiento a cualquier escala.
+
+Preferences conserva fuentes Unicode en UTF-8 explícito y añade preferencias de
+fuente, tamaño y conversión de Board. El documento .epboard sigue conservando su
+estilo propio. `preferences_transfer.inl` serializa el mismo conjunto canónico de
+preferencias en JSON versionado, con límite de 64 KiB, claves permitidas, cadenas
+acotadas, UTF-8 válido, rechazo de duplicados y de valores que el lector normalizaría.
+La validación se realiza en un INI temporal separado, nunca sobre el activo.
+Al importar se respalda la configuración, se registran los atajos de forma
+transaccional y se escribe por reemplazo atómico antes de aplicar preferencias.
+No se importan rutas ejecutables, dibujos ni configuraciones de otros programas.

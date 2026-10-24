@@ -1,4 +1,7 @@
 #include "preferences.hpp"
+#include "color_values.hpp"
+#include <map>
+#include <locale>
 
 #include <shlobj.h>
 
@@ -41,7 +44,7 @@ float read_float(const std::wstring& path, const wchar_t* key, float fallback) {
     if (buffer[0] == L'\0') return fallback;
     wchar_t* end = nullptr;
     const float value = std::wcstof(buffer, &end);
-    return end != buffer ? value : fallback;
+    return end != buffer && std::isfinite(value) ? value : fallback;
 }
 
 Color read_color(const std::wstring& path, Color fallback) {
@@ -178,6 +181,32 @@ Preferences PreferencesStore::load() const {
     result.zoom_invert = read_int(path_, L"ZoomInvert", 0) != 0;
     result.thickness = std::clamp(read_float(path_, L"Thickness", 4.0F), 1.0F, 40.0F);
     result.color = read_color(path_, kBlack);
+    wchar_t colors[160]{};
+    GetPrivateProfileStringW(L"ElitePen", L"CustomColors", L"", colors, 160, path_.c_str());
+    std::wistringstream swatches(colors);
+    std::wstring value;
+    while (std::getline(swatches, value, L';') && result.custom_colors.size() < kCustomColorLimit) {
+        if (auto c = parse_color_hex(value); c &&
+            std::find(result.custom_colors.begin(), result.custom_colors.end(), *c) == result.custom_colors.end())
+            result.custom_colors.push_back(*c);
+    }
+    result.board_text_size = std::clamp(read_float(path_, L"BoardTextSize", 28), 8.0F, 256.0F);
+    result.board_auto_text = read_int(path_, L"BoardAutoText", 0) != 0;
+    // The legacy profile API reads UTF-8 INI text as ANSI. Decode font names explicitly.
+    std::ifstream font_stream{std::filesystem::path(path_)};
+    std::string line;
+    while (std::getline(font_stream, line)) {
+        if (!line.starts_with("BoardFont=")) continue;
+        auto font = line.substr(10);
+        if (!font.empty() && font.back() == '\r') font.pop_back();
+        const int count = MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, font.data(),
+                                             static_cast<int>(font.size()), nullptr, 0);
+        if (count > 0 && count < 128) {
+            std::wstring wide(static_cast<std::size_t>(count), L'\0');
+            MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, font.data(), static_cast<int>(font.size()), wide.data(), count);
+            result.board_font = std::move(wide);
+        }
+    }
     constexpr std::array<const wchar_t*, kHotkeyActionCount> hotkey_keys{{
         L"HotkeyInteract", L"HotkeyVisibility", L"HotkeyWhiteboard", L"HotkeyUndo",
         L"HotkeyRedo", L"HotkeyClear", L"HotkeyZoom", L"HotkeyBlackboard",
@@ -261,13 +290,10 @@ Preferences PreferencesStore::load() const {
     return result;
 }
 
-bool PreferencesStore::save(const Preferences& preferences) const {
-    const std::filesystem::path target(path_);
-    std::error_code error;
-    std::filesystem::create_directories(target.parent_path(), error);
-    if (error) return false;
-
+namespace {
+std::string preferences_ini(const Preferences& preferences) {
     std::ostringstream content;
+    content.imbue(std::locale::classic());
     content << "[ElitePen]\r\n";
     content << "HotkeySchemeVersion=" << preferences.hotkey_scheme_version << "\r\n";
     content << "Theme=" << static_cast<int>(preferences.theme) << "\r\n";
@@ -312,6 +338,19 @@ bool PreferencesStore::save(const Preferences& preferences) const {
     content << "Color=" << static_cast<int>(preferences.color.r) << ','
             << static_cast<int>(preferences.color.g) << ','
             << static_cast<int>(preferences.color.b) << "\r\n";
+    content << "CustomColors=";
+    for (std::size_t n = 0; n < std::min(preferences.custom_colors.size(), kCustomColorLimit); ++n) {
+        auto hex = color_hex(preferences.custom_colors[n]);
+        content << (n ? ";" : "") << std::string(hex.begin(), hex.end());
+    }
+    content << "\r\nBoardTextSize=" << preferences.board_text_size
+            << "\r\nBoardAutoText=" << (preferences.board_auto_text ? 1 : 0) << "\r\nBoardFont=";
+    std::wstring font = preferences.board_font;
+    if (font.empty() || font.size() >= 128 || font.find_first_of(L"\r\n") != std::wstring::npos) font = L"Palitoon";
+    const int bytes = WideCharToMultiByte(CP_UTF8, 0, font.data(), static_cast<int>(font.size()), nullptr, 0, nullptr, nullptr);
+    std::string utf8(static_cast<std::size_t>(bytes), '\0');
+    WideCharToMultiByte(CP_UTF8, 0, font.data(), static_cast<int>(font.size()), utf8.data(), bytes, nullptr, nullptr);
+    content << utf8 << "\r\n";
     constexpr std::array<const char*, kHotkeyActionCount> hotkey_keys{{
         "HotkeyInteract", "HotkeyVisibility", "HotkeyWhiteboard", "HotkeyUndo",
         "HotkeyRedo", "HotkeyClear", "HotkeyZoom", "HotkeyBlackboard",
@@ -363,11 +402,18 @@ bool PreferencesStore::save(const Preferences& preferences) const {
                 << ',' << preferences.hotkeys[index].virtual_key << "\r\n";
     }
 
+    return content.str();
+}
+bool write_settings_atomic(const std::wstring& path, const std::string& content) {
+    const std::filesystem::path target(path);
+    std::error_code error;
+    if (!target.parent_path().empty()) std::filesystem::create_directories(target.parent_path(), error);
+    if (error) return false;
     const std::filesystem::path temporary = target.wstring() + L".tmp";
     {
         std::ofstream stream(temporary, std::ios::binary | std::ios::trunc);
         if (!stream) return false;
-        stream << content.str();
+        stream << content;
         stream.flush();
         if (!stream) return false;
     }
@@ -375,4 +421,9 @@ bool PreferencesStore::save(const Preferences& preferences) const {
                        MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH) != FALSE;
 }
 
+} // namespace
+bool PreferencesStore::save(const Preferences& preferences) const {
+    return write_settings_atomic(path_, preferences_ini(preferences));
+}
+#include "preferences_transfer.inl"
 }  // namespace elite_pen::win

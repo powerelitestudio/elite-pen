@@ -10,8 +10,8 @@ pantalla para Windows, desarrollada por [Power Elite Studio](https://powerelite.
 Permite explicar sobre cualquier aplicación sin convertir la presentación en una
 sucesión de ventanas y menús.
 
-> **Estado:** acceso anticipado. La versión 2.18.1 renueva la pizarra con un
-> panel compacto de iconos, fondos de cualquier color y escritura a texto local con Palitoon.
+> **Estado:** acceso anticipado. La versión 2.19.0 añade colores personalizados
+> persistentes y respaldo de preferencias en JSON, incluida la fuente de Board.
 > Conserva los toques de lápiz corregidos en 2.16.1.
 > Incluye la pizarra editable
 > Whiteboard / Blackboard con lienzo navegable, presión del lápiz, imágenes,
@@ -189,7 +189,7 @@ Los paquetes oficiales listos para usar se publican en
 [GitHub Releases](https://github.com/powerelitestudio/elite-pen/releases):
 
 La distribución publicada que se enlaza a continuación es 2.10.3. Los símbolos y
-tamaños nuevos, emojis, Zoom de enfoque y pizarra editable están en el código 2.18.1 y pueden compilarse con los scripts del repositorio.
+tamaños nuevos, emojis, Zoom de enfoque y pizarra editable están en el código 2.19.0 y pueden compilarse con los scripts del repositorio.
 
 - [Descargar portable 2.10.3](https://github.com/powerelitestudio/elite-pen/releases/download/v2.10.3/Elite.Pen.Portable.2.10.3.zip):
   descomprime la carpeta y ejecuta `Elite Pen.exe`.
@@ -412,3 +412,29 @@ La licencia del software no concede derechos sobre las marcas `Elite Pen`,
 `Power Elite Studio`, sus logotipos ni su identidad visual. Consulta la
 [política de marcas](TRADEMARKS.md) para distinguir forks y distribuciones derivadas
 de las ediciones oficiales.
+
+## Colores personalizados y respaldo de preferencias (2.19)
+
+En **Board → +** o **Configuración → Mis colores…** puedes escribir un color HTML
+como `#7C3AED` o los canales RGB de 0 a 255. **Guardar color** lo añade a tu paleta
+(hasta 16, sin duplicados); **Usar color** selecciona la tinta. Selecciona una muestra
+y pulsa **Quitar seleccionado** para retirarla. Los colores se guardan en el equipo,
+aparecen como **Mis colores** y vuelven al abrir Elite Pen. El modo de escritorio
+comparte la paleta a través de su selector de colores.
+
+**Configuración → Exportar ajustes…** (también en **Archivo** de Board) crea un JSON con las preferencias de Elite Pen:
+colores, fuente/tamaño preferidos de Board, conversión de escritura, atajos,
+favoritos de emojis, zonas y máscaras de enfoque, tamaño y apariencia de paneles.
+**Importar ajustes…** valida el archivo, pide confirmar el reemplazo y guarda la
+configuración anterior en `settings.ini.before-import.json`, junto a `settings.ini`.
+Los valores inválidos y versiones incompatibles no reemplazan tus preferencias;
+un atajo ocupado en Windows cancela la importación. Las posiciones de las ventanas
+se recolocan en los monitores disponibles al volver a abrir la aplicación.
+
+Para cambiar de equipo conserva también tus archivos `.epboard`: el JSON no
+contiene dibujos ni recuperaciones. Las fuentes distintas de Palitoon deben estar
+instaladas en el nuevo Windows; el perfil ACK05 se exporta desde el controlador XP-Pen.
+La pizarra mantiene el estilo de los documentos que abres; la fuente preferida
+exportada es la elegida desde las opciones de texto y se usa al comenzar una sesión
+sin recuperación previa. Importar preferencias actualiza la fuente de los próximos
+textos sin cambiar los objetos existentes.

@@ -392,6 +392,45 @@ int main() {
           sanitized_focus.hotkeys[static_cast<std::size_t>(HotkeyAction::Pen)] == HotkeyBinding{6, 'M'},
           "invalid focus values sanitize and a new shortcut never takes an existing custom binding");
 
+    Preferences portable;
+    portable.custom_colors = {{18, 52, 86, 255}, {255, 128, 0, 255}};
+    portable.board_font = L"Fuente ñ 漢字";
+    portable.board_text_size = 48;
+    portable.board_auto_text = true;
+    portable.focus_zones[7] = focus.focus_last;
+    portable.hotkeys[board_hand] = {0, VK_F13};
+    check(store.save(portable), "custom palette and Unicode font persist");
+    const auto persisted = store.load();
+    check(persisted.custom_colors == portable.custom_colors && persisted.board_font == portable.board_font &&
+          persisted.board_text_size == 48 && persisted.board_auto_text, "colors and font survive a new preferences load");
+    const auto json_path = (data / L"settings.json").wstring();
+    std::wstring transfer_error;
+    check(store.export_json(json_path, portable, transfer_error), "all preferences export as JSON");
+    Preferences imported;
+    check(store.read_json(json_path, imported, transfer_error), "exported JSON imports including focus masks");
+    check(imported.custom_colors == portable.custom_colors && imported.board_font == portable.board_font &&
+          imported.hotkeys == portable.hotkeys && imported.focus_zones[7].mask_count == 1 && imported.board_auto_text,
+          "full round trip preserves palette, fonts, shortcuts, and saved zones");
+    const auto corrupt = [&](const std::string& payload) {
+        std::ofstream out{std::filesystem::path(json_path), std::ios::binary | std::ios::trunc}; out << payload;
+    };
+    for (const std::string payload : {
+        "{}", "{\"format\":\"OtherApp\",\"version\":1,\"settings\":{\"Theme\":\"1\"}}",
+        "{\"format\":\"ElitePen.Settings\",\"version\":2,\"settings\":{\"Theme\":\"1\"}}",
+        "{\"format\":\"ElitePen.Settings\",\"version\":1,\"settings\":{\"Theme\":\"9\"}}",
+        "{\"format\":\"ElitePen.Settings\",\"version\":1,\"settings\":{\"Theme\":\"1\",\"Theme\":\"0\"}}",
+        "{\"format\":\"ElitePen.Settings\",\"version\":1,\"settings\":{\"BoardFont\":\"x\\nTheme=0\"}}",
+        "{\"format\":\"ElitePen.Settings\",\"version\":1,\"settings\":{\"RunCommand\":\"anything\"}}",
+        "{\"format\":\"ElitePen.Settings\",\"version\":1,\"settings\":{\"ZoomFactor\":\"nan\"}}"}) {
+        corrupt(payload);
+        imported.board_font = L"unchanged";
+        check(!store.read_json(json_path, imported, transfer_error) && imported.board_font == L"unchanged",
+              "malformed, foreign, duplicate, unsupported, injected and invalid values never change the candidate");
+        check(store.load().custom_colors == portable.custom_colors && store.load().board_font == portable.board_font,
+              "rejected import leaves the installed preferences untouched");
+    }
+    corrupt(std::string(65537, 'x'));
+    check(!store.read_json(json_path, imported, transfer_error), "oversized configuration is rejected");
     if (failures == 0) std::cout << "Elite Pen preferences: all tests passed\n";
     return failures == 0 ? 0 : 1;
 }

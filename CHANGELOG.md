@@ -1,5 +1,13 @@
 # Historial de cambios
 
+## 2.19.0 — 2026-10-24
+
+- Colores personalizados persistentes: hasta 16 muestras compartidas entre Board y escritorio, editor HTML/hexadecimal y RGB, vista previa y eliminación individual.
+- Fila «Mis colores» en el panel de Board y en el selector de colores del escritorio; respeta el desplazamiento y los tamaños del panel hasta el 300 %.
+- Exportar e importar preferencias en JSON desde Configuración: colores, fuente y tamaño preferidos, conversión de escritura, atajos, favoritos de emojis, zonas de enfoque y ajustes de presentación.
+- Importación validada, guardado atómico y respaldo anterior automático. Las pizarras y recuperaciones siguen guardándose aparte en .epboard; los archivos de fuentes y perfiles del controlador XP-Pen no se incluyen.
+
+
 ## 2.18.1 — 2026-10-22
 
 - Board muestra Borrar todo con icono de papelera y texto en la cabecera del panel,

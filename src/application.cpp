@@ -6,6 +6,7 @@
 #include "graphics.hpp"
 #include "history_shortcuts.hpp"
 #include "preferences.hpp"
+#include "color_dialog.hpp"
 #include "board_recognition.hpp"
 #include <dwrite_3.h>
 
@@ -1025,6 +1026,9 @@ private:
     HWND shortcut_scrollbar_{};
     HWND reset_hotkeys_{};
     HWND close_{};
+    HWND export_settings_{};
+    HWND import_settings_{};
+    HWND custom_colors_{};
     HWND chrome_close_{};
     HFONT title_font_{};
     HFONT body_font_{};
@@ -1443,6 +1447,8 @@ public:
     bool reset_hotkeys();
     void reset_palette_position();
     void save_preferences();
+    std::optional<Color> choose_custom_color(HWND owner, Color initial);
+    void transfer_settings(HWND owner, bool exporting);
     [[nodiscard]] bool zoom_active() const noexcept;
     [[nodiscard]] bool zoom_frozen() const noexcept;
     void restack_zoom();
@@ -4177,10 +4183,12 @@ bool ColorWindow::initialize(GraphicsDevice& graphics) {
 }
 
 void ColorWindow::toggle_near(HWND anchor) {
+    const int height = 330 + (controller_.preferences().custom_colors.empty() ? 0 :
+        24 + 36 * static_cast<int>((controller_.preferences().custom_colors.size() + 6) / 7));
     RECT anchor_rect{};
     GetWindowRect(anchor, &anchor_rect);
     RECT desired{anchor_rect.right + 10, anchor_rect.top,
-                 anchor_rect.right + 10 + 344, anchor_rect.top + 330};
+                 anchor_rect.right + 10 + 344, anchor_rect.top + height};
     HMONITOR monitor = MonitorFromRect(&anchor_rect, MONITOR_DEFAULTTONEAREST);
     MONITORINFO info{};
     info.cbSize = sizeof(info);
@@ -4191,25 +4199,16 @@ void ColorWindow::toggle_near(HWND anchor) {
     }
     desired.top = std::clamp(static_cast<int>(desired.top),
                              static_cast<int>(info.rcWork.top),
-                             static_cast<int>(info.rcWork.bottom) - 330);
-    SetWindowPos(window_, HWND_TOPMOST, desired.left, desired.top, 344, 330,
+                             static_cast<int>(info.rcWork.bottom) - height);
+    SetWindowPos(window_, HWND_TOPMOST, desired.left, desired.top, 344, height,
                  SWP_SHOWWINDOW | SWP_NOACTIVATE);
     invalidate();
 }
 
 void ColorWindow::choose_system_color() {
-    static COLORREF custom_colors[16]{};
-    CHOOSECOLORW chooser{};
-    chooser.lStructSize = sizeof(chooser);
-    chooser.hwndOwner = window_;
-    chooser.rgbResult = RGB(controller_.state().color.r, controller_.state().color.g,
-                            controller_.state().color.b);
-    chooser.lpCustColors = custom_colors;
-    chooser.Flags = CC_FULLOPEN | CC_RGBINIT | CC_ANYCOLOR;
     SetForegroundWindow(window_);
-    if (ChooseColorW(&chooser)) {
-        controller_.set_color({GetRValue(chooser.rgbResult), GetGValue(chooser.rgbResult),
-                               GetBValue(chooser.rgbResult), 255});
+    if (auto color = controller_.choose_custom_color(window_, controller_.state().color)) {
+        controller_.set_color(*color);
         hide();
     }
 }
@@ -4218,6 +4217,13 @@ LRESULT ColorWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
     switch (message) {
         case WM_LBUTTONDOWN: {
             const POINT point{GET_X_LPARAM(lparam), GET_Y_LPARAM(lparam)};
+            const auto& favorites = controller_.preferences().custom_colors;
+            for (std::size_t n = 0; n < favorites.size(); ++n) {
+                if (point_in_circle(point, 31.0F + static_cast<float>(n % 7) * 47,
+                    369.0F + static_cast<float>(n / 7) * 36, 16)) {
+                    controller_.set_color(favorites[n]); hide(); return 0;
+                }
+            }
             for (std::size_t index = 0; index < kExtendedColors.size(); ++index) {
                 const int column = static_cast<int>(index % 7);
                 const int row = static_cast<int>(index / 7);
@@ -4270,6 +4276,7 @@ LRESULT ColorWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
 void ColorWindow::render() {
     auto* context = surface_.begin_draw(D2D1::ColorF(0, 0.0F));
     if (!context) return;
+    const float height = static_cast<float>(surface_.height());
     const auto& theme = current_ui_theme();
     ComPtr<ID2D1SolidColorBrush> panel;
     ComPtr<ID2D1SolidColorBrush> raised;
@@ -4294,8 +4301,8 @@ void ColorWindow::render() {
                                    glass.GetAddressOf());
     context->CreateSolidColorBrush(theme_color(theme.violet_strong), selected.GetAddressOf());
     context->FillRoundedRectangle(
-        D2D1::RoundedRect(D2D1::RectF(4, 5, 344, 330), 20, 20), shadow.Get());
-    const auto panel_rect = D2D1::RoundedRect(D2D1::RectF(2, 2, 342, 328), 18, 18);
+        D2D1::RoundedRect(D2D1::RectF(4, 5, 344, height), 20, 20), shadow.Get());
+    const auto panel_rect = D2D1::RoundedRect(D2D1::RectF(2, 2, 342, height - 2), 18, 18);
     context->FillRoundedRectangle(panel_rect, panel.Get());
     context->DrawRoundedRectangle(panel_rect, border.Get(), 1.15F);
     context->DrawLine(D2D1::Point2F(20, 41), D2D1::Point2F(324, 41), border.Get(), 0.8F);
@@ -4350,6 +4357,18 @@ void ColorWindow::render() {
     if (caption_format) {
         context->DrawTextW(L"Color personalizado…", 20, caption_format.Get(),
                            D2D1::RectF(58, 290, 300, 313), text.Get());
+    }
+    const auto& favorites = controller_.preferences().custom_colors;
+    if (!favorites.empty() && caption_format)
+        context->DrawTextW(L"MIS COLORES", 11, caption_format.Get(), D2D1::RectF(20, 333, 320, 355), muted.Get());
+    for (std::size_t n = 0; n < favorites.size(); ++n) {
+        const float x = 31 + static_cast<float>(n % 7) * 47, y = 369 + static_cast<float>(n / 7) * 36;
+        ComPtr<ID2D1SolidColorBrush> color;
+        context->CreateSolidColorBrush(d2d_color(favorites[n]), color.GetAddressOf());
+        context->FillEllipse(D2D1::Ellipse({x, y}, 12, 12), color.Get());
+        context->DrawEllipse(D2D1::Ellipse({x, y}, 12, 12), border.Get(), 1);
+        if (controller_.state().color == favorites[n])
+            context->DrawEllipse(D2D1::Ellipse({x, y}, 16, 16), selected.Get(), 2);
     }
     std::wstring error;
     if (!surface_.end_draw(error)) controller_.report_runtime_error(error);
@@ -5444,7 +5463,7 @@ bool SettingsWindow::initialize() {
     title_ = CreateWindowW(L"STATIC", L"ELITE PEN", WS_CHILD | WS_VISIBLE,
                            31, 12, 473, 30, window_, nullptr,
                            GetModuleHandleW(nullptr), nullptr);
-    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.18.1",
+    subtitle_ = CreateWindowW(L"STATIC", L"Preferencias de anotación y presentación · 2.19.0",
                               WS_CHILD | WS_VISIBLE, 32, 40, 473, 20, window_, nullptr,
                               GetModuleHandleW(nullptr), nullptr);
     chrome_close_ = CreateWindowW(L"BUTTON", L"", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
@@ -5596,7 +5615,7 @@ bool SettingsWindow::initialize() {
                                     reinterpret_cast<HMENU>(4300),
                                     GetModuleHandleW(nullptr), nullptr);
     help_ = CreateWindowW(L"STATIC",
-        L"Ayuda de Elite Pen 2.18.1. Anotación, pizarra, captura y zoom para Windows. "
+        L"Ayuda de Elite Pen 2.19.0. Anotación, pizarra, captura y zoom para Windows. "
         L"Código abierto bajo Apache License 2.0. Desarrollado por Power Elite Studio.",
         WS_CHILD | SS_OWNERDRAW, 24, 119, 540, 400, window_,
         reinterpret_cast<HMENU>(4105), GetModuleHandleW(nullptr), nullptr);
@@ -5606,6 +5625,12 @@ bool SettingsWindow::initialize() {
     help_source_ = CreateWindowW(L"BUTTON", L"Código fuente en GitHub",
         WS_CHILD | WS_TABSTOP | BS_OWNERDRAW, 292, 465, 266, 38, window_,
         reinterpret_cast<HMENU>(4501), GetModuleHandleW(nullptr), nullptr);
+    export_settings_ = CreateWindowW(L"BUTTON", L"Exportar ajustes…", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
+        24, 542, 186, 32, window_, reinterpret_cast<HMENU>(4600), GetModuleHandleW(nullptr), nullptr);
+    import_settings_ = CreateWindowW(L"BUTTON", L"Importar ajustes…", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
+        220, 542, 186, 32, window_, reinterpret_cast<HMENU>(4601), GetModuleHandleW(nullptr), nullptr);
+    custom_colors_ = CreateWindowW(L"BUTTON", L"Mis colores…", WS_CHILD | WS_VISIBLE | WS_TABSTOP | BS_OWNERDRAW,
+        326, 489, 232, 31, window_, reinterpret_cast<HMENU>(4602), GetModuleHandleW(nullptr), nullptr);
     close_ = CreateWindowW(L"BUTTON", L"Cerrar", WS_CHILD | WS_VISIBLE | WS_TABSTOP |
                            BS_OWNERDRAW, 455, 542, 100, 32, window_,
                            reinterpret_cast<HMENU>(IDOK), GetModuleHandleW(nullptr), nullptr);
@@ -5620,7 +5645,7 @@ bool SettingsWindow::initialize() {
                        reset_position_,
                        shortcuts_, shortcut_scrollbar_, reset_hotkeys_, help_, help_website_,
                        help_source_,
-                       close_, chrome_close_}) {
+                       close_, chrome_close_, export_settings_, import_settings_, custom_colors_}) {
         SendMessageW(child, WM_SETFONT, reinterpret_cast<WPARAM>(body_font_), TRUE);
         SetWindowTheme(child, theme.light ? L"Explorer" : L"DarkMode_Explorer", nullptr);
     }
@@ -5840,7 +5865,7 @@ void SettingsWindow::paint_help(HDC dc, RECT bounds) {
     SelectObject(dc, small_font_);
     SetTextColor(dc, theme_colorref(theme.text_muted));
     RECT version{bounds.left, bounds.top + 73, bounds.right, bounds.top + 94};
-    DrawTextW(dc, L"Version 2.18.1 · Windows 10 y 11 · x64", -1, &version,
+    DrawTextW(dc, L"Version 2.19.0 · Windows 10 y 11 · x64", -1, &version,
               DT_LEFT | DT_SINGLELINE | DT_VCENTER);
 
     SelectObject(dc, body_font_);
@@ -5901,7 +5926,7 @@ void SettingsWindow::show_tab(int tab) {
                          palette_size_hint_, thickness_label_, thickness_, zoom_label_, zoom_,
                          zoom_view_label_, zoom_view_, zoom_invert_, zoom_lens_size_label_,
                          zoom_lens_size_, theme_label_, theme_dark_,
-                         theme_light_, reset_position_}) {
+                         theme_light_, reset_position_, custom_colors_}) {
         ShowWindow(control, general_visibility);
     }
     ShowWindow(shortcuts_, active_tab_ == 1 ? SW_SHOW : SW_HIDE);
@@ -6120,6 +6145,17 @@ LRESULT SettingsWindow::handle_message(UINT message, WPARAM wparam, LPARAM lpara
         }
         case WM_COMMAND: {
             const int id = LOWORD(wparam);
+            if ((id == 4600 || id == 4601) && HIWORD(wparam) == BN_CLICKED) {
+                cancel_hotkey_capture();
+                controller_.transfer_settings(window_, id == 4600);
+                refresh_controls();
+                return 0;
+            }
+            if (id == 4602 && HIWORD(wparam) == BN_CLICKED) {
+                if (auto color = controller_.choose_custom_color(window_, controller_.state().color))
+                    controller_.set_color(*color);
+                return 0;
+            }
             if (id == 4101 && HIWORD(wparam) == BN_CLICKED) {
                 show_tab(0);
                 return 0;
@@ -10084,6 +10120,76 @@ void Controller::reset_palette_position() {
                  info.rcWork.top + 28, 0, 0, SWP_NOSIZE | SWP_NOACTIVATE);
     save_palette_position();
     save_preferences();
+}
+
+std::optional<Color> Controller::choose_custom_color(HWND owner, Color initial) {
+    auto favorites = preferences_.custom_colors;
+    const auto result = custom_color_dialog(owner, initial, favorites, [&](const std::vector<Color>& colors) {
+        if (colors == preferences_.custom_colors) return true;
+        auto candidate = preferences_;
+        candidate.custom_colors = colors;
+        if (!preferences_store_.save(candidate)) return false;
+        preferences_.custom_colors = colors;
+        return true;
+    });
+    if (colors_ && colors_->visible()) colors_->toggle_near(palette_->hwnd());
+    if (board_) board_->invalidate();
+    return result;
+}
+void Controller::transfer_settings(HWND owner, bool exporting) {
+    wchar_t filename[32768] = L"Elite-Pen-configuracion.json";
+    OPENFILENAMEW dialog{};
+    dialog.lStructSize = sizeof(dialog); dialog.hwndOwner = owner;
+    dialog.lpstrFilter = L"Configuración de Elite Pen (*.json)\0*.json\0\0";
+    dialog.lpstrFile = filename; dialog.nMaxFile = 32768; dialog.lpstrDefExt = L"json";
+    dialog.Flags = OFN_EXPLORER | OFN_NOCHANGEDIR | OFN_PATHMUSTEXIST |
+        (exporting ? OFN_OVERWRITEPROMPT : OFN_FILEMUSTEXIST);
+    if (!(exporting ? GetSaveFileNameW(&dialog) : GetOpenFileNameW(&dialog))) return;
+    std::wstring error;
+    if (exporting) {
+        save_preferences();
+        auto exported = preferences_;
+        if (board_) board_->capture_preferences(exported);
+        if (!preferences_store_.export_json(filename, exported, error))
+            MessageBoxW(owner, error.c_str(), L"Elite Pen", MB_OK | MB_ICONERROR);
+        else MessageBoxW(owner, L"Configuración exportada: colores, fuente, atajos, favoritos y preferencias.\n\nLas pizarras se guardan aparte como archivos .epboard. Las fuentes instaladas y el perfil del ACK05 se trasladan por separado.", L"Elite Pen", MB_OK | MB_ICONINFORMATION);
+        return;
+    }
+    Preferences candidate;
+    if (!preferences_store_.read_json(filename, candidate, error)) {
+        MessageBoxW(owner, error.c_str(), L"No se pudo importar", MB_OK | MB_ICONERROR); return;
+    }
+    if (MessageBoxW(owner, L"¿Reemplazar las preferencias actuales por las del archivo?\n\nSe guardará una copia de la configuración anterior. Tus dibujos y recuperaciones se conservan.",
+        L"Importar configuración", MB_YESNO | MB_DEFBUTTON2 | MB_ICONQUESTION) != IDYES) return;
+    const auto backup = preferences_store_.path() + L".before-import.json";
+    auto current = preferences_;
+    if (board_) board_->capture_preferences(current);
+    if (!preferences_store_.export_json(backup, current, error)) {
+        MessageBoxW(owner, L"No se pudo crear el respaldo. No se importó ningún ajuste.", L"Elite Pen", MB_OK | MB_ICONERROR); return;
+    }
+    if (!palette_ || !palette_->apply_hotkeys(candidate.hotkeys)) {
+        MessageBoxW(owner, L"Uno de los atajos importados está ocupado en Windows. Se conserva la configuración actual.", L"Elite Pen", MB_OK | MB_ICONWARNING); return;
+    }
+    if (!preferences_store_.save(candidate)) {
+        palette_->apply_hotkeys(preferences_.hotkeys);
+        MessageBoxW(owner, L"No se pudo guardar. Se conserva la configuración actual.", L"Elite Pen", MB_OK | MB_ICONERROR); return;
+    }
+    close_panels();
+    preferences_ = candidate;
+    state_.color = candidate.color; state_.thickness = candidate.thickness;
+    state_.zoom_factor = candidate.zoom_factor; state_.cursor_highlight = candidate.highlight_cursor;
+    palette_->apply_mode(candidate.control_mode); palette_->apply_size(candidate.palette_size);
+    g_ui_theme = candidate.theme;
+    if (settings_) settings_->apply_theme();
+    if (geometry_) geometry_->restore_geometry_layout();
+    if (emojis_) emojis_->restore_layout();
+    if (board_) board_->apply_preferences();
+    // Applying the current palette layout remembers its old on-screen position.
+    // Keep the imported positions for startup's monitor-aware restoration.
+    preferences_ = candidate;
+    preferences_store_.save(preferences_);
+    apply_capture_preference(); invalidate_all();
+    MessageBoxW(owner, (L"Configuración importada.\n\nRespaldo anterior:\n" + backup + L"\n\nLas posiciones de las ventanas se restaurarán al volver a abrir Elite Pen.").c_str(), L"Elite Pen", MB_OK | MB_ICONINFORMATION);
 }
 
 void Controller::save_preferences() {

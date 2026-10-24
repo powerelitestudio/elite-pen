@@ -319,6 +319,10 @@ class BoardWindow final : public WindowBase {
             DestroyWindow(edit_);
     }
     bool initialize();
+    void apply_preferences();
+    void capture_preferences(Preferences& p) const {
+        p.board_font = text_font_; p.board_text_size = text_size_; p.board_auto_text = auto_text_;
+    }
     void show();
     void hide();
     bool active() const noexcept {
@@ -569,6 +573,9 @@ void BoardWindow::font_menu() {
         text_size_ = std::clamp(static_cast<float>(chooser.iPointSize) * (96.0F / 720), 8.0F, 256.0F);
     } else
         return;
+    controller_.preferences().board_font = text_font_;
+    controller_.preferences().board_text_size = text_size_;
+    controller_.save_preferences();
     changed(
         (L"Fuente: " + text_font_ + L" · " + std::to_wstring(static_cast<int>(text_size_)) + L" px").c_str());
 }
@@ -600,17 +607,8 @@ void BoardWindow::background_menu() {
     }
     if (id != 1)
         return;
-    static COLORREF custom[16]{};
     const auto color = background_.value_or(dark_ ? Color{17, 20, 27, 255} : Color{255, 255, 255, 255});
-    CHOOSECOLORW chooser{};
-    chooser.lStructSize = sizeof(chooser);
-    chooser.hwndOwner = window_;
-    chooser.rgbResult = RGB(color.r, color.g, color.b);
-    chooser.lpCustColors = custom;
-    chooser.Flags = CC_RGBINIT | CC_FULLOPEN;
-    if (ChooseColorW(&chooser))
-        set_background(
-            {GetRValue(chooser.rgbResult), GetGValue(chooser.rgbResult), GetBValue(chooser.rgbResult), 255});
+    if (auto chosen = controller_.choose_custom_color(window_, color)) set_background(*chosen);
 }
 void BoardWindow::cancel_recognition() {
     ++recognition_generation_;
@@ -739,6 +737,7 @@ bool BoardWindow::initialize() {
         !initialize_surface(controller_.graphics()))
         return false;
     initialize_font();
+    apply_preferences();
     refresh_pencil_cursor();
     SetTimer(window_, board_ui::kRecognitionTimer, 200, nullptr);
     apply_premium_window_chrome(window_);
@@ -749,6 +748,18 @@ bool BoardWindow::initialize() {
     last_snapshot_at_ = monotonic_milliseconds();
     SetTimer(window_, board_ui::kSaveTimer, 1000, nullptr);
     return true;
+}
+void BoardWindow::apply_preferences() {
+    commit_text();
+    cancel_recognition();
+    const auto& p = controller_.preferences();
+    const bool text_changed = text_font_ != p.board_font || text_size_ != p.board_text_size ||
+                              auto_text_ != p.board_auto_text;
+    text_font_ = p.board_font;
+    text_size_ = p.board_text_size;
+    auto_text_ = p.board_auto_text;
+    if (text_changed && !recovery_.empty()) changed(L"Preferencias de texto importadas");
+    else invalidate();
 }
 void BoardWindow::show() {
     ShowWindow(window_, SW_RESTORE);
@@ -1003,7 +1014,9 @@ void BoardWindow::layout() {
     const int columns = std::clamp(static_cast<int>((panel_width / s - 24) / 52), 2, 6);
     const float cell = (panel_width / s - 24) / static_cast<float>(columns);
     const int rows = (18 + columns - 1) / columns;
-    toolbar_total_ = (42 + static_cast<float>(rows) * 54 + 168) * s;
+    const auto favorite_count = controller_.preferences().custom_colors.size();
+    const float favorites_height = favorite_count ? 20.0F + 32.0F * static_cast<float>((favorite_count + 7) / 8) : 0.0F;
+    toolbar_total_ = (42 + static_cast<float>(rows) * 54 + 168 + favorites_height) * s;
     const float panel_height =
         panel_collapsed_ ? 38 * s : std::min(toolbar_total_, height - (fullscreen_ ? 24.0F : 90.0F));
     if (!panel_moved_)
@@ -1070,13 +1083,19 @@ void BoardWindow::layout() {
         item(100 + n, names[static_cast<std::size_t>(n)], 12 + static_cast<float>(n) * swatch, y + 16, swatch,
              32);
     item(15, L"Más colores…", 12 + 8 * swatch, y + 16, swatch, 32);
+    for (std::size_t n = 0; n < favorite_count; ++n) {
+        const auto name = color_hex(controller_.preferences().custom_colors[n]);
+        item(300 + static_cast<int>(n), name.c_str(), 12 + static_cast<float>(n % 8) * available / 8,
+            y + 64 + static_cast<float>(n / 8) * 32, available / 8, 30);
+    }
     const float chip = (available - 64) / 4;
+    const float trace_y = y + favorites_height;
     for (int n = 0; n < 4; ++n)
-        item(200 + n, L"Grosor del trazo", 12 + static_cast<float>(n) * chip, y + 64, chip - 3, 34);
-    item(16, L"Reducir grosor", 12 + 4 * chip, y + 64, 30, 34);
-    item(17, L"Aumentar grosor", 44 + 4 * chip, y + 64, 30, 34);
-    item(22, L"Presión del lápiz", 12, y + 112, available / 2 - 3, 32);
-    item(23, L"Cuadrícula", 15 + available / 2, y + 112, available / 2 - 3, 32);
+        item(200 + n, L"Grosor del trazo", 12 + static_cast<float>(n) * chip, trace_y + 64, chip - 3, 34);
+    item(16, L"Reducir grosor", 12 + 4 * chip, trace_y + 64, 30, 34);
+    item(17, L"Aumentar grosor", 44 + 4 * chip, trace_y + 64, 30, 34);
+    item(22, L"Presión del lápiz", 12, trace_y + 112, available / 2 - 3, 32);
+    item(23, L"Cuadrícula", 15 + available / 2, trace_y + 112, available / 2 - 3, 32);
 }
 bool BoardWindow::controls(PointF p) const {
     return toolbar_ && (p.y < toolbar_height_ || panel_bounds_.contains(p));
@@ -1147,6 +1166,9 @@ void BoardWindow::file_menu() {
                          {7, L"Exportar vista como PNG…"},
                          {8, L"Recuperaciones locales…"},
                          {0, L""},
+                         {10, L"Exportar ajustes de Elite Pen…"},
+                         {11, L"Importar ajustes de Elite Pen…"},
+                         {0, L""},
                          {9, L"Volver al escritorio\tEsc"}});
     switch (id) {
     case 1:
@@ -1172,6 +1194,10 @@ void BoardWindow::file_menu() {
         break;
     case 8:
         ShellExecuteW(window_, L"open", recovery_.parent_path().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+        break;
+    case 10:
+    case 11:
+        controller_.transfer_settings(window_, id == 10);
         break;
     case 9:
         hide();
@@ -1288,6 +1314,10 @@ void BoardWindow::options_menu() {
                     L"Controles de la pizarra", MB_OK);
 }
 void BoardWindow::command(int id) {
+    if (id >= 300 && static_cast<std::size_t>(id - 300) < controller_.preferences().custom_colors.size()) {
+        color_ = controller_.preferences().custom_colors[static_cast<std::size_t>(id - 300)];
+        changed(); return;
+    }
     if (id >= 100 && id < 108) {
         color_ = board_ui::kColors[static_cast<std::size_t>(id - 100)];
         changed();
@@ -1361,6 +1391,8 @@ void BoardWindow::command(int id) {
     case 34:
         cancel_recognition();
         auto_text_ = !auto_text_;
+        controller_.preferences().board_auto_text = auto_text_;
+        controller_.save_preferences();
         changed(auto_text_ ? L"A texto activado · escribe y haz una pausa · Deshacer recupera tus trazos"
                            : L"Caligrafía original · conversión desactivada");
         break;
@@ -1369,16 +1401,7 @@ void BoardWindow::command(int id) {
         options_menu();
         break;
     case 15: {
-        CHOOSECOLORW chooser{};
-        chooser.lStructSize = sizeof(chooser);
-        COLORREF custom[16]{};
-        chooser.hwndOwner = window_;
-        chooser.rgbResult = RGB(color_.r, color_.g, color_.b);
-        chooser.lpCustColors = custom;
-        chooser.Flags = CC_RGBINIT | CC_FULLOPEN;
-        if (ChooseColorW(&chooser))
-            color_ = {GetRValue(chooser.rgbResult), GetGValue(chooser.rgbResult),
-                      GetBValue(chooser.rgbResult), 255};
+        if (auto color = controller_.choose_custom_color(window_, color_)) color_ = *color;
         break;
     }
     case 16:
@@ -2308,7 +2331,10 @@ void BoardWindow::render_controls(ID2D1DeviceContext *context, DrawableRenderRes
             const int id = b.command;
             if (!chrome && !b.bounds.intersects(panel_body_))
                 continue;
-            const bool swatch = id >= 100 && id < 108, width = id >= 200 && id < 204;
+            const bool favorite = id >= 300 && static_cast<std::size_t>(id - 300) < controller_.preferences().custom_colors.size();
+            const bool swatch = (id >= 100 && id < 108) || favorite, width = id >= 200 && id < 204;
+            const Color swatch_color = favorite ? controller_.preferences().custom_colors[static_cast<std::size_t>(id - 300)]
+                : (id >= 100 && id < 108 ? board_ui::kColors[static_cast<std::size_t>(id - 100)] : kBlack);
             const bool active =
                 (id == 2 && mode_ == Mode::Ink && tool_ == Tool::Pen) ||
                 (id == 3 && mode_ == Mode::Ink && tool_ == Tool::Highlighter) ||
@@ -2326,7 +2352,7 @@ void BoardWindow::render_controls(ID2D1DeviceContext *context, DrawableRenderRes
                 (id == 27 && mode_ == Mode::Ink && tool_ == Tool::Ellipse) ||
                 (id == 28 && mode_ == Mode::Ink && tool_ == Tool::Arrow) ||
                 (id == 29 && mode_ == Mode::Ink && tool_ == Tool::Line) ||
-                (swatch && color_ == board_ui::kColors[static_cast<std::size_t>(id - 100)]) ||
+                (swatch && color_ == swatch_color) ||
                 (width &&
                  std::abs(thickness_ - board_ui::kWidths[static_cast<std::size_t>(id - 200)]) < .01F);
             const bool disabled = (id == 11 && !document_.can_undo()) ||
@@ -2347,7 +2373,7 @@ void BoardWindow::render_controls(ID2D1DeviceContext *context, DrawableRenderRes
             const float cx = (r.left + r.right) / 2, cy = (r.top + r.bottom) / 2;
             if (swatch) {
                 const float radius = std::min(r.width(), r.height()) * .32F;
-                brush->SetColor(d2d_color(board_ui::kColors[static_cast<std::size_t>(id - 100)]));
+                brush->SetColor(d2d_color(swatch_color));
                 context->FillEllipse(D2D1::Ellipse({cx, cy}, radius, radius), brush);
                 brush->SetColor(theme_color(theme.text, .15F));
                 context->DrawEllipse(D2D1::Ellipse({cx, cy}, radius, radius), brush, 1);
@@ -2399,6 +2425,8 @@ void BoardWindow::render_controls(ID2D1DeviceContext *context, DrawableRenderRes
                     label(L"COLOR",
                           {panel.left + 16 * s, b.bounds.top - 16 * s, panel.right - 12 * s, b.bounds.top},
                           9 * s, theme.text_soft);
+                if (b.command == 300)
+                    label(L"MIS COLORES", {panel.left + 16 * s, b.bounds.top - 18 * s, panel.right - 12 * s, b.bounds.top}, 9 * s, theme.text_soft);
                 if (b.command == 200)
                     label(L"TRAZO  ·  " + std::to_wstring(static_cast<int>(thickness_)) + L" px",
                           {panel.left + 16 * s, b.bounds.top - 16 * s, panel.right - 12 * s, b.bounds.top},

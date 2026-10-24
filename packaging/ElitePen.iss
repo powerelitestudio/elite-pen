@@ -1,6 +1,6 @@
 #define MyAppName "Elite Pen"
 #ifndef MyAppVersion
-  #define MyAppVersion "2.18.1"
+  #define MyAppVersion "2.19.0"
 #endif
 #define MyAppPublisher "Power Elite Studio"
 #define MyAppExeName "Elite Pen.exe"
