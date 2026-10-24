@@ -84,6 +84,14 @@ Invoke-Compiler ($common + @(
 
 $wgcCaptureExecutable = Join-Path $outputDirectory 'wgc-capture.exe'
 Invoke-Compiler ($common + @(
+    (Join-Path $repoRoot 'src\screen_color_picker.cpp'),
+    (Join-Path $repoRoot 'src\color_dialog.cpp'),
+    (Join-Path $repoRoot 'tests\screen_color_picker_tests.cpp'),
+    '-o', (Join-Path $outputDirectory 'elite-pen-picker-tests.exe'),
+    '-static', '-pthread', '-ldwmapi', '-lgdi32', '-luser32'
+))
+
+Invoke-Compiler ($common + @(
     (Join-Path $repoRoot 'tests\wgc_capture.cpp'),
     '-o', $wgcCaptureExecutable, '-municode', '-static',
     '-ld3d11', '-ldxgi', '-lruntimeobject', '-lole32', '-luser32'

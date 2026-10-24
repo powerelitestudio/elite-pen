@@ -1,6 +1,6 @@
-# Elite Pen 2.19.0 — contrato de producto
+# Elite Pen 2.19.1 — contrato de producto
 
-Estado: versión 2.19.0 implementada como software de código abierto bajo Apache
+Estado: versión 2.19.1 implementada como software de código abierto bajo Apache
 License 2.0, con actualización instalada y distribución portable local.
 
 ## 0. Pizarra editable
@@ -440,7 +440,7 @@ zoom congelado y Zoom editable) comparten el renderizador y el historial por obj
 - Configuración de los ocho atajos Board con detección de conflictos y acceso directo desde Opciones.
 - Guardado formato 2 con lectura de documentos anteriores y recuperación de ajustes y textos.
 
-## Board 2.19.0 — borrado visible y cursor por herramienta
+## Board 2.18.1 — borrado visible y cursor por herramienta
 
 Borrar todo permanece en la cabecera del panel, con confirmación y deshacer único.
 Mantiene el atajo Limpiar personalizable y no afecta al documento del escritorio.
@@ -456,3 +456,15 @@ La fila de favoritos se integra al panel de Board (80–300 %). Configuración
 incluye exportación e importación JSON versionada de preferencias, fuente,
 atajos, emojis y enfoque. Importar exige archivo válido, respaldo previo y
 registro correcto de atajos; los documentos siguen independientes en .epboard.
+
+## Cuentagotas y apariencia rápida — 2.19.1
+
+El editor de colores ofrece muestra de pantalla completa multimonitor, incluidos
+orígenes negativos, con lupa y valor HEX. Clic/Enter elige; flechas ajustan de a un
+píxel; Esc, clic derecho, cambio de pantalla o pérdida de activación cancelan.
+Cancelar conserva campos, validación y favoritos. Elegir sincroniza HEX/RGB;
+Guardar color persiste explícitamente. Captura local en memoria con recursos acotados.
+
+La cabecera de Board incluye luna/sol para alternar AppTheme y guardarlo en las
+preferencias existentes. Actualiza paneles y marco nativo, sin cambiar fondo,
+objetos, historial ni cámara. Accesible al 300 %, contraído y en pantalla completa.

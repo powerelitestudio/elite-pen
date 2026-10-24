@@ -360,3 +360,17 @@ La validación se realiza en un INI temporal separado, nunca sobre el activo.
 Al importar se respalda la configuración, se registran los atajos de forma
 transaccional y se escribe por reemplazo atómico antes de aplicar preferencias.
 No se importan rutas ejecutables, dibujos ni configuraciones de otros programas.
+
+## Cuentagotas y tema de Board — 2.19.1
+
+`screen_color_picker` captura una sola vez el escritorio físico virtual en un DIB
+BGRA superior-a-inferior, con origen multimonitor. La función de lectura comprueba
+coordenadas y longitud del buffer. El popup modal presenta la captura congelada y
+una lupa independiente; al mover el puntero invalida solo las zonas anterior/nueva
+de la lupa. Los recursos GDI y la captura se liberan al elegir o cancelar.
+`color_dialog` oculta su ventana antes de capturar y la restaura sin alterar los
+campos al cancelar. El color elegido entra por el mismo guardado de favoritos.
+
+Board usa el comando 36 en su cabecera para llamar `Controller::set_theme`, que
+ahora actualiza también su marco nativo y controles. La apariencia usa el mismo
+AppTheme ya persistido/exportado; el fondo del documento permanece independiente.

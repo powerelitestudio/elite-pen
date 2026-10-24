@@ -10,8 +10,9 @@ pantalla para Windows, desarrollada por [Power Elite Studio](https://powerelite.
 Permite explicar sobre cualquier aplicación sin convertir la presentación en una
 sucesión de ventanas y menús.
 
-> **Estado:** acceso anticipado. La versión 2.19.0 añade colores personalizados
-> persistentes y respaldo de preferencias en JSON, incluida la fuente de Board.
+> **Estado:** acceso anticipado. La versión 2.19.1 añade cuentagotas de pantalla
+> y cambio rápido claro/oscuro en Board. Conserva los colores personalizados
+> persistentes y el respaldo de preferencias en JSON, incluida la fuente de Board.
 > Conserva los toques de lápiz corregidos en 2.16.1.
 > Incluye la pizarra editable
 > Whiteboard / Blackboard con lienzo navegable, presión del lápiz, imágenes,
@@ -189,7 +190,7 @@ Los paquetes oficiales listos para usar se publican en
 [GitHub Releases](https://github.com/powerelitestudio/elite-pen/releases):
 
 La distribución publicada que se enlaza a continuación es 2.10.3. Los símbolos y
-tamaños nuevos, emojis, Zoom de enfoque y pizarra editable están en el código 2.19.0 y pueden compilarse con los scripts del repositorio.
+tamaños nuevos, emojis, Zoom de enfoque y pizarra editable están en el código 2.19.1 y pueden compilarse con los scripts del repositorio.
 
 - [Descargar portable 2.10.3](https://github.com/powerelitestudio/elite-pen/releases/download/v2.10.3/Elite.Pen.Portable.2.10.3.zip):
   descomprime la carpeta y ejecuta `Elite Pen.exe`.
@@ -421,6 +422,16 @@ como `#7C3AED` o los canales RGB de 0 a 255. **Guardar color** lo añade a tu pa
 y pulsa **Quitar seleccionado** para retirarla. Los colores se guardan en el equipo,
 aparecen como **Mis colores** y vuelven al abrir Elite Pen. El modo de escritorio
 comparte la paleta a través de su selector de colores.
+
+En el editor, **Cuentagotas…** oculta temporalmente la ventana y permite tomar
+un color de cualquier monitor. La lupa muestra el píxel y su hexadecimal:
+clic o Enter elige, las flechas afinan píxel a píxel y Esc o clic derecho cancelan.
+Al volver, **Guardar color** conserva la muestra en Mis colores; **Usar color**
+la aplica. La captura temporal permanece en memoria y no se guarda en disco.
+
+El icono de **luna / sol** de la cabecera del panel cambia la interfaz a oscuro
+o claro y recuerda la elección. Está disponible con el panel fijo, contraído,
+al 300 % y en pantalla completa. El fondo del lienzo se elige por separado en **Fondo**.
 
 **Configuración → Exportar ajustes…** (también en **Archivo** de Board) crea un JSON con las preferencias de Elite Pen:
 colores, fuente/tamaño preferidos de Board, conversión de escritura, atajos,

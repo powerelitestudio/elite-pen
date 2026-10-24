@@ -1,4 +1,5 @@
 #include "color_dialog.hpp"
+#include "screen_color_picker.hpp"
 #include <algorithm>
 #include <array>
 #include <commctrl.h>
@@ -76,6 +77,7 @@ struct ColorDialog {
         status = control(L"STATIC", L"", 0, 0, 22, 124, 490, 38);
         add = control(L"BUTTON", L"Guardar color", WS_TABSTOP, 105, 22, 168, 160, 34);
         remove = control(L"BUTTON", L"Quitar seleccionado", WS_TABSTOP, 106, 200, 168, 186, 34);
+        control(L"BUTTON", L"Cuentagotas…", WS_TABSTOP, 107, 398, 168, 116, 34);
         control(L"STATIC", L"Mis colores · hasta 16 · se guardan en este equipo", 0, 0, 22, 224, 490, 24);
         for (std::size_t n = 0; n < chips.size(); ++n)
             chips[n] = control(L"BUTTON", L"", WS_TABSTOP | BS_OWNERDRAW, 200 + static_cast<int>(n),
@@ -102,7 +104,16 @@ struct ColorDialog {
                 updating = true; SetWindowTextW(hex, color_hex(color).c_str()); updating = false; valid(true);
             }
         } else if (event == BN_CLICKED) {
-            if (id >= 200 && id < 216 && static_cast<std::size_t>(id - 200) < favorites.size()) {
+            if (id == 107) {
+                ShowWindow(window, SW_HIDE);
+                std::wstring error;
+                const auto sample = pick_screen_color(window, error);
+                ShowWindow(window, SW_SHOW); SetForegroundWindow(window); SetFocus(GetDlgItem(window, 107));
+                if (sample) {
+                    color = *sample; selected = -1; sync(); refresh();
+                    SetWindowTextW(status, L"Muestra lista. Pulsa Guardar color para añadirla a Mis colores.");
+                } else if (!error.empty()) SetWindowTextW(status, error.c_str());
+            } else if (id >= 200 && id < 216 && static_cast<std::size_t>(id - 200) < favorites.size()) {
                 selected = id - 200; color = favorites[static_cast<std::size_t>(selected)]; sync(); refresh();
             } else if (id == 105 && IsWindowEnabled(add)) {
                 const auto previous = favorites;

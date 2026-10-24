@@ -1,4 +1,33 @@
-# Informe de calidad — Elite Pen 2.19.0
+# Informe de calidad — Elite Pen 2.19.1
+
+## Cuentagotas y tema rápido de Board — 2.19.1
+
+Validación local: 2026-10-24 (America/Bogota).
+
+- Release compilada sin errores ni advertencias. Núcleo, preferencias,
+  reconocimiento local, rendimiento CPU y 417 comprobaciones de Board aprobados.
+- 9 casos del lector de píxeles: orden BGRA, alfa, origen negativo, filas,
+  bordes y buffers insuficientes/coordenadas grandes. Se ejecutan también en CI.
+- 19 comprobaciones del cuentagotas con `elite-pen-picker-tests.exe --desktop`:
+  lectura RGB 17/143/219 en los tres monitores conectados, Escape/clic derecho,
+  reapertura del editor, sincronización HEX/RGB, guardado explícito y cancelación
+  que conserva incluso texto inválido. Repetición sin crecimiento de recursos GDI.
+  El modo desktop usa ventanas de prueba propias y no configura la XP-Pen.
+- 14 comprobaciones de interfaz del tema: clic real en la cabecera a 100/200/300 %,
+  ventana mínima de 640×480, panel contraído y pantalla completa. Reiniciar conserva
+  tema, objetos y fondo del documento. Capturas revisadas en claro y oscuro.
+- Revisión general de interfaz y las 86 comprobaciones de regresión de Board
+  aprobadas: presión sintética, selección, capturas, guardado y recuperación.
+- 5.000 trazos, 240 frames: caché 1,661 ms, vivo 1,511 ms y navegación editable
+  0,291 ms de media. Todos los presupuestos de rendimiento aprobados.
+- Ejecutable instalado y portable 2.19.1 iguales al build por SHA-256.
+  Respaldo previo de ejecutable, preferencias y cuatro archivos de pizarra;
+  los cuatro hashes coinciden después del reemplazo. Al arrancar se conservan
+  las 153 claves de preferencias sin cambios. App iniciada y respondiendo.
+- Actualización por reemplazo respaldado del ejecutable existente. No se generó
+  un instalador nuevo (Inno Setup no está disponible en este equipo).
+- Evidencia y respaldos privados en `artifacts/eyedropper-2.19.1/` y
+  `artifacts/qa/board-captures/`, excluidos de Git.
 
 ## Colores personalizados y configuración portable — 2.19.0
 

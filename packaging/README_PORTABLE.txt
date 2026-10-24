@@ -1,4 +1,9 @@
-ELITE PEN 2.19.0 — EDICION PORTABLE
+ELITE PEN 2.19.1 — EDICION PORTABLE
+
+NUEVO 2.19.1: Cuentagotas en Colores personalizados para elegir cualquier pixel
+visible de tus monitores y guardarlo en Mis colores. Clic/Enter elige; Esc cancela.
+Icono luna/sol en la cabecera del panel de Board para alternar interfaz clara/oscura.
+Conserva el fondo del lienzo y recuerda tu elección al reiniciar.
 ================================
 
 Elite Pen es la herramienta de anotacion, pizarra y ampliacion de pantalla de
@@ -163,7 +168,7 @@ Configuracion.
 
 SOPORTE
 -------
-Producto de Power Elite Studio. Version 2.19.0.
+Producto de Power Elite Studio. Version 2.19.1.
 Sitio oficial: https://powerelite.studio/
 Codigo fuente: https://github.com/powerelitestudio/elite-pen
 
@@ -184,7 +189,7 @@ BOARD: TEXTO, FUENTES Y COLORES (2.18)
 - Configuracion > Atajos > Board: personaliza herramientas, fondo y A texto para macropad.
 - Formato .epboard 2: abre archivos previos; los archivos nuevos requieren 2.18 o posterior.
 
-BOARD 2.19.0: BORRAR TODO Y CURSOR
+BOARD 2.19.1: BORRAR TODO Y CURSOR
 - Borrar todo esta en la cabecera del panel, tambien al 300% y en pantalla completa.
 - Pide confirmacion. Ctrl+Z recupera todo. Atajo inicial Limpiar: Ctrl+Shift+E.
 - Lapiz y Resaltar muestran el lapiz de Elite Pen sobre el lienzo.

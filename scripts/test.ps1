@@ -23,4 +23,7 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $preferencesExecutable = Join-Path $repoRoot "build\$($Configuration.ToLowerInvariant())\preferences-qa\elite-pen-preferences-tests.exe"
 & $preferencesExecutable
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+& (Join-Path $repoRoot "build\$($Configuration.ToLowerInvariant())\elite-pen-picker-tests.exe")
 exit $LASTEXITCODE

@@ -1,5 +1,11 @@
 # Historial de cambios
 
+## 2.19.1 — 2026-10-24
+
+- Cuentagotas en Colores personalizados: muestra de cualquier monitor con lupa de píxeles, hexadecimal y ajuste fino con flechas. Clic/Enter confirma; Esc/clic derecho cancela sin cambiar los campos ni los favoritos. Guardar color conserva la muestra.
+- Icono luna/sol en la cabecera de Board para cambiar y recordar la interfaz clara/oscura, conservando el lienzo y sus dibujos. Disponible hasta el 300 %, contraído y en pantalla completa.
+- La cabecera adapta Borrar todo a icono cuando falta espacio, manteniendo separados los controles en ventanas estrechas.
+
 ## 2.19.0 — 2026-10-24
 
 - Colores personalizados persistentes: hasta 16 muestras compartidas entre Board y escritorio, editor HTML/hexadecimal y RGB, vista previa y eliminación individual.

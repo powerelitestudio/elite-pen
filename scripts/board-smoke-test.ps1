@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$ExecutablePath,[switch]$PenCompatibilityOnly,[switch]$SkipGlobalHotkeys,[switch]$WritingOnly,[switch]$FontPickerOnly,[switch]$ClearCursorOnly)
+param([string]$ExecutablePath,[switch]$PenCompatibilityOnly,[switch]$SkipGlobalHotkeys,[switch]$WritingOnly,[switch]$FontPickerOnly,[switch]$ClearCursorOnly,[switch]$ThemeOnly)
 $ErrorActionPreference='Stop'
 $repoRoot=Split-Path -Parent $PSScriptRoot
 if(-not $ExecutablePath){$ExecutablePath=Join-Path $repoRoot 'build\release\Elite Pen.exe'}
@@ -81,7 +81,7 @@ Set-Content -LiteralPath (Join-Path $sandbox 'portable.flag') -Value 'Isolated b
 Set-Content -LiteralPath (Join-Path $sandbox 'data\settings.ini') -Encoding ascii -Value "[ElitePen]`r`nHotkeySchemeVersion=2`r`nExcludePaletteFromCapture=0`r`nStartInInteractMode=1`r`nHasPalettePosition=1`r`nPaletteX=50`r`nPaletteY=50`r`nHotkeyBoardOpen=7,123`r`n"
 $oldInstance=$env:ELITE_PEN_QA_INSTANCE_ID;$oldBoard=$env:ELITE_PEN_BOARD_QA;$oldRealHotkeys=$env:ELITE_PEN_QA_REAL_HOTKEYS
 $env:ELITE_PEN_QA_INSTANCE_ID=[Guid]::NewGuid().ToString('N');$env:ELITE_PEN_BOARD_QA='1';$env:ELITE_PEN_QA_REAL_HOTKEYS='1'
-if($PenCompatibilityOnly -or $SkipGlobalHotkeys -or $WritingOnly -or $FontPickerOnly -or $ClearCursorOnly){Remove-Item Env:ELITE_PEN_QA_REAL_HOTKEYS -ErrorAction SilentlyContinue}
+if($PenCompatibilityOnly -or $SkipGlobalHotkeys -or $WritingOnly -or $FontPickerOnly -or $ClearCursorOnly -or $ThemeOnly){Remove-Item Env:ELITE_PEN_QA_REAL_HOTKEYS -ErrorAction SilentlyContinue}
 $failures=[Collections.Generic.List[string]]::new();$checks=0
 function Check([bool]$Condition,[string]$Message){$script:checks++;if(-not $Condition){$script:failures.Add($Message);Write-Output "FAIL: $Message"}}
 function Find([int]$ProcessId,[string]$Class,[bool]$Visible=$false){for($n=0;$n -lt 120;$n++){$w=[BoardNative]::Find([uint32]$ProcessId,$Class,$Visible);if($w -ne [IntPtr]::Zero){return $w};Start-Sleep -Milliseconds 50};throw "Missing $Class"}
@@ -118,6 +118,33 @@ try {
  Check ([BoardNative]::IsWindowVisible($board)) 'Board opens from its global action'
  Check (-not [BoardNative]::IsWindowVisible($palette)) 'Desktop palette hides while drawing on board'
  Check ((Send $palette 0x805E) -eq 0) 'Desktop document starts unchanged'
+ if($ThemeOnly){
+  $null=Qa 11;$null=Qa 3 512 200 200;$null=Qa 4 512 300 200;$null=Qa 5 512 310 200
+  $objects=Qa 0;$background=Qa 10
+  foreach($scale in @(100,200,300)){
+   $null=Qa 9 $scale;Wait-Frame
+   $beforeTheme=Qa 61;Tap-Command 36
+   Check ((Qa 61) -ne $beforeTheme) "Header toggles theme at $scale percent"
+   Check ((Qa 0) -eq $objects -and (Qa 10) -eq $background) 'Theme preserves canvas background and objects'
+   Frame "board-theme-$scale.png"
+  }
+  $null=[BoardNative]::SetWindowPos($board,[IntPtr]::Zero,0,0,640,480,0x16);Wait-Frame
+  $beforeTheme=Qa 61;Tap-Command 36
+  Check ((Qa 61) -ne $beforeTheme) 'Theme remains actionable at 300 percent in minimum window'
+  Tap-Command 25;$beforeTheme=Qa 61;Tap-Command 36
+  Check ((Qa 61) -ne $beforeTheme) 'Theme remains actionable with collapsed panel'
+  Tap-Command 25;Tap-Command 30;$beforeTheme=Qa 61;Tap-Command 36
+  Check ((Qa 61) -ne $beforeTheme -and (Qa 43) -eq 1) 'Theme remains actionable in fullscreen'
+  Frame 'board-theme-fullscreen.png'
+  $finalTheme=Qa 61;Stop-App;Start-App
+  Check ((Qa 61) -eq $finalTheme) 'Theme choice persists across app restart'
+  Check ((Qa 0) -eq $objects -and (Qa 10) -eq $background) 'Restart preserves drawings and canvas background'
+  Stop-App
+  $result=[ordered]@{Checks=$checks;Failures=@($failures);Mode='Theme';Sandbox=$sandbox;Captures=$captures}
+  $result|ConvertTo-Json -Depth 4|Set-Content -LiteralPath (Join-Path $captures 'theme-result.json') -Encoding utf8
+  if($failures.Count){throw "$($failures.Count) of $checks theme UI checks failed"}
+  Write-Output "$checks theme UI checks passed. Evidence: $captures";return
+ }
  if($ClearCursorOnly){
   function Cursor-Handle {$c=[BoardNative+CURSOR_INFO]::new();$c.Size=[Runtime.InteropServices.Marshal]::SizeOf($c);if(-not [BoardNative]::GetCursorInfo([ref]$c)){throw 'Cannot read the visible cursor'};return $c.Cursor.ToInt64()}
   $null=[BoardNative]::Foreground($board)

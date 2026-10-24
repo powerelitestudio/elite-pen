@@ -7,7 +7,7 @@ constexpr std::array<Color, 8> kColors{
 constexpr std::array<float, 4> kWidths{2, 4, 8, 16};
 constexpr bool chrome(int id) {
     return id == 1 || id == 14 || id == 18 || id == 19 || id == 20 || id == 21 || id == 24 || id == 25 ||
-           id == 30 || id == 31 || id == 35;
+           id == 30 || id == 31 || id == 35 || id == 36;
 }
 
 // Original 24-unit outline glyphs, rendered as vectors at every panel scale.
@@ -182,6 +182,18 @@ void icon(ID2D1DeviceContext *c, ID2D1SolidColorBrush *brush, int id, RectF boun
         line(10, 10, 10, 17);
         line(14, 10, 14, 17);
         break;
+    case 36: // Moon: switch to dark interface.
+        path({{15, 3}, {10, 4}, {6, 7}, {4, 12}, {5, 17}, {9, 20}, {14, 21},
+              {19, 18}, {21, 14}, {16, 15}, {12, 13}, {10, 9}, {11, 5}, {15, 3}});
+        break;
+    case 37: // Sun: switch to light interface (render alias only).
+        c->DrawEllipse(D2D1::Ellipse({12, 12}, 4, 4), brush, 1.6F);
+        for (int n = 0; n < 8; ++n) {
+            const float a = static_cast<float>(n) * 3.14159265F / 4;
+            line(12 + 8 * std::cos(a), 12 + 8 * std::sin(a),
+                 12 + 10 * std::cos(a), 12 + 10 * std::sin(a));
+        }
+        break;
     case 29:
         line(4, 19, 20, 5);
         break;
@@ -320,6 +332,7 @@ class BoardWindow final : public WindowBase {
     }
     bool initialize();
     void apply_preferences();
+    void apply_theme() { if (window_) { apply_premium_window_chrome(window_); layout(); invalidate(); } }
     void capture_preferences(Preferences& p) const {
         p.board_font = text_font_; p.board_text_size = text_size_; p.board_auto_text = auto_text_;
     }
@@ -1032,7 +1045,9 @@ void BoardWindow::layout() {
         L"Borrar todo · " +
         hotkey_text(controller_.preferences().hotkeys[static_cast<std::size_t>(HotkeyAction::Clear)]);
     add(35, clear_label.c_str(), panel_bounds_.left + 12 * s, panel_bounds_.top + 4 * s,
-        std::min(132 * s, panel_width - 148 * s), 29 * s);
+        std::max(24 * s, std::min(132 * s, panel_width - 180 * s)), 29 * s);
+    add(36, controller_.preferences().theme == AppTheme::Light ? L"Interfaz oscura" : L"Interfaz clara",
+        panel_bounds_.right - 163 * s, panel_bounds_.top + 4 * s, 29 * s, 29 * s);
     add(31, L"Opciones · tamaño del panel", panel_bounds_.right - 131 * s, panel_bounds_.top + 4 * s, 29 * s,
         29 * s);
     const auto full_label =
@@ -1384,6 +1399,9 @@ void BoardWindow::command(int id) {
         break;
     case 35:
         clear_all();
+        break;
+    case 36:
+        controller_.set_theme(controller_.preferences().theme == AppTheme::Light ? AppTheme::Dark : AppTheme::Light);
         break;
     case 33:
         background_menu();
@@ -2399,9 +2417,10 @@ void BoardWindow::render_controls(ID2D1DeviceContext *context, DrawableRenderRes
                                       w / 2),
                     brush);
             } else if (id == 35) {
-                board_ui::icon(context, brush, id, {r.left + 6 * s, cy - 9 * s, r.left + 24 * s, cy + 9 * s});
-                label(L"Borrar todo", {r.left + 30 * s, r.top, r.right - 4 * s, r.bottom}, 10 * s,
-                      foreground);
+                const bool text_fits = r.right - r.left >= 80 * s;
+                const float icon_x = text_fits ? r.left + 15 * s : cx;
+                board_ui::icon(context, brush, id, {icon_x - 9 * s, cy - 9 * s, icon_x + 9 * s, cy + 9 * s});
+                if (text_fits) label(L"Borrar todo", {r.left + 30 * s, r.top, r.right - 4 * s, r.bottom}, 10 * s, foreground);
             } else if (id == 22 || id == 23) {
                 board_ui::icon(context, brush, id,
                                {r.left + 7 * s, cy - 10 * s, r.left + 27 * s, cy + 10 * s});
@@ -2410,9 +2429,10 @@ void BoardWindow::render_controls(ID2D1DeviceContext *context, DrawableRenderRes
             } else {
                 const bool tool = !chrome && id != 15 && id != 16 && id != 17;
                 const float size =
-                    (id == 24 || id == 25 || id == 30 || id == 31) ? 21 * s : (chrome ? 21.0F : 22 * s);
+                    (id == 24 || id == 25 || id == 30 || id == 31 || id == 36) ? 21 * s : (chrome ? 21.0F : 22 * s);
                 const float icon_y = tool ? r.top + 17 * s : cy;
-                board_ui::icon(context, brush, id == 31 ? 14 : (id == 30 && fullscreen_ ? 32 : id),
+                board_ui::icon(context, brush, id == 31 ? 14 : (id == 30 && fullscreen_ ? 32 :
+                    (id == 36 && controller_.preferences().theme == AppTheme::Dark ? 37 : id)),
                                {cx - size / 2, icon_y - size / 2, cx + size / 2, icon_y + size / 2});
                 if (tool)
                     label(b.label, {r.left, r.top + 32 * s, r.right, r.bottom - 2 * s}, 8.5F * s, foreground,
@@ -3024,6 +3044,8 @@ LRESULT BoardWindow::handle_message(UINT message, WPARAM wparam, LPARAM lparam) 
                 reinterpret_cast<LONG_PTR>(LoadCursorW(nullptr, wparam ? IDC_HAND : IDC_ARROW))));
         case 60:
             return board_ui::down(VK_SPACE);
+        case 61:
+            return controller_.preferences().theme == AppTheme::Dark;
         default:
             break;
         }
